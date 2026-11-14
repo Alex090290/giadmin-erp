@@ -3,7 +3,11 @@
 import { config } from "dotenv";
 import { defineConfig, env } from "prisma/config";
 
-config({ path: ".env.local" });
+const environment = process.env.NODE_ENV ?? "development";
+
+config({
+  path: environment === "production" ? ".env.production.local" : ".env.development.local",
+});
 
 export default defineConfig({
   schema: "prisma/models",
