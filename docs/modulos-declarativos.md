@@ -200,6 +200,35 @@ rules: [
 Fuera de alcance por ahora: permisos por campo, multiempresa y crear reglas desde
 la interfaz (los dominios son código).
 
+## 6. Acciones del modelo
+
+La lógica de un botón de negocio vive en la clase, publicada con `@action`:
+
+```ts
+import { action, type ActionRecord } from "@/lib/orm";
+
+@action({ label: "Confirmar" })
+confirmar(record: ActionRecord<Venta>) {
+  if (record.estado !== "borrador") throw new ModelValidationError("Sólo borradores.");
+  return { estado: "confirmada" };
+}
+```
+
+En la vista (por defecto o expulsada):
+
+```tsx
+<FormHeader>
+  <FormButton action="confirmar" />
+  <FieldSelect<Values> name="estado" widget="statebar" />
+</FormHeader>
+```
+
+FormButton guarda primero si hace falta y luego ejecuta la acción. El servidor
+valida el nombre contra las acciones publicadas, los permisos, los grupos opcionales
+(`groups: ["gerente"]`), la regla de registro y la revisión, y persiste el patch por
+el mismo ciclo del guardado. Contrato completo en
+[Acciones de formulario](ideas/acciones-formulario.md#contrato-implementado-2026-11-14).
+
 ## Seguridad
 
 Todas las operaciones pasan por `src/lib/modules/actions.ts`: una Server Action fija

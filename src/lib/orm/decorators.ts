@@ -2,7 +2,9 @@ import "server-only";
 export type ReactionDeclaration = { method: string; fields: readonly string[]; reads?: readonly string[]; writes?: readonly string[]; preview?: readonly string[] };
 export type ConstraintDeclaration = { method: string; fields: readonly string[] };
 export type DisplayDeclaration = { method: string; fields: readonly string[] };
-type Annotation = { kind: "onchange" | "depends"; options: Omit<ReactionDeclaration,"method"> } | { kind:"constraint" | "display"; fields:readonly string[] };
+/** Business action published to the browser by name; only decorated methods are executable. */
+export type ActionDeclaration = { method: string; label: string; groups?: readonly string[] };
+type Annotation = { kind: "onchange" | "depends"; options: Omit<ReactionDeclaration,"method"> } | { kind:"constraint" | "display"; fields:readonly string[] } | { kind: "action"; options: Omit<ActionDeclaration,"method"> };
 const annotations = new WeakMap<(...args:never[])=>unknown, Annotation[]>();
 /** Compatibility adapter for Next's supported legacy decorator transform; no reflect-metadata. */
 function annotation(definition:Annotation):MethodDecorator {
@@ -22,9 +24,16 @@ export function depends(...args:[Omit<ReactionDeclaration,"method"|"writes">] | 
 }
 export const constraint = (...fields:string[]) => annotation({kind:"constraint",fields});
 export const displayName = (...fields:string[]) => annotation({kind:"display",fields});
+/**
+ * Publish a model method as a business action (like an Odoo button). It receives the
+ * saved record and the transaction context and returns a patch of declared fields;
+ * the service applies it through the normal save pipeline (normalize, Zod, hooks,
+ * constraints, tracking). Groups restrict who may run it on top of model write access.
+ */
+export const action = (options:Omit<ActionDeclaration,"method">) => annotation({kind:"action",options});
 
 export function decoratedMethods(instance:object) {
-  const reactions:ReactionDeclaration[]=[], constraints:ConstraintDeclaration[]=[], displays:DisplayDeclaration[]=[];
+  const reactions:ReactionDeclaration[]=[], constraints:ConstraintDeclaration[]=[], displays:DisplayDeclaration[]=[], actions:ActionDeclaration[]=[];
   const seen=new Set(Object.getOwnPropertyNames(instance).filter(name=>typeof Reflect.get(instance,name)==="function"));
   for(let proto=Object.getPrototypeOf(instance);proto && proto!==Object.prototype;proto=Object.getPrototypeOf(proto)) {
     for(const name of Object.getOwnPropertyNames(proto)) {
@@ -36,8 +45,9 @@ export function decoratedMethods(instance:object) {
         if(definition.kind==="onchange" || definition.kind==="depends") reactions.push({method:name,...definition.options});
         else if(definition.kind==="constraint") constraints.push({method:name,fields:definition.fields});
         else if(definition.kind==="display") displays.push({method:name,fields:definition.fields});
+        else if(definition.kind==="action") actions.push({method:name,...definition.options});
       }
     }
   }
-  return {reactions,constraints,displays};
+  return {reactions,constraints,displays,actions};
 }

@@ -10,10 +10,11 @@ const publicSelect = {
   actor: { select: { id: true, login: true, partner: { select: { name: true, avatarUrl: true } } } },
 } satisfies Prisma.RecordActivitySelect;
 
-export async function recordActivity(tx: Prisma.TransactionClient, model: string, actorId: string, metadata: Readonly<Record<string, FieldMetadata>>, before: Record<string, unknown> | null, after: { id: string; [key: string]: unknown }) {
+export async function recordActivity(tx: Prisma.TransactionClient, model: string, actorId: string, metadata: Readonly<Record<string, FieldMetadata>>, before: Record<string, unknown> | null, after: { id: string; [key: string]: unknown }, label?: string) {
   const changes = trackedChanges(metadata, before, after);
-  if (before && !changes.length) return;
-  await tx.recordActivity.create({ data: { model, recordId: after.id, actorId, kind: before ? "update" : "create", changes } });
+  // A business action is always recorded with its label, even without tracked changes.
+  if (before && !changes.length && !label) return;
+  await tx.recordActivity.create({ data: { model, recordId: after.id, actorId, kind: before ? "update" : "create", changes, ...(label && before ? { body: label } : {}) } });
 }
 
 /** Scope and authorization are supplied by the owning model service, not the browser. */
@@ -32,10 +33,11 @@ export async function readActivity(tx: Prisma.TransactionClient, model: string, 
     const parsed = z.array(activityChangeSchema).safeParse(record.changes);
     // A field can become private or stop tracking later. Never republish its old values.
     const changes = parsed.success ? parsed.data.filter(change => Object.hasOwn(metadata, change.field) && metadata[change.field].tracking && !metadata[change.field].sensitive) : [];
-    if (record.kind === "update" && !changes.length) return [];
+    if (record.kind === "update" && !changes.length && !record.body) return [];
     return [{ id: record.id, kind: record.kind as ActivityEntry["kind"], createdAt: record.createdAt.toISOString(),
       author: { id: record.actor.id, login: record.actor.login, name: record.actor.partner?.name ?? record.actor.login, avatarUrl: record.actor.partner?.avatarUrl ?? null },
-      body: record.kind === "note" ? record.body : null, changes: record.kind === "update" ? changes : [] }];
+      // Update entries carry the action label (business actions); notes carry their text.
+      body: record.kind === "note" || record.kind === "update" ? record.body : null, changes: record.kind === "update" ? changes : [] }];
   });
   const last = page.at(-1);
   return { entries, nextCursor: records.length > pageSize && last ? { id: last.id, createdAt: last.createdAt.toISOString() } : null };

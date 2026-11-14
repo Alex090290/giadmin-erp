@@ -5,10 +5,11 @@ import { AccessError } from "../auth/policy";
 import type { ModelActor } from "../orm/context";
 import { prisma } from "../prisma";
 import { createModelService } from "../orm/service";
-import { authorizeModel } from "../access/engine";
+import { authorizeModel, userGroups } from "../access/engine";
 import { createModelImageSigner } from "../uploads/model-image.server";
 import type { Many2OneLoader } from "../many2one/model-lookup";
 import type { FieldMetadata } from "../orm/fields";
+import type { ModelAction } from "../orm/model";
 import { createRepository } from "./repository";
 import { modelIdPattern, type ModelClientConfig } from "./config";
 import type { ModuleDefinition, ModuleModel } from "./define";
@@ -63,6 +64,13 @@ export function modelService(id: string): Service {
     list: entry.list, audit: true, defaultSort: entry.defaultSort,
     // Group access and record rules, revalidated inside each service transaction.
     authorize: (tx, actor, operation) => authorizeModel(tx, actor, entry.id, operation),
+    // Actions with groups: superusers pass; others need one of the groups (local keys belong to this module).
+    authorizeAction: async (tx, actor, action) => {
+      const user = await tx.user.findUnique({ where: { id: actor.id }, select: { isAdmin: true } });
+      if (user?.isAdmin) return;
+      const groups = await userGroups(tx, actor.id);
+      if (!action.groups?.some(group => groups.has(group.includes(".") ? group : `${module.id}.${group}`))) throw new AccessError("DENIED");
+    },
     ...(entry.kanban ? { kanban: { field: entry.kanban } } : {}),
     ...(Object.keys(relations).length ? { relations } : {}),
   });
@@ -115,6 +123,8 @@ export function modelClientConfig(id: string): ModelClientConfig {
     related: Object.keys(contract.relatedFields ?? {}),
     reactionRules: contract.reactionRules ?? [],
     lookups: lookupTargets(entry),
+    // Names and labels only; the server validates the name and re-checks permissions on every call.
+    actions: ((entry.contract.actions ?? []) as readonly ModelAction[]).map(({ name, label }) => ({ name, label })),
     list: { fields: entry.list.fields, searchFields: entry.list.searchFields, sortable: entry.list.sortable ?? [], groupable: entry.list.groupable ?? [], filterable: entry.list.filterable ?? [] },
     view: entry.view,
     // Plain JSON: omit absent options instead of sending undefined.

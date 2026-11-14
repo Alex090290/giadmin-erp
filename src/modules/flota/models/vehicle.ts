@@ -1,8 +1,22 @@
 import "server-only";
-import { Fields, Model, ModelValidationError as Err, type DisplayRecord, type ModelContext } from "@/lib/orm";
+import {
+  Fields,
+  Model,
+  ModelValidationError as Err,
+  action,
+  type DisplayRecord,
+  type ModelContext,
+  ActionRecord,
+  ActionContext,
+} from "@/lib/orm";
 
 export class Vehicle extends Model {
-  name = Fields.Text({ label: "Nombre", required: false, maxLength: 300, tracking: true });
+  name = Fields.Text({
+    label: "Nombre",
+    required: false,
+    maxLength: 300,
+    tracking: true,
+  });
   active = Fields.Boolean({ label: "Activo", default: true, tracking: true });
 
   plate = Fields.Text({
@@ -25,10 +39,20 @@ export class Vehicle extends Model {
     related: "modeloId.fabricanteId.logo",
   });
 
+  @action({ label: "Testing" })
+  testing(record: ActionRecord<Vehicle>) {
+    return {
+      active: !record.active,
+    };
+  }
+
   normalize(values: Readonly<Record<string, unknown>>) {
     return {
       ...values,
-      plate: typeof values.plate === "string" ? values.plate.trim().toUpperCase() : values.plate,
+      plate:
+        typeof values.plate === "string"
+          ? values.plate.trim().toUpperCase()
+          : values.plate,
     };
   }
 
@@ -60,7 +84,10 @@ export class Vehicle extends Model {
     }
 
     // SE FORMA EL NAME DEL MODELO
-    return { ...values, name: `[${values.plate}] ${modelo.name} / ${modelo.fabricante.name}` };
+    return {
+      ...values,
+      name: `[${values.plate}] ${modelo.name} / ${modelo.fabricante.name}`,
+    };
   }
 
   displayName(record: DisplayRecord<Vehicle, "name">): string {

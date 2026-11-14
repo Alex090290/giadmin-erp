@@ -17,6 +17,8 @@ export type ModelClientConfig = {
   readonly reactionRules: readonly ReactionRule[];
   /** Many2one field → target module model id with an authorized lookup. */
   readonly lookups: Readonly<Record<string, string>>;
+  /** Business actions published with `@action` (name and label only). */
+  readonly actions: readonly { readonly name: string; readonly label: string }[];
   readonly list: {
     readonly fields: readonly string[];
     readonly searchFields: readonly string[];

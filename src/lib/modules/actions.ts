@@ -36,6 +36,16 @@ export async function modelRead(model: string, id: unknown): Promise<FormViewLoa
   catch (error) { return { ok: false, error: failure(error, unknownModel) }; }
 }
 
+/** Run a business action published with `@action`; the service validates the name against the model's whitelist. */
+export async function modelAction(model: string, input: unknown): Promise<FormViewResult<Values>> {
+  try {
+    const { entry, service } = resolve(model);
+    const result = await service.action(prisma, await requireUser(), input);
+    if (result.ok) revalidatePath(entry.route);
+    return result;
+  } catch (error) { return { ok: false, kind: "server", error: failure(error, "No se pudo ejecutar la acción.") }; }
+}
+
 export async function modelSave(model: string, input: unknown): Promise<FormViewResult<Values>> {
   try {
     const { entry, service } = resolve(model);

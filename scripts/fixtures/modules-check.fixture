@@ -195,5 +195,40 @@ assert.equal(catalogue.find(module => module.id === "modulos")?.kind, "manual");
 assert.equal(cataloguePage(catalogue, { ...state, query: "ensayo" }).total, 1);
 await assert.rejects(moduleCatalogue(prisma, ana, catalogueContext), /administrador/);
 await assert.rejects(moduleCatalogue(prisma, { ...root, sessionVersion: root.sessionVersion + 1 }, catalogueContext), /sesión/);
+// Business actions (@action): published names only, write access + rules + groups, revision,
+// transition rules, the save pipeline (hooks/constraints/tracking) and canonical result.
+assert.deepEqual(modelClientConfig("ensayo.tarea").actions, [{ name: "completar", label: "Completar" }, { name: "reabrir", label: "Reabrir" }]);
+await setGroupMembers(prisma, root, "ensayo.usuario", [ana.id, beto.id]);
+const deAnaAccion = await taskOf(ana, "Acción de Ana");
+const deBetoAccion = await taskOf(beto, "Acción de Beto");
+const run = (who: typeof ana, action: string, record: { id?: unknown; revision?: unknown }) => tareas.action(prisma, who, { action, id: record.id, revision: record.revision });
+for (const forbidden of ["ayudante", "normalize", "beforeSave", "constructor", "__proto__", "Completar"]) {
+  assert.equal((await run(ana, forbidden, deAnaAccion)).ok, false, `método no publicado: ${forbidden}`);
+}
+assert.equal((await tareas.action(prisma, ana, { action: "completar", id: deAnaAccion.id, revision: deAnaAccion.revision, estado: "hecha" })).ok, false, "no acepta campos extra");
+denied(await run(ana, "completar", deBetoAccion), "regla de registro: acción sobre tarea ajena");
+denied(await run(readerActor, "completar", deAnaAccion), "sin grupo no hay acción");
+const completed = ok(await run(ana, "completar", deAnaAccion), "completar propia");
+assert.equal(completed.values.estado, "hecha");
+assert.notEqual(completed.values.revision, deAnaAccion.revision, "la revisión avanza");
+assert.equal(completed.message, "Completar: acción completada.");
+assert.equal(completed.displayName, "Acción de Ana");
+assert.equal((await run(ana, "completar", deAnaAccion)).ok, false, "revisión vieja");
+const again = await run(ana, "completar", completed.values);
+assert.equal(again.ok, false); assert.equal(!again.ok && again.error, "La tarea ya está hecha.", "transición inválida");
+const history = ok(await tareas.activity(prisma, ana, { id: deAnaAccion.id }), "historial de la acción");
+assert.ok(history.data.entries.some(entry => entry.kind === "update" && entry.body === "Completar" && entry.changes.some(change => change.field === "estado" && change.after === "hecha")), JSON.stringify(history.data.entries));
+// Groups on the action: usuario lacks «reabrir», responsable may run it.
+denied(await run(ana, "reabrir", completed.values), "reabrir exige responsable");
+const reopened = ok(await run(jefa, "reabrir", completed.values), "responsable reabre");
+assert.equal(reopened.values.estado, "pendiente");
+// The patch goes through beforeSave: completing an urgent task is rejected and rolled back.
+const urgent = ok(await tareas.save(prisma, beto, { ...base, categoria: trabajo.values.id, name: "Urgente", prioridad: 5 }), "urgente").values;
+const urgentResult = await run(beto, "completar", urgent);
+assert.equal(urgentResult.ok, false); assert.equal(!urgentResult.ok && urgentResult.fieldErrors?.prioridad, "Una tarea urgente no puede cerrarse sin revisión.");
+assert.equal((await prisma.ensayoTarea.findUniqueOrThrow({ where: { id: urgent.id } })).estado, "pendiente", "rollback de la acción");
+// Admin superuser runs any action.
+const betoNow = ok(await tareas.read(prisma, root, deBetoAccion.id), "leer como superusuario").values;
+ok(await run(root, "completar", betoNow), "superusuario");
 await prisma.$disconnect();
 console.log("modules-check ok");

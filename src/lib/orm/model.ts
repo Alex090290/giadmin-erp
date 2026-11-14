@@ -1,9 +1,10 @@
 import "server-only";
 import { z } from "zod";
 import { isField, type Field, type FieldMetadata } from "./fields";
-import type { ModelContext } from "./context";
+import { ModelValidationError, type ModelActor, type ModelContext } from "./context";
+import type { Prisma } from "@/generated/prisma/client";
 import { compileModelMethods } from "./reactions";
-import type { ReactionDeclaration, ConstraintDeclaration } from "./decorators";
+import { decoratedMethods, type ReactionDeclaration, type ConstraintDeclaration } from "./decorators";
 import type { ReactionContext } from "./reactions";
 import { displayFieldPaths, displayRelation, normalizeDisplayName, projectDisplayRecord } from "./display";
 
@@ -56,6 +57,7 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
   const methods=compileModelMethods(instance,fields,relatedFields,computedFields);
   if(methods.display && instance.displayFields) throw new Error("Usa displayFields o @displayName, no ambos.");
   const displayKeys = displayFieldPaths(metadata, methods.display?.fields ?? instance.displayFields);
+  const actions = compileActions(options.name, instance, decoratedMethods(instance).actions);
   // Runtime collection filters precisely the descriptor keys represented by Shape.
   const schema = z.strictObject(shape as Shape<InstanceType<C>>);
   return Object.freeze({
@@ -93,7 +95,45 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
       return result;
     },
     async afterSave(record: Record<string, unknown>, context: ModelContext<Values<InstanceType<C>>>) { await instance.afterSave?.(record, context); },
+    /** Published business actions (name/label/groups). Only these names can be executed. */
+    actions: actions.list,
+    /** Run a published action; returns a validated patch of declared fields (possibly empty). */
+    async runAction(name: string, record: Readonly<Record<string, unknown>>, context: ActionContext): Promise<Record<string, unknown>> {
+      const declared = actions.byName.get(name);
+      if (!declared) throw new ModelValidationError("La acción no está publicada en este modelo.");
+      const method = Reflect.get(instance, declared.method) as (record: unknown, context: ActionContext) => unknown;
+      const result = await method.call(instance, Object.freeze({ ...record }), Object.freeze({ ...context }));
+      if (result === undefined || result === null) return {};
+      if (typeof result !== "object" || Array.isArray(result)) throw new Error(`${options.name}.${declared.method}: una acción devuelve un objeto con campos declarados o nada.`);
+      const unknownKey = Object.keys(result).find(key => !Object.hasOwn(fields, key));
+      if (unknownKey) throw new Error(`${options.name}.${declared.method}: «${unknownKey}» no es un campo declarado.`);
+      return { ...(result as Record<string, unknown>) };
+    },
   });
+}
+
+export type ModelAction = { readonly name: string; readonly label: string; readonly groups?: readonly string[] };
+/** Context of a business action: same transaction and authenticated actor as the save pipeline. */
+export type ActionContext = { readonly tx: Prisma.TransactionClient; readonly actor: Readonly<ModelActor>; readonly action: string };
+/** Saved record received by an action method: declared values plus identity and revision. */
+export type ActionRecord<I> = Readonly<Values<I> & { id: string; revision: string }>;
+/** Patch an action may return: only declared fields. */
+export type ActionPatch<I> = Partial<Values<I>> | void;
+
+const internalMethods = new Set(["normalize", "beforeSave", "afterSave", "displayName", "constructor"]);
+function compileActions(model: string, instance: object, declarations: readonly { method: string; label: string; groups?: readonly string[] }[]) {
+  const byName = new Map<string, { method: string; label: string; groups?: readonly string[] }>();
+  for (const declaration of declarations) {
+    if (!/^[a-z][A-Za-z0-9]*$/.test(declaration.method) || internalMethods.has(declaration.method)) throw new Error(`${model}.${declaration.method}: nombre de acción inválido o reservado.`);
+    if (typeof declaration.label !== "string" || !declaration.label.trim()) throw new Error(`${model}.${declaration.method}: la acción necesita label.`);
+    if (declaration.groups !== undefined && (!Array.isArray(declaration.groups) || !declaration.groups.length || declaration.groups.some(group => typeof group !== "string" || !/^[a-z][a-z0-9-]*(?:.[a-z][a-z0-9-]*)?$/.test(group)))) throw new Error(`${model}.${declaration.method}: groups usa claves de grupo.`);
+    if (typeof Reflect.get(instance, declaration.method) !== "function") throw new Error(`${model}.${declaration.method}: la acción debe ser un método.`);
+    if (byName.has(declaration.method)) throw new Error(`${model}.${declaration.method}: acción duplicada.`);
+    byName.set(declaration.method, declaration);
+  }
+  if (byName.size > 20) throw new Error(`${model}: máximo 20 acciones publicadas.`);
+  const list: readonly ModelAction[] = Object.freeze([...byName.values()].map(({ method, label, groups }) => Object.freeze({ name: method, label, ...(groups ? { groups: Object.freeze([...groups]) } : {}) })));
+  return { list, byName };
 }
 
 /** Form values of a declaration, for typed custom views: `FieldText<FormValues<typeof Tarea>> name="name"`. Type-only; the class stays server-only. */

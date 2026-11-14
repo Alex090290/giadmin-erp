@@ -88,6 +88,7 @@ try {
   console.log("✓ Gestor de módulos: instalado, disponible sin registrar, fuera de catálogo, permisos admin y sesión revocada; lecturas del esquema temporal.");
   console.log("✓ Repositorio genérico y servicio: crear, normalize, beforeSave, revisión, listas, búsqueda, filtros, agrupación con etiquetas, lookup, kanban, historial, notas y borrado.");
   console.log("✓ Control de accesos: grupos implicados, CRUD por modelo, reglas de registro (AND/OR), overrides y reglas desactivadas en BD, superusuario y administración.");
+  console.log("✓ Acciones @action: sólo nombres publicados, permisos/reglas/grupos, revisión, transición, hooks con rollback, historial y resultado canónico.");
 
   command("next", ["typegen"], "Next route types");
   command("tsc", ["--noEmit", "--incremental", "false"], "typecheck with modules and ejected views");

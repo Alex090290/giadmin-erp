@@ -86,7 +86,7 @@ export default function FormActivity({ source, refreshToken, readOnly }: { sourc
         <div className="shrink-0 self-start"><PartnerAvatar name={entry.author.name} avatarUrl={entry.author.avatarUrl} /></div>
         <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline justify-between gap-1 text-xs"><span className="font-semibold wrap-anywhere">[{entry.author.login}] {entry.author.name}</span><time dateTime={entry.createdAt} className="text-base-content/50">{new Date(entry.createdAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}</time></div>
-        <p className="mt-1 text-xs text-base-content/55">{entry.kind === "create" ? "Registro creado" : entry.kind === "update" ? "Campos actualizados" : "Nota interna"}</p>
+        <p className="mt-1 text-xs text-base-content/55">{entry.kind === "create" ? "Registro creado" : entry.kind === "update" ? (entry.body ? `Acción: ${entry.body}` : "Campos actualizados") : "Nota interna"}</p>
         {entry.kind === "note" && <p className="mt-2 whitespace-pre-wrap text-sm wrap-anywhere">{entry.body}</p>}
         {entry.kind === "update" && !!entry.changes.length && <ul className="mt-2 space-y-2 text-sm">{entry.changes.map(change => <li key={change.field} className="min-w-0"><span className="font-medium">{change.label}: </span><span className="whitespace-pre-wrap wrap-anywhere text-base-content/55"><ActivityValue change={change} side="before" /></span><span aria-label="cambió a"> → </span><span className="whitespace-pre-wrap wrap-anywhere"><ActivityValue change={change} side="after" /></span></li>)}</ul>}
         </div>

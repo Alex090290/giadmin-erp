@@ -1,5 +1,6 @@
 import ModelFieldsSample from "./ModelFieldsSample";
 import FormDeletionSample from "./FormDeletionSample";
+import FormActionsSample from "./FormActionsSample";
 import RelatedImageSample from "./RelatedImageSample";
 import { relatedImageModel } from "./related-image.model";
 import ModelReactionsSample from "./ModelReactionsSample";
@@ -43,6 +44,7 @@ export default function PageSample() {
             <a className="btn btn-sm btn-outline" href="#kanban-view">KanbanView</a>
             <a className="btn btn-sm btn-outline" href="#form-view">FormView</a>
             <a className="btn btn-sm btn-outline" href="#form-deletion">Eliminar desde formulario</a>
+            <a className="btn btn-sm btn-outline" href="#form-actions">Acciones de formulario</a>
             <a className="btn btn-sm btn-outline" href="#record-audit">Auditoría</a>
             <a className="btn btn-sm btn-outline" href="#alerts">Alertas</a>
             <a className="btn btn-sm btn-outline" href="#notebook">Notebook</a>
@@ -77,6 +79,7 @@ export default function PageSample() {
         <AlertsSample />
         <FormViewSample />
         <FormDeletionSample />
+        <FormActionsSample />
         <AuditSample />
         <SampleForms />
         <Many2OneSample />

@@ -30,6 +30,7 @@ import type { Many2OneLoader } from "../many2one/model-lookup";
 import { fieldColumn } from "./presentation";
 import type { ReactionContext } from "./reactions";
 import type { ReactionRule, ReactionResult } from "./reactions.types";
+import type { ActionContext, ModelAction } from "./model";
 import { displayProjectionPaths } from "./display";
 import { modelDisplayName, resolveDisplayNames } from "./display.server";
 
@@ -42,10 +43,13 @@ type Contract<T extends Record<string, unknown>> = {
   normalize?(values: Record<string, unknown>): T;
   beforeSave?(values: T, context: ModelContext<T>): Promise<T>;
   afterSave?(record: Record<string, unknown>, context: ModelContext<T>): Promise<void>;
+  readonly actions?: readonly ModelAction[];
+  runAction?(name: string, record: Readonly<Record<string, unknown>>, context: ActionContext): Promise<Record<string, unknown>>;
   readonly displayFields?: readonly string[];
   displayName?(record: Readonly<Record<string, unknown>>): string;
 };
 const idSchema = z.string().trim().min(1).max(100);
+const actionRequestSchema = z.strictObject({ action: z.string().regex(/^[a-z][A-Za-z0-9]*$/).max(60), id: idSchema, revision: z.iso.datetime({ precision: 3 }) });
 const codeOf = (error: unknown) => error && typeof error === "object" && "code" in error ? String(error.code) : "";
 export const fieldListType = (field: FieldMetadata): ListDataType => field.kind === "integer" ? "integer" : field.kind === "boolean" ? "boolean" : field.kind === "datetime" ? "datetime" : "text";
 
@@ -101,6 +105,8 @@ type ServicePresentation = {
   defaultSort?: ListViewConfig["defaultSort"]; kanban?: { field: string }; audit?: boolean;
   relations?: Readonly<Record<string, Many2OneLoader>>;
   authorize?: ServiceAuthorizer;
+  /** Extra check for actions that declare groups (resolved by the module registry). Superusers are handled by the caller. */
+  authorizeAction?: (tx: Prisma.TransactionClient, actor: ModelActor, action: ModelAction) => Promise<void>;
 } & ({ list: ModelListPolicy; columns?: never; searchFields?: never } | { list?: never; columns: readonly ListColumn[]; searchFields: readonly string[] });
 
 /** Admin-only baseline. The repository and list policy are fixed on the server, never selected by a client. */
@@ -173,7 +179,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     } catch (error) { return { ok: false, kind: error instanceof ModelValidationError ? "validation" : "server", error: messageFor(error) }; }
   }
 
-  async function persist(tx: Prisma.TransactionClient, actor: ModelActor, input: unknown) {
+  async function persist(tx: Prisma.TransactionClient, actor: ModelActor, input: unknown, activityLabel?: string) {
     const updating = Boolean(input && typeof input === "object" && !Array.isArray(input) && (input as Record<string, unknown>).id);
     const scope = await authorize(tx, actor, updating ? "write" : "create");
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new ModelValidationError("Revisa los datos del registro.");
@@ -200,7 +206,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     if (!final) throw new ModelValidationError("El registro no está disponible después de guardar.");
     // The saved values must stay inside the actor's rules; otherwise the transaction rolls back.
     if (!await inScope(tx, final.id, scope)) throw new AccessError("DENIED");
-    await recordActivity(tx, model.name, actor.id, model.metadata, current, final);
+    await recordActivity(tx, model.name, actor.id, model.metadata, current, final, activityLabel);
     return final;
   }
 
@@ -211,11 +217,39 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         return { values, ...await readAudit(tx, values.id), ...await readDisplayName(tx, values) };
       }, { isolationLevel: "Serializable" });
       return { ok: true, ...record, message: "Registro guardado." };
-    } catch (error) {
-      const validation = error instanceof ModelValidationError || error instanceof z.ZodError || ["P2002", "P2003", "P2018", "P2025", "P2034"].includes(codeOf(error));
-      const fieldErrors = error instanceof ModelValidationError ? error.fieldErrors : error instanceof z.ZodError ? Object.fromEntries(error.issues.filter(issue => issue.path.length).map(issue => [issue.path.join("."), issue.message])) : undefined;
-      return { ok: false, kind: validation ? "validation" : "server", error: error instanceof z.ZodError ? "Revisa los datos del registro." : messageFor(error), ...(fieldErrors ? { fieldErrors: fieldErrors as Partial<Record<FieldPath<Values>, string>> } : {}) };
-    }
+    } catch (error) { return writeFailure(error); }
+  }
+
+  function writeFailure(error: unknown): FormViewResult<Values> {
+    const validation = error instanceof ModelValidationError || error instanceof z.ZodError || ["P2002", "P2003", "P2018", "P2025", "P2034"].includes(codeOf(error));
+    const fieldErrors = error instanceof ModelValidationError ? error.fieldErrors : error instanceof z.ZodError ? Object.fromEntries(error.issues.filter(issue => issue.path.length).map(issue => [issue.path.join("."), issue.message])) : undefined;
+    return { ok: false, kind: validation ? "validation" : "server", error: error instanceof z.ZodError ? "Revisa los datos del registro." : messageFor(error), ...(fieldErrors ? { fieldErrors: fieldErrors as Partial<Record<FieldPath<Values>, string>> } : {}) };
+  }
+
+  /**
+   * Run a business action published by the model (`@action`). One Serializable transaction:
+   * write access and record rules, action groups, current revision, the model method, and
+   * its patch applied through the same pipeline as save (normalize, Zod, hooks, constraints,
+   * tracking). The browser only names a published action; any failure rolls everything back.
+   */
+  async function action(prisma: PrismaClient, actor: ModelActor, input: unknown): Promise<FormViewResult<Values>> {
+    try {
+      const request = actionRequestSchema.safeParse(input);
+      if (!request.success) throw new ModelValidationError("La acción solicitada no es válida.");
+      const declared = model.actions?.find(item => item.name === request.data.action);
+      if (!declared || !model.runAction) throw new ModelValidationError("La acción no está publicada en este modelo.");
+      const record = await prisma.$transaction(async tx => {
+        const scope = await authorize(tx, actor, "write");
+        if (declared.groups && presentation.authorizeAction) await presentation.authorizeAction(tx, actor, declared);
+        const current = await inScope(tx, request.data.id, scope) ? await repository.read(tx, request.data.id) : null;
+        if (!current || current.revision !== request.data.revision) throw new ModelValidationError(conflict);
+        const patch = await model.runAction!(declared.name, current, { tx, actor: Object.freeze({ ...actor }), action: declared.name });
+        const { id, revision, ...values } = current;
+        const values2 = await persist(tx, actor, { ...values, ...patch, id, revision }, declared.label);
+        return { values: values2, ...await readAudit(tx, values2.id), ...await readDisplayName(tx, values2) };
+      }, { isolationLevel: "Serializable" });
+      return { ok: true, ...record, message: `${declared.label}: acción completada.` };
+    } catch (error) { return writeFailure(error); }
   }
 
   async function list(prisma: PrismaClient, actor: ModelActor, input: unknown, group?: { field: string; value: string }, domain?: (context: ListDomainContext) => Promise<Record<string, unknown>>): Promise<ListResult> {
@@ -412,5 +446,5 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     }
   }
 
-  return { react, read, save, remove, activity, addNote, lookup, list: (prisma: PrismaClient, actor: ModelActor, input: unknown) => list(prisma, actor, input), defineListAction, kanban, move };
+  return { react, read, save, action, actions: model.actions ?? [], remove, activity, addNote, lookup, list: (prisma: PrismaClient, actor: ModelActor, input: unknown) => list(prisma, actor, input), defineListAction, kanban, move };
 }

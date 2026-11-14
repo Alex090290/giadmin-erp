@@ -16,6 +16,7 @@ import FormAuditPanel from "./FormAuditPanel";
 import type { RecordAudit } from "@/lib/orm/audit";
 import type { FormActivity } from "@/lib/orm/activity";
 import { deleteFormRecord, formDeleteReturnHref, formDeleteTarget, FormDeletionError, type FormDeletion } from "./formDeletion";
+import { FormActionsContext, type FormActionRunner } from "./formActions";
 
 export type { FormViewContext, FormViewResult, FormViewSubmit } from "./formView.types";
 export type { FormViewMenuAction } from "./FormViewActionMenu";
@@ -52,6 +53,10 @@ export type FormViewProps<TValues extends FieldValues, TContext = unknown, TOutp
     onRevert?: () => void;
     /** Explicit authorized action; hidden for unsaved or read-only records. */
     deletion?: FormDeletion;
+    /** Executes named business actions for FormButton (e.g. ModelForm → modelAction). */
+    runAction?: FormActionRunner<TValues>;
+    /** Published action labels, so FormButton can default its text. */
+    actions?: readonly { name: string; label: string }[];
   };
 
 class SaveRejected extends Error {
@@ -61,7 +66,7 @@ const serverErrorTypes = ["server"];
 
 export default function FormView<TValues extends FieldValues, TContext = unknown, TOutput = TValues>({
   title, width = "normal", layout = "content", breadcrumbs, audit, activity, methods, mode = "edit", disabled = false, readOnly = false, busy: actionBusy = false,
-  headerActions, menuActions, statebar, footer, saveLabel = "Guardar", revertLabel = "Revertir", newLabel = "Nuevo", onNew, onSubmit, onSaved, onRevert, deletion,
+  headerActions, menuActions, statebar, footer, saveLabel = "Guardar", revertLabel = "Revertir", newLabel = "Nuevo", onNew, onSubmit, onSaved, onRevert, deletion, runAction, actions: publishedActions,
   children, id, className = "", onSubmitCapture, ...formProps
 }: FormViewProps<TValues, TContext, TOutput>) {
   const generatedId = useId();
@@ -77,10 +82,16 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
   const [startingNew, setStartingNew] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deletedHref, setDeletedHref] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  const actionLock = useRef(false);
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
+  // Save → action coordination: the action's own submit bypasses the lock it holds.
+  const actionSubmit = useRef(false);
+  const saveWaiter = useRef<((saved: Extract<FormViewResult<TValues>, { ok: true }> | null) => void) | null>(null);
   const inFlight = useRef(false);
   const submitter = useRef<HTMLElement | null>(null);
   const pending = useRef<Extract<FormViewResult<TValues>, { ok: true }> | null>(null);
-  const busy = actionBusy || isSubmitting || saving || startingNew || deleting || deletedHref !== null;
+  const busy = actionBusy || isSubmitting || saving || startingNew || deleting || deletedHref !== null || acting !== null;
   const locked = disabled || busy;
   const context = { methods, isDirty, busy: locked, readOnly };
   const actions = typeof headerActions === "function" ? headerActions(context) : headerActions;
@@ -133,10 +144,69 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
     } finally { close(); inFlight.current = false; if (mounted.current) setDeleting(false); }
   }
 
-  return <FormLayout {...formProps} id={id} methods={methods} aria-labelledby={titleId} aria-busy={busy} silentErrorTypes={serverErrorTypes}
+  /**
+   * FormButton sequence: one lock; validate/save through the normal submit when the record
+   * is new or dirty (no second pipeline); only after success run the action with the saved
+   * ID/revision. A failed save stops; a failed action keeps the saved record and revision.
+   */
+  async function runFormAction(name: string): Promise<boolean> {
+    // Synchronous lock: two clicks in the same frame must not both pass before `acting` renders.
+    if (!runAction || locked || readOnly || inFlight.current || saveWaiter.current || actionLock.current) return false;
+    actionLock.current = true;
+    setActing(name);
+    let saved: Extract<FormViewResult<TValues>, { ok: true }> | null = null;
+    try {
+      let target = mode === "edit" && !isDirty ? savedTarget : null;
+      if (!target) {
+        const form = document.getElementById(titleId)?.closest("form");
+        if (!form) return false;
+        saved = await new Promise(resolve => {
+          saveWaiter.current = resolve;
+          actionSubmit.current = true;
+          try { form.requestSubmit(); } finally { actionSubmit.current = false; }
+        });
+        if (!saved) return false;
+        target = formDeleteTarget({ id: saved.values.id, revision: saved.values.revision });
+        if (!target) return false;
+      }
+      methods.clearErrors("root.server");
+      const outcome = await runAction(name, target);
+      if (!mounted.current) return false;
+      if (!outcome.ok) {
+        for (const [field, message] of Object.entries(outcome.fieldErrors ?? {})) if (typeof message === "string") methods.setError(field as FieldPath<TValues>, { type: "server", message });
+        methods.setError("root.server", { type: "server", message: outcome.error });
+        const details = [...new Set(Object.values(outcome.fieldErrors ?? {}).filter((message): message is string => typeof message === "string"))];
+        await (outcome.kind === "validation" ? alerts.validation : alerts.error)({ title: "No se pudo completar la acción", message: outcome.error, details });
+        if (saved) onSaved?.(saved.values, saved.audit, saved.displayName);
+        return false;
+      }
+      methods.reset(outcome.values);
+      markClean();
+      setActivityVersion(version => version + 1);
+      toast.success(outcome.message ?? "Acción completada.");
+      onSaved?.(outcome.values, outcome.audit, outcome.displayName);
+      return true;
+    } catch {
+      // Unknown network outcome: never present success nor retry a mutation automatically.
+      if (mounted.current) {
+        methods.setError("root.server", { type: "server", message: "No se pudo confirmar la acción. Recarga el registro antes de reintentar." });
+        if (saved) onSaved?.(saved.values, saved.audit, saved.displayName);
+        await alerts.error({ title: "No se pudo confirmar la acción", message: "Recarga el registro para comprobar su estado antes de reintentar." });
+      }
+      return false;
+    } finally {
+      saveWaiter.current = null;
+      actionLock.current = false;
+      if (mounted.current) setActing(null);
+    }
+  }
+
+  return <FormActionsContext.Provider value={{ header: headerSlot, locked, readOnly, actions: publishedActions, run: runAction ? runFormAction : null, running: acting }}>
+  <FormLayout {...formProps} id={id} methods={methods} aria-labelledby={titleId} aria-busy={busy} silentErrorTypes={serverErrorTypes}
     className={`card w-full ${pageLayout ? "flex min-h-0 flex-1 flex-col" : `mx-auto shrink-0 ${width === "wide" ? "max-w-7xl" : "max-w-5xl"}`} rounded-2xl border border-base-300 bg-base-100 shadow-sm ${className}`} contentClassName={`flex min-w-0 flex-col ${pageLayout ? "min-h-0 flex-1" : ""}`}
     onSubmitCapture={event => {
       onSubmitCapture?.(event);
+      if (actionSubmit.current && !event.defaultPrevented) { submitter.current = null; return; }
       if (event.defaultPrevented || locked || inFlight.current || readOnly || (mode === "edit" && !isDirty)) {
         event.preventDefault();
         event.stopPropagation();
@@ -183,7 +253,17 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
     onSubmitSettled={() => {
       const saved = pending.current;
       pending.current = null;
-      if (!saved) return;
+      // A FormButton is waiting: it receives the outcome and calls onSaved after its action.
+      const waiter = saveWaiter.current;
+      saveWaiter.current = null;
+      if (!saved) { waiter?.(null); return; }
+      if (waiter) {
+        methods.reset(saved.values);
+        markClean();
+        setActivityVersion(version => version + 1);
+        waiter(saved);
+        return;
+      }
       // handleSubmit has finished; reset can now establish a reliable saved baseline.
       methods.reset(saved.values);
       markClean();
@@ -210,6 +290,8 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
           {hasSecondaryActions && <FormViewActionMenu actions={secondaryActions} disabled={locked} />}
         </fieldset>}
       </div>
+      {/* FormHeader portal target: hidden while empty. */}
+      <div ref={setHeaderSlot} className="flex min-w-0 flex-wrap items-center gap-3 border-t border-base-300/70 pt-4 empty:hidden" />
       {(actions || statebar) && <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-base-300/70 pt-4">
         {actions && <fieldset disabled={locked} className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">{actions}</fieldset>}
         {statebar && <fieldset disabled={locked || readOnly} className="m-0 ml-auto min-w-0 max-w-full border-0 p-0">{statebar}</fieldset>}
@@ -224,10 +306,11 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
       </div>
     </div>
     <footer data-slot="footer" className="shrink-0 space-y-3 rounded-b-2xl border-t border-base-300 bg-base-200/20 px-4 py-3 sm:px-6">
-      <p role="status" className="text-xs text-base-content/60">{deletedHref ? "Registro eliminado" : deleting ? "Eliminando registro…" : busy ? saving || isSubmitting ? "Guardando cambios…" : "Procesando acción…" : readOnly ? "Formulario de solo lectura" : isDirty ? "Tienes cambios sin guardar" : "Sin cambios pendientes"}</p>
+      <p role="status" className="text-xs text-base-content/60">{deletedHref ? "Registro eliminado" : deleting ? "Eliminando registro…" : busy ? acting && !(saving || isSubmitting) ? "Ejecutando acción…" : saving || isSubmitting ? "Guardando cambios…" : "Procesando acción…" : readOnly ? "Formulario de solo lectura" : isDirty ? "Tienes cambios sin guardar" : "Sin cambios pendientes"}</p>
       {deletedHref && <button type="button" className="btn btn-link btn-sm px-0" onClick={() => { void navigation.run(() => router.replace(deletedHref)); }}>Volver a la vista anterior</button>}
       {typeof serverError === "string" && <p role="alert" className="text-sm text-error">{serverError}</p>}
       {footerContent && <div className="border-t border-base-300 pt-3">{footerContent}</div>}
     </footer>
-  </FormLayout>;
+  </FormLayout>
+  </FormActionsContext.Provider>;
 }

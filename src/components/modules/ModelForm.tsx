@@ -19,7 +19,7 @@ import { useFormNavigation } from "@/components/ui/form/FormNavigationProvider";
 import { useAlerts } from "@/components/ui/alerts/AlertProvider";
 import { buildModelUI, type ModelUI } from "@/lib/modules/client";
 import type { ModelClientConfig } from "@/lib/modules/config";
-import { modelActivity, modelDelete, modelNote, modelRead, modelSave } from "@/lib/modules/actions";
+import { modelAction, modelActivity, modelDelete, modelNote, modelRead, modelSave } from "@/lib/modules/actions";
 
 type Values = Record<string, unknown>;
 
@@ -59,6 +59,9 @@ function Editor({ ui, record, displayName, onReload, children }: { ui: ModelUI; 
     mode={savedId ? "edit" : "create"}
     onSubmit={values => modelSave(config.id, values)}
     deletion={{ action: selection => modelDelete(config.id, selection), returnHref: config.route }}
+    // FormButton: published @action names only; the server validates them and re-authorizes.
+    runAction={(action, target) => modelAction(config.id, { action, ...target })}
+    actions={config.actions}
     onNew={savedId ? () => router.push(`${config.route}/nuevo`) : undefined}
     onSaved={(values, _audit, name) => {
       setSavedId(values.id as string);

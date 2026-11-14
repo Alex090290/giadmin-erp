@@ -97,7 +97,9 @@ Migraciones creadas durante el recorrido (conservar junto con esquemas y propied
 ## Pendiente para retomar
 
 **Primero, prioridad para la sesión del 2026-11-14:** implementar
-[Acciones de formulario](ideas/acciones-formulario.md): FormHeader y FormButton.
+[Acciones de formulario](ideas/acciones-formulario.md): métodos de acción en la
+clase del modelo y su ejecución autorizada (ampliación del 2026-11-14), seguidos
+de FormHeader y FormButton. Sintaxis y contrato de los métodos aún por definir.
 El formulario valida/guarda primero y luego se ejecuta la acción del botón sólo si
 tuvo éxito. Son propuestas; todavía no existen esos componentes ni Ventas.
 

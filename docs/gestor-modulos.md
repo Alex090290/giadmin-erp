@@ -91,7 +91,9 @@ máquinas. Sin él se requiere una recuperación manual revisada.
 
 **Eliminar datos** retira además el esquema/propiedad/inversas exclusivos y crea
 una migración nueva con transacción, sin borrar migraciones históricas. La limpieza
-de actividad, grupos, reglas y overrides usa identidades exactas. Las imágenes
+de actividad, grupos, reglas y overrides usa identidades exactas. Su SQL usa nombres de tabla sin esquema
+(no `"public".`) para que la migración se pueda reproducir en la base sombra o en otro
+esquema. Las imágenes
 remotas se conservan. Las referencias de otros módulos, imports, delegates,
 Many2one y SQL literal detectados bloquean; la inspección SQL también bloquea FK
 externas, vistas, particiones y triggers. Los usos dinámicos arbitrarios requieren

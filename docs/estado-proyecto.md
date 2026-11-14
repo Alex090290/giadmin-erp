@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-13.
+Última actualización: 2026-11-14.
 
 Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../AGENTS.md)
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
@@ -74,9 +74,64 @@ se preparan ahora desde un fixture propio, sin depender de la nueva tutoría.
 
 ## Siguiente paso concreto
 
-### Prioridad para mañana: Acciones de formulario (2026-11-14)
+### Acciones del modelo y de formulario: implementadas (2026-11-14)
 
-Implementar antes de continuar Flota: FormHeader para botones y Field de estado,
+Implementado en `codex/flota`, sin commit:
+
+- `@action` en la clase del modelo;
+- `service.action` (Serializable, permisos, regla, grupos y revisión; mismo
+  `persist`; historial «Acción: <label>»);
+- Server Action fija `modelAction` con nombre validado;
+- `FormHeader` y `FormButton` coordinados por FormView y conectados en ModelForm;
+- demo `/sample#form-actions`.
+
+Contrato en [Acciones de formulario](ideas/acciones-formulario.md#contrato-implementado-2026-11-14).
+
+- Correcciones de paso:
+  - FormLayout ahora hace `preventDefault` síncrono. Antes lo hacía tras
+    `await reactions.settle()`, y un submit programático podía enviar un GET nativo
+    con los valores en la URL.
+  - FormView usa un candado por ref contra el doble clic.
+- Migración `20261113221349_uninstall_demo`:
+  - se quitaron los nombres calificados `"public".`, que rompían el replay en la
+    base sombra de `migrate dev`;
+  - con aprobación del usuario, se actualizó su checksum en la tabla
+    `_prisma_migrations` local (LF, condicionado al valor anterior);
+  - **otras bases donde ya se aplicó (otra máquina) requieren el mismo ajuste de
+    checksum**, o `migrate` reportará la migración como modificada;
+  - `cleanupSQL` del gestor de módulos ya genera SQL sin esquema.
+- Verificación del 2026-11-14:
+  - `test:modules:integration` pasó completa. Cubre en acciones: nombres no
+    publicados o reservados, campos extra, regla de registro, grupos, revisión
+    obsoleta, transición inválida, rollback por beforeSave, historial y
+    superusuario.
+  - test:orm 78/79: el fallo es EPERM al crear symlinks en Windows, ajeno al cambio.
+  - form-navigation 12/12, form-model 8/8, modules 21/21, list-selection 8/8 y
+    list-grouping 14/14; tsc y eslint limpios.
+  - Demo verificada en el panel del navegador:
+    - registro nuevo vacío: la validación bloquea la acción;
+    - registro nuevo: guarda y ejecuta la acción una sola vez;
+    - registro modificado: la acción recibe la revisión nueva;
+    - registro limpio: sin reescritura;
+    - transición inválida;
+    - fallo simulado que conserva lo guardado;
+    - doble clic y modo consulta.
+  - No se probó con un módulo real en el navegador ni se ejecutó el build.
+- Pendientes:
+  - el esquema de contraseña limita a 8 caracteres;
+  - las etiquetas Many2one no se filtran por las reglas del modelo destino;
+  - aviso dev `instant-unrendered-segment`.
+
+  Usar acciones en Flota sólo en un ejercicio acordado; Ventas no existe.
+
+### Acuerdo original: acciones del modelo y de formulario (2026-11-14)
+
+Ampliación acordada el 2026-11-14: declarar las acciones de negocio como métodos
+en la propia clase del modelo, con publicación explícita y un adaptador de Server
+Action sin reglas duplicadas. Primero definir su contrato y ejecución compartida
+autorizada/transaccional, revisión, validación, hooks e historial; la sintaxis de
+decorador y tipos del ejemplo todavía no es definitiva. Después implementar
+FormHeader para botones y Field de estado,
 y FormButton integrado con RHF/ModelForm. Secuencia predeterminada acordada:
 validar/guardar mediante el ciclo del formulario y, sólo tras éxito, ejecutar la
 acción del botón con la identidad y revisión persistidas. Un bloqueo cubre ambas
@@ -85,6 +140,10 @@ La acción posterior puede fallar después de un guardado exitoso: conservar ese
 registro/revisión, sin prometer una transacción conjunta. Estos componentes y
 Ventas aún no existen. [Acuerdo, límites y aceptación](ideas/acciones-formulario.md).
 Se registra para la próxima sesión; no es una implementación ni ejecución programada.
+Revisión del 2026-11-14: rama codex/flota y árbol limpio antes de esta actualización;
+documentación contrastada con ModelForm/FormView y fuentes actuales de Flota.
+Esta ampliación sólo cambia documentación; verificación con git diff --check,
+sin nuevas suites, comprobaciones de BD ni servidor local.
 
 ### Avances posteriores de Flota y Fields (2026-11-13)
 

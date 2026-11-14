@@ -49,6 +49,26 @@ Si falla la navegación después de confirmar el borrado, se bloquea la edición
 se ofrece un enlace de retorno. No se eliminan automáticamente archivos remotos.
 Demo RHF/Zod reversible, con cancelación/rechazo/consulta, en `/sample#form-deletion`.
 
+## Acciones de formulario
+
+`runAction(name, {id, revision})` y `actions` (nombres y labels publicados) habilitan
+`FormHeader` y `FormButton`. FormHeader se monta en la cabecera mediante portal,
+dentro del contexto RHF. FormButton (`type="button"`) se oculta en consulta y comparte
+un único bloqueo síncrono con Guardar y los demás botones:
+
+1. Registro nuevo o con cambios: envía el formulario y espera el ciclo normal
+   (reacciones, validación, guardado). Si falla, la acción no se ejecuta.
+2. Registro limpio en edición: usa la identidad guardada, sin reescribir.
+3. Ejecuta `runAction` con la revisión persistida. Éxito: reset, historial, toast y
+   `onSaved`. Fallo: errores por campo y alerta, conservando lo guardado. Error de
+   red: alerta, sin éxito aparente ni reintento.
+
+FormLayout previene el envío nativo de forma síncrona antes de esperar reacciones:
+un submit programático, o una reacción pendiente, podía dejar pasar un GET con los
+valores en la URL. ModelForm conecta todo desde su configuración.
+Demo ficticia: `/sample#form-actions`. Contrato de servidor en
+[Acciones de formulario](../../../../docs/ideas/acciones-formulario.md).
+
 ## Presentación
 
 El header es compacto: navegación y acciones comparten fila cuando hay espacio,

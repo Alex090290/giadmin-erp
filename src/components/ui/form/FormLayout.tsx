@@ -89,6 +89,9 @@ export default function FormLayout<
         className={`@container/form min-w-0 ${className}`}
         noValidate={noValidate}
         onSubmit={async (submitEvent) => {
+          // Synchronously: the awaits below would let the native GET submit run first
+          // (programmatic requestSubmit from FormButton, or a pending reaction).
+          submitEvent.preventDefault();
           try {
             if(!await reactions.settle()){methods.setError("root.reaction",{type:"reaction",message:"Revisa los datos relacionados o reintenta su consulta."});return;}
             methods.clearErrors("root.reaction");

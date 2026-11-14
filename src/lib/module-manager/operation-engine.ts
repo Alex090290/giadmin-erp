@@ -116,7 +116,11 @@ async function accessKeys(root: string, id: string) {
 }
 
 function cleanupSQL(schema: string, models: readonly string[], modelIds: readonly string[], keys: { groups: string[]; rules: string[] }) {
-  const table = (name: string) => `${quote(schema)}.${quote(name)}`;
+  // Unqualified like every Prisma migration: the file must replay in any schema (shadow
+  // databases, temporary test schemas, deployments not using "public"). `schema` only
+  // documents where the plan was reviewed.
+  void schema;
+  const table = (name: string) => quote(name);
   const statements = models.length ? [`DELETE FROM ${table("record_activities")} WHERE model IN (${models.map(literalSQL).join(", ")});`] : [];
   if (keys.groups.length) statements.push(`DELETE FROM ${table("access_user_groups")} WHERE group_id IN (${keys.groups.map(literalSQL).join(", ")});`);
   const conditions = [keys.groups.length ? `group_id IN (${keys.groups.map(literalSQL).join(", ")})` : "", modelIds.length ? `model IN (${modelIds.map(literalSQL).join(", ")})` : ""].filter(Boolean);
