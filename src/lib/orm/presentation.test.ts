@@ -15,6 +15,24 @@ test("published descriptors derive columns and preserve explicit presentation", 
   assert.throws(()=>modelColumns(fields,[{field:"missing" as "state"}]),/no publicado/);
 });
 
+test("badges retain Selection labels and reject invalid fields, colors and values", () => {
+  const fields = {
+    state: Fields.Selection([{value:"draft",label:"Borrador"}], {required:true}),
+    name: Fields.Text(),
+    secret: Fields.Selection([{value:"draft",label:"Secreto"}], {sensitive:true}),
+  };
+  const [column] = modelColumns(fields, [{field:"state",widget:"badge",colors:{draft:"warning"},options:[{value:"draft",label:"Changed"}]}]);
+  assert.deepEqual(column.options, [{value:"draft",label:"Borrador"}]);
+  assert.deepEqual(column.colors, {draft:"warning"});
+  assert.throws(() => modelColumns(fields, [{field:"name",widget:"badge"}]), /Selection/);
+  assert.throws(() => modelColumns(fields, [{field:"secret",widget:"badge"}]), /sensible/);
+  assert.throws(() => modelColumns(fields, [{field:"state",widget:"badge",colors:{unknown:"error"}}]), /badge/);
+  assert.doesNotThrow(() => modelColumns(fields, [{field:"state",colors:{draft:"error"}}]));
+  assert.throws(() => modelColumns(fields, [{field:"name",colors:{draft:"error"}}]), /Selection/);
+  assert.throws(() => modelColumns(fields, [{field:"state",widget:"image",colors:{draft:"error"}}]), /badge/);
+  assert.throws(() => modelColumns(fields, [{field:"state",widget:"badge",colors:{draft:"red" as "error"}}]), /badge/);
+});
+
 const brand = defineModel(class extends Model { name=Fields.Text({required:true}); privateName=Fields.Text({sensitive:true}); },{name:"DisplayBrand",table:"display_brand"});
 const vehicle = defineModel(class extends Model { name=Fields.Text({required:true}); brandId=Fields.Many2one("DisplayBrand"); },{name:"DisplayVehicle",table:"display_vehicle"});
 test("typed names project dependencies, preserve nullable relations and reject target mismatches", () => {

@@ -6,6 +6,73 @@ Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
+## Cierre del 2026-11-14
+
+Estado contrastado hoy con fuentes y Git. Rama `codex/flota`; último commit
+`fdd4d5b` («Acciones del modelo»). Las ampliaciones de esta sesión permanecen
+sin commit, incluidos nuevos archivos, esquema/propiedad y migración de estado.
+No se hicieron commit, push ni pull. Al cambiar de máquina, compartir también
+los archivos nuevos; dependencias, configuración privada, datos y procesos no
+se transportan mediante Git.
+
+Avance implementado y revisado:
+
+- Flota: búsqueda explícita por name/plate, filtros/agrupación practicados y menú
+  Vehículos / Configuración → Fabricantes y Modelos.
+- Consulta con lectura de los tres modelos; Operador hereda Consulta y crea/lee/
+  edita vehículos propios; Responsable hereda Operador y accede a todos mediante
+  regla de grupo domain:[]. Sin eliminación ni escritura de catálogos añadidas.
+- Vehicle.estado: Disponible / En mantenimiento, obligatorio, default disponible
+  y tracking. Migración `20261114180636_sync_flota` y esquema/propiedad presentes;
+  usuario dio por completado orm:sync, sin nueva consulta independiente de BD
+  para verificar la aplicación de esa migración.
+- Formulario personalizado con FormContent/useWatch, statebar y botones para
+  enviar/finalizar mantenimiento; métodos @action en Vehicle. Active volvió a
+  mostrarse; testing permanece en la clase pero ya no tiene botón en la vista.
+- Metadata de la ruta compartida usa displayName autorizado como título de la
+  pestaña y se actualiza tras guardar/acción. Fallbacks seguros para creación,
+  lista y lectura fallida. Lectura de metadata y loader aún separadas.
+- Colores de Selection compartidos por lista/card/kanban: colors sin widget
+  colorea el texto; widget badge usa daisyUI y fallback neutral. Las etiquetas
+  vienen del modelo. Corregida propagación de options al filtro de ListView.
+- VehicleKanban creado por el usuario y activo en views.list, conservando el
+  archivo VehicleList. El arrastre/selector ejecuta los mismos métodos de
+  mantenimiento a través del grafo from/to/action, con transacción, revisión,
+  permisos/reglas/grupos y rollback de registro/historial si falla o no alcanza
+  destino. No se añadieron más estados ni movimientos sobre datos reales.
+- Layout compartido: statebar junto a botones con ancho de contenido; Kanban
+  con padding exterior 8/12px y gap de columnas 8px.
+
+Evidencia y límites: el usuario confirmó búsqueda/filtros/agrupación, ejercicios
+de acceso y reglas, título, flujo de mantenimiento desde formulario e historial,
+y apertura del Kanban. El asistente revisó fuentes y comprobó demos ficticias de
+acciones, badges/texto y movimientos con selector/teclado, incluido rechazo.
+Pasaron TypeScript, ESLint de afectados, pruebas focalizadas por alcance y
+test:modules:integration completo con proyecto/esquema temporales eliminados.
+La última ampliación de transiciones cubrió 30 pruebas focalizadas y, en BD
+temporal, permisos, sesión, revisión/origen, grupos, historial y rollback tras
+hooks/destino incorrecto. No se ejecutó build nuevo ni se repitió una prueba
+autenticada de arrastre en Flota. El cierre actual sólo actualiza documentación
+y verifica git diff --check; no vuelve a ejecutar esas suites.
+
+Siguiente paso: comprobar con el usuario el arrastre/selector de Flota en ambos
+sentidos, revisión de historial/reapertura y rechazo sin escritura. Antes de otro
+ejercicio, tener presente que finalizarMantenimiento sigue fuera del div que
+agrupa botones en VehicleForm; es un ajuste de maquetación aún no aplicado.
+Después acordar qué pendiente abordar; registrar una idea no autoriza ejecutarla:
+
+- [Multivistas Lista/Kanban/Tarjetas](ideas/multivistas-colecciones.md), coordinadas
+  con [eject:view Kanban](ideas/eject-kanban.md).
+- [Menús por permisos efectivos](ideas/menus-permisos-efectivos.md).
+- [Permisos por campo y presentación por grupo](ideas/permisos-campos.md).
+
+La propuesta de otra API render/children se retiró: renderCard ya permite
+personalizar tarjetas. Oportunidades detectadas: proyectar capacidades efectivas
+para abrir formularios sin escritura en consulta y evitar que un lookup denegado
+oculte toda la lista; aceptación y límites en los pendientes de este documento.
+Los detalles y comprobaciones por alcance se conservan debajo y en
+[la tutoría](tutorial-flota.md#continuación-vigente-2026-11-14).
+
 ## Dirección y funcionalidades
 
 - Para módulos declarativos: create:module → create:model → personalizar la clase
@@ -74,9 +141,129 @@ se preparan ahora desde un fixture propio, sin depender de la nueva tutoría.
 
 ## Siguiente paso concreto
 
+### Espacio exterior de Kanban (2026-11-14)
+
+Reducido el padding del tablero compartido de 16/24px a 8/12px y la separación
+entre columnas de 16px a 8px, por petición del usuario. Conserva ancho de columnas,
+tarjetas, scroll y movimientos. ESLint del componente y git diff --check aprobados;
+demo /sample#kanban-view comprobada en navegador con padding 12px y gap 8px en
+escritorio. Sin nueva integración/build ni cambios de datos por este ajuste CSS.
+
+### Kanban con transiciones mediante @action (2026-11-14)
+
+Implementado kanban:{field,transitions:[{from,to,action}]} en módulos y servicio;
+el formato string anterior y servicios con sólo field conservan sus movimientos
+directos. Declaración validada y congelada: Selection obligatorio/público/publicado
+<=12 estados, pares distintos/únicos y métodos publicados. Cliente recibe sólo
+from/to; el servidor resuelve el método desde manifest, en la misma transacción
+Serializable de movimiento y compartiendo persistAction con el formulario.
+Revalida origen/revisión, permisos/reglas/grupos y estado final tras hooks; error
+revierte registro e historial. Pares ausentes se rechazan sin fallback; [] bloquea
+cambios. Selector, arrastre y teclado respetan el grafo como ayuda de interfaz.
+
+Flota conserva sus dos estados y métodos: enviarMantenimiento y
+finalizarMantenimiento. Manifest actualizado y VehicleKanban conecta modelMove
+y config.kanbanTransitions; lista y formulario personalizados conservados. Sin
+SQL ni movimientos sobre datos reales. Próximo paso del usuario: probar los dos
+movimientos y comprobar historial/reapertura, con cuentas de operador/responsable.
+
+Verificación: TypeScript, ESLint de afectados, git diff --check y 30 pruebas
+focalizadas (configuración, compatibilidad, módulos, acciones y servicio) aprobados.
+Demo /sample#kanban-view con grafo local
+de tres estados: destinos no declarados deshabilitados, movimiento por selector,
+teclado que salta destinos no permitidos y rechazo que conserva estado. La demo
+es una simulación local, no una comprobación autenticada de Flota.
+Fixture PostgreSQL de módulos: bloque de servicios completado con permisos,
+reglas, grupos de acción, sesión/revisión, acciones falsificadas, historial único,
+hooks rechazados y destino final incorrecto con rollback de revisión/historial.
+test:modules:integration completo aprobado, incluidos ciclo de módulos/scaffold
+y TypeScript de rutas/vistas en la copia temporal. Proyecto y schema temporales
+eliminados por el fixture. No se ejecutó build ni prueba autenticada sobre Flota.
+Contrato en [Módulos](modulos-declarativos.md#kanban-mediante-acciones-publicadas).
+
+### Badges de Selection en colecciones (2026-11-14)
+
+Ampliación posterior solicitada: colors independiente de widget; sin widget
+colorea la fuente, conservando el color heredado cuando no hay asignación, con
+badge mantiene su fondo y fallback neutral. Sigue limitado a Selection público
+y colores/valores válidos. Demo con selector badge/texto en las tres colecciones,
+verificada en navegador; no se modificó VehicleList por esta ampliación.
+Pruebas focalizadas de presentación/servicio (14) y render (4) aprobadas;
+TypeScript, ESLint de afectados y git diff --check aprobados, sin build ni SQL.
+
+Implementado widget badge y colors por valor con fallback neutral en el renderizador
+compartido de lista/tarjetas/kanban; modelColumns y servicio validan Selection
+público, colores semánticos y claves válidas, conservando etiquetas canónicas.
+VehicleList.estado conectado: disponible success, mantenimiento warning. Demo
+ficticia /sample#badge-collections incluye las tres vistas y casos sin color,
+valor desconocido y null. Sin migraciones ni escrituras sobre datos de Flota.
+Se corrigió que ListView no pasaba options a ColumnFilter: ya ofrece operadores
+y valores Selection sin tratar el estado como texto libre.
+Verificación: TypeScript, 14 pruebas de presentación/servicio y 26 de renderizado,
+filtros/consulta, ESLint de afectados y git diff --check aprobados. Navegador:
+render en las tres vistas, filtro eq progress
+con un resultado y valor original en URL, fallback y ancho de 320px sin overflow
+de sección. No se comprobó Flota autenticada ni se ejecutó build.
+Contrato en [Colecciones](vistas-colecciones.md#selection-como-badge).
+El usuario dio por comprobados transiciones de mantenimiento desde formulario,
+guardado previo, reapertura e historial; no se repitieron de forma independiente.
+La conexión Kanban inicialmente de consulta fue superada por el grafo de acciones
+descrito arriba. ModelCollection sólo presenta list/card actualmente; multivistas
+y eject:view kanban están registrados como diseño pendiente, sin API implementada.
+
+### Cabecera compacta con statebar (2026-11-14)
+
+Ajuste solicitado durante la tutoría: FormHeader limita el ancho del FieldSelect
+statebar para compartir fila con botones, centrados verticalmente; conserva wrap
+y scroll interno cuando no caben. Espaciado de esa fila reducido a 8px. Cambios
+compartidos en FormHeader/FormView y marcador de widget en FieldSelect, sin
+modificar las personalizaciones de Flota ni su lógica de estado.
+Demo ficticia /sample#form-actions comprobada en navegador: botones y statebar
+alineados en 1280px; a 320px el estado cabe con scroll interno sin overflow de la
+sección. No se ejecutaron acciones ni escrituras sobre registros reales.
+TypeScript, ESLint de los tres componentes y git diff --check aprobados;
+sin build nuevo ni comprobación visual de Flota autenticada.
+Contrato en ui/form/FormView.md. Las acciones y botones de mantenimiento ya están
+conectados; el siguiente paso vigente figura en el cierre de hoy.
+
+### Título de pestaña del registro (2026-11-14)
+
+Implementado generateMetadata en la ruta compartida de módulos: displayName
+persistido mediante modelRead autorizado; lista con etiqueta del modelo,
+creación «Nuevo registro» y fallo de lectura «Registro». Página y metadata
+comparten validación de ruta. ModelForm ya refresca tras guardado/acción.
+No se modificaron las personalizaciones locales de Vehicle ni datos/SQL.
+Verificación: TypeScript, ESLint de la ruta y git diff --check aprobados;
+sin nueva prueba visual autenticada ni build. Alcance y oportunidad de unificar
+la lectura metadata/loader en [Módulos declarativos](modulos-declarativos.md#título-de-la-pestaña).
+El usuario confirmó el título en su sesión. También dio por completados búsqueda
+(name/plate con searchable:true verificados en fuentes), filtro Activo y
+agrupación Modelo → Activo; sin repetición independiente en navegador.
+Menú Vehículos y Configuración → Fabricantes/Modelos completado por el usuario y
+verificado en manifest. Consulta y Operador ya declarados (lectura de los tres
+modelos; Operador hereda Consulta y añade cru a Vehicle). El usuario comprobó el
+rechazo de guardado sin escritura y dio por terminado el paso tras corregir la
+asignación a Operador. Sin repetición independiente del guardado en navegador.
+Regla vehiculos-propios de Operador ya verificada en manifest (createBy = actor.id);
+usuario dio por terminado el ejercicio, sin prueba funcional independiente.
+Responsable y regla vehiculos-todos (domain:[]) ya verificados en manifest;
+usuario dio por completado el ejercicio, sin repetición funcional independiente.
+Usuario aceptó Disponible ↔ En mantenimiento y añadió estado Selection obligatorio
+con default disponible/tracking. Fuentes, esquema y migración
+20261114180636_sync_flota verificados; usuario dio por completado orm:sync, sin
+comprobación independiente de BD. Statebar y métodos de transición ya verificados
+en fuentes; métodos requieren grupo operador y validan estado previo. Siguiente
+paso de esta etapa, ya confirmado por el usuario: prueba funcional de transiciones,
+guardado previo e historial. Botones y
+condiciones ya verificados en fuentes, label corregido; falta agrupar ambos
+botones dentro del mismo div (finalizar quedó fuera). Usuario retiró testing de
+la vista y muestra active. Sin cambios de aplicación ni SQL por esta nota.
+Detalle en [la tutoría](tutorial-flota.md#continuación-vigente-2026-11-14).
+
 ### Acciones del modelo y de formulario: implementadas (2026-11-14)
 
-Implementado en `codex/flota`, sin commit:
+Base implementada en `codex/flota` y versionada en `fdd4d5b`; ampliaciones de esta
+sesión aún sin commit:
 
 - `@action` en la clase del modelo;
 - `service.action` (Serializable, permisos, regla, grupos y revisión; mismo
@@ -1124,6 +1311,53 @@ Comprobaciones anteriores a la actividad (históricas para esos alcances):
   Las pruebas de código anteriores son históricas y no se repitieron para esta nota.
 
 ## Oportunidades de mejora pendientes
+
+- **Formularios según capacidades efectivas**: durante la prueba de consulta el
+  servidor rechazó guardar, pero el formulario dejó editar y mostró Guardar/Nuevo.
+  Aceptación: publicar capacidades autorizadas, abrir sin escritura en modo consulta
+  y ajustar crear/eliminar/acciones por su permiso, manteniendo la comprobación
+  transaccional de cada operación. No sustituye permisos por campo ni autoriza
+  ampliar accesos. Hallazgo registrado, sin implementación por esta nota.
+- **Lista cuando falla el lookup de una relación**: con lectura de Vehicle pero
+  sin lectura de Modelo, resolveListLabels rechaza toda la lista. Aceptación:
+  diseñar un fallback seguro para relación no disponible sin publicar etiquetas
+  restringidas ni ocultar errores de red/configuración; conservar autorización
+  de la lista y del destino. No conceder lectura automáticamente. Hallazgo
+  diagnosticado mediante lectura de permisos y código, sin corrección implementada.
+
+- **Multivistas Lista/Kanban/Tarjetas**, solicitado el 2026-11-14: selector de
+  vistas disponibles para una colección y registro por tipo, evitando usar
+  views.list para sustituir la tabla por Kanban. Conservar personalizaciones,
+  permisos y consultas; diseñar URL/navegación y estado compatible entre vistas.
+  Coordinar eject:view kanban. [Alcance y aceptación](ideas/multivistas-colecciones.md).
+  Propuesta sin implementación ni API definitiva; sólo documentación comprobada
+  con git diff --check, sin cambios de aplicación ni SQL.
+
+- **Planificar eject:view Kanban**, solicitado el 2026-11-14:
+  `npm run eject:view -- <modulo> <modelo> kanban`. Reducir la creación manual del
+  tablero preservando TSX editable, lista existente, permisos, transiciones y
+  protecciones del generador. Definir primero salida y registro de vistas.
+  La propuesta adicional de render/children se retiró por decisión del usuario
+  el 2026-11-14: renderCard(record) ya cubre su necesidad de personalizar tarjetas.
+  [Alcance y aceptación](ideas/eject-kanban.md). Sólo documentación, sin código
+  ni SQL; verificada con git diff --check.
+
+- **Ocultar menús por permisos efectivos**, solicitado el 2026-11-14. El filtro
+  actual usa grupos de lectura declarados, sin incorporar overrides del motor
+  de permisos. Incorporarlos y ocultar grupos vacíos, manteniendo autorización
+  por URL directa, superusuario y cargas por lote. Evidencia: revisión de código
+  y captura del usuario, sin nueva prueba visual independiente. Alcance en
+  [el pendiente](ideas/menus-permisos-efectivos.md). Sólo documentación;
+  git diff --check, sin cambios de permisos, aplicación ni SQL.
+
+- **Permisos por campo y presentación por grupo**, solicitado el 2026-11-14:
+  lectura/escritura de campos en servidor y condiciones invisible/readOnly/required
+  y visibilidad de NotebookPage en UI. Propuesta sin implementación ni API decidida;
+  diseñar contratos parciales y composición de grupos, preservando validación,
+  datos y protección de salidas derivadas. Alcance, motivo y aceptación en
+  [el pendiente](ideas/permisos-campos.md). No cambia el siguiente ejercicio de
+  Flota. Nota documental comprobada con git diff --check;
+  sin nuevas suites, SQL ni cambios de aplicación.
 
 - **Unificar escrituras de eject:view:** el comando aún tiene su propia secuencia
   de creación/edición/restauración, mientras los nuevos generadores reutilizan

@@ -36,7 +36,7 @@ function useFormActions(component: string) {
  */
 export function FormHeader({ children }: { children: ReactNode }) {
   const { header } = useFormActions("FormHeader");
-  return header ? createPortal(<div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">{children}</div>, header) : null;
+  return header ? createPortal(<div className="flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-between gap-2 [&_[data-form-widget=statebar]]:ml-auto [&_[data-form-widget=statebar]]:w-auto [&_[data-form-widget=statebar]]:max-w-full">{children}</div>, header) : null;
 }
 
 type FormButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "onClick" | "children"> & {

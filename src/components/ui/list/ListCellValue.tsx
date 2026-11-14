@@ -2,11 +2,15 @@ import { readListDisplayValue, readListValue, type ListColumn, type ListRecord }
 import { PartnerIdentity } from "../PartnerAvatar";
 import { formatListValue } from "./listFormat";
 import CollectionImage from "../collection/CollectionImage";
+import { badgeColorClass, selectionTextColorClass } from "@/lib/list/badge";
 
 export default function ListCellValue({ record, column }: { record: ListRecord; column: ListColumn }) {
   const value = readListDisplayValue(record, column);
   if (column.widget === "image") return <CollectionImage value={value} label={column.label} size={column.imageSize} shape={column.imageShape} />;
   const formatted = formatListValue(value, column);
+  if (column.widget === "badge") return <span className={`badge badge-sm h-auto max-w-full whitespace-normal break-words py-1 ${badgeColorClass(readListValue(record, column.field), column.colors)}`}>{formatted}</span>;
+  const textColor = column.widget === undefined ? selectionTextColorClass(readListValue(record, column.field), column.colors) : "";
+  if (textColor) return <span className={textColor}>{formatted}</span>;
   if (column.widget === "partner") {
     const avatar = column.avatarField ? readListValue(record, column.avatarField) : null;
     return <PartnerIdentity name={formatted} avatarUrl={typeof avatar === "string" ? avatar : null} />;

@@ -11,6 +11,21 @@ Sólo se escribe TSX para lo que se personaliza.
 
 ## Estructura
 
+### Título de la pestaña
+
+La ruta compartida `/erp/[module]/[[...path]]` define `generateMetadata`:
+en listas usa la etiqueta del modelo, en creación «Nuevo registro» y al abrir
+un registro su `displayName` canónico. Reutiliza `modelRead`, con sesión,
+permisos y reglas de registro; ante fallo usa «Registro» sin publicar el error
+ni el nombre. No se cachean nombres entre usuarios.
+
+El título corresponde al registro persistido, no al borrador RHF. Guardar o
+ejecutar una acción desde ModelForm refresca la ruta y sus metadatos. La carga
+actual hace una lectura autorizada para metadata y otra mediante FormViewLoader;
+no cambia el contrato de las vistas expulsadas ni las rutas manuales de
+Contactos/Usuarios. Una futura unificación de carga debe conservar loader,
+reintentos, autorización y actualización del registro sin duplicar consultas.
+
 ```
 src/modules/<id>/manifest.ts        obligatorio: defineModule(...)
 src/modules/<id>/models/*.ts        clases de modelo (server-only)
@@ -196,11 +211,73 @@ rules: [
   siguiente operación: los permisos se leen dentro de cada transacción.
 - Cajón y menús se muestran según los grupos con lectura declarados en el código;
   es presentación: el servidor vuelve a autorizar cada operación.
+  Incorporar los ajustes de lectura guardados en Control de accesos a esta
+  visibilidad está [pendiente](ideas/menus-permisos-efectivos.md).
 
 Fuera de alcance por ahora: permisos por campo, multiempresa y crear reglas desde
 la interfaz (los dominios son código).
+Permisos por campo y presentación por grupo se registraron como
+[pendiente de diseño](ideas/permisos-campos.md) el 2026-11-14; no están implementados.
 
 ## 6. Acciones del modelo
+
+### Kanban mediante acciones publicadas
+
+Un modelo puede declarar el grafo de transiciones en el manifest:
+
+```ts
+vehicle: {
+  model: Vehicle,
+  kanban: {
+    field: "estado",
+    transitions: [
+      { from: "disponible", to: "mantenimiento", action: "enviarMantenimiento" },
+      { from: "mantenimiento", to: "disponible", action: "finalizarMantenimiento" },
+    ],
+  },
+  // Conservar las vistas personalizadas existentes.
+},
+```
+
+Cada par origen/destino debe ser único, usar valores distintos de una Selection
+obligatoria pública publicada (máximo 12 estados) y apuntar a un método @action.
+Se valida al declarar el módulo y al construir el servicio. Un método puede
+servir a varios pares si sus reglas lo permiten. `transitions: []` impide cambios;
+una transición ausente se rechaza sin fallback de escritura directa.
+
+Compatibilidad: `kanban: "estado"` sigue funcionando. La forma anterior del
+servicio `{field:"estado"}` también conserva movimientos directos por el ciclo
+de guardado; no implica ejecutar métodos @action. Añadir transitions activa el
+despacho autorizado de acciones. No requiere orm:sync ni migración si campos y
+estados ya existen.
+
+En una vista KanbanView personalizada, conectar:
+
+```tsx
+load={modelKanban.bind(null, config.id)}
+onMove={modelMove.bind(null, config.id)}
+transitions={config.kanbanTransitions}
+```
+
+El contrato cliente conserva `config.kanban` como nombre del campo y publica sólo
+pares from/to en kanbanTransitions. El servidor resuelve la acción desde su copia
+del manifest; una petición sólo admite ID, revisión, from y to. No acepta nombre
+de método, patch ni configuración de transiciones del navegador.
+
+El movimiento usa una transacción Serializable: revalida sesión/escritura/regla,
+revisión y origen persistidos, ejecuta la acción con sus grupos y el mismo ciclo
+de persistencia/historial del botón. Comprueba el estado final después de hooks:
+si difiere del destino, revierte registro, revisión e historial. No abre una
+transacción anidada ni coordina dos requests. Un movimiento al estado actual es
+un no-op autorizado con revisión vigente, sin ejecutar acción ni escribir.
+
+El grafo publicado deshabilita destinos del selector y del arrastre/teclado; es
+una ayuda de interfaz, no una autorización. Los grupos de acción se comprueban
+en servidor y pueden rechazar un destino visible. Esto no crea permisos por campo
+ni convierte las acciones en el único canal de escritura de un Selection; las
+restricciones generales del modelo siguen correspondiendo a sus reglas/hooks.
+Demo local en /sample#kanban-view con selector de transiciones; integración real
+en el fixture desechable de módulos, sin datos de Flota.
 
 La lógica de un botón de negocio vive en la clase, publicada con `@action`:
 

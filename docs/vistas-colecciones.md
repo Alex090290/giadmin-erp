@@ -22,6 +22,45 @@ Fields.Image no sensibles; legacy conserva su whitelist. Demo
 
 ## Búsqueda y filtros comunes
 
+### Selection como badge
+
+ListView, CardView y KanbanView comparten `widget: "badge"` para campos Selection:
+
+```tsx
+{ field: "estado", widget: "badge", colors: {
+  disponible: "success",
+  mantenimiento: "warning",
+} }
+```
+
+En ModelCollection/modelColumns, etiquetas y opciones se obtienen del modelo.
+`colors` también funciona sin widget; en ese caso aplica color a la fuente:
+
+```tsx
+{ field: "estado", colors: { disponible: "success", mantenimiento: "warning" } }
+```
+
+`colors` es opcional y sus claves deben ser valores del Selection. Colores:
+primary, secondary, accent, info, success, warning, error y neutral. Sin color
+configurado, badge usa neutral y texto sin widget conserva su color heredado.
+Igual fallback para valores desconocidos; null/vacío se muestra como «—».
+Texto escapado, clases estáticas del tema y
+etiquetas multilínea. El badge sólido usa el color de contenido del tema.
+
+modelColumns y createModelService rechazan badge en otros tipos/sensibles,
+colores inválidos o claves ajenas a la selección. colors admite widget badge o
+ningún widget; no se combina con image/partner/many2one. Sigue limitado a Selection.
+El servicio reutiliza las opciones canónicas para sus columnas. Proveedores
+manuales de colecciones declaran options explícitas; la whitelist legacy
+partner/user no se amplía. renderCell/renderCard personalizados conservan su
+prioridad; el contenido propio no recibe badges automáticos.
+
+Es presentación: no cambia valores, SQL, permisos, filtros, orden ni agrupación.
+ListView pasa options al filtro para ofrecer igualdad, desigualdad y vacío,
+como las otras colecciones. Demo ficticia en `/sample#badge-collections`;
+Flota lo usa en la columna estado. La demo permite alternar badge/texto en las
+tres vistas sin modificar valores ni su configuración de consulta.
+
 CardView y KanbanView usan header compacto compartido: breadcrumbs opcionales,
 búsqueda, filtros, orden y acciones. title permanece como encabezado accesible;
 icon/description se aceptan por compatibilidad sin el bloque visible de resumen.
@@ -151,13 +190,24 @@ guardar. La carga incremental de cada columna no se guarda en la URL.
 
 ## Movimiento y seguridad
 
+Para módulos declarativos, `kanban: {field, transitions:[{from,to,action}]}` conecta
+el movimiento a métodos @action dentro de la misma transacción, con permisos,
+revisión, reglas, grupos e historial del método. La vista pasa
+`transitions={config.kanbanTransitions}` y `onMove={modelMove.bind(null,config.id)}`.
+Destinos no declarados se deshabilitan en selector/arrastre/teclado y el servidor
+los rechaza de forma independiente. Si el resultado final no coincide con el
+destino, el movimiento se revierte. `kanban:"estado"` y servicios con sólo field
+mantienen el comportamiento directo previo. [Contrato y límites](modulos-declarativos.md#kanban-mediante-acciones-publicadas).
+
 `onMove` recibe `{ id, revision, from, to }` y devuelve `{ok:true}` o
 `{ok:false,error,kind?}`. Cada DTO movible necesita `revision` ISO UTC con milisegundos.
 Sin `onMove`, la vista es de consulta; si falta revisión, esa tarjeta no es movible.
 
 El servicio comprueba en una transacción Serializable:
 
-1. Cuenta activa, permisos admin y versión de sesión leídos de la base.
+1. Cuenta activa, permisos de escritura y versión de sesión leídos de la base;
+   módulos declarativos aplican sus grupos/reglas, servicios sin authorizer
+   conservan la política admin.
 2. Estados declarados, ID, revisión y estado de origen actuales.
 3. Validación completa y hooks `beforeSave`/`afterSave`, compartidos con FormView.
 4. Escritura con comparación de revisión y avance de `updatedAt`.
@@ -180,6 +230,9 @@ Ambas vistas admiten `icon`, `description`, `headerActions`, `footer`, `createHr
 tarjeta. Ese callback se define dentro de un componente cliente (como el ejemplo
 de `/sample`); una función normal no puede cruzar el límite servidor/cliente.
 Un Server Action sí puede pasarse como `load`/`onMove`.
+
+Kanban usa padding exterior de 8px en móvil y 12px desde sm, con 8px entre
+columnas. Conserva el ancho de columnas, el padding de las tarjetas y sus scrolls.
 
 Usar un padre `flex min-h-0 flex-1 flex-col` y `className="flex-1"` para ocupar
 el espacio disponible. En catálogos o paneles se puede definir altura explícita,

@@ -1,6 +1,6 @@
 # Flota: tutoría con módulos declarativos
 
-Recorrido actualizado el 2026-11-13 para `src/modules`. El usuario ejecuta los
+Recorrido actualizado el 2026-11-14 para `src/modules`. El usuario ejecuta los
 ejercicios; explicar y verificar uno cada vez, sin crear modelos, vistas ni reglas
 por adelantado. [Contrato y herramientas](modulos-declarativos.md).
 
@@ -27,7 +27,7 @@ No es necesario escribir un manifest desde cero ni generar vistas por modelo:
 `create:module` produce el esqueleto y `create:model` registra cada clase. Los
 menús y las reglas de negocio/acceso sí se personalizan expresamente.
 
-## Avance actual (2026-11-13)
+## Base al cierre del 2026-11-13
 
 Rama `codex/flota`. Después de la primera pausa para cambiar de máquina, la tutoría
 continuó con Vehicle. El usuario ejecutó los ejercicios y personalizó sus archivos;
@@ -96,28 +96,82 @@ Migraciones creadas durante el recorrido (conservar junto con esquemas y propied
 
 ## Pendiente para retomar
 
-**Primero, prioridad para la sesión del 2026-11-14:** implementar
-[Acciones de formulario](ideas/acciones-formulario.md): métodos de acción en la
-clase del modelo y su ejecución autorizada (ampliación del 2026-11-14), seguidos
-de FormHeader y FormButton. Sintaxis y contrato de los métodos aún por definir.
-El formulario valida/guarda primero y luego se ejecuta la acción del botón sólo si
-tuvo éxito. Son propuestas; todavía no existen esos componentes ni Ventas.
+### Continuación vigente (2026-11-14)
 
-Después retomar Flota, un ejercicio por vez:
+Las acciones del modelo y FormHeader/FormButton están implementados, con base
+versionada en fdd4d5b. Las ampliaciones del día siguen sin commit en codex/flota;
+no se hicieron commit/push/pull. Vehicle conserva testing como práctica, pero el
+usuario retiró su botón y volvió a mostrar active. FormContent observa estado con
+useWatch y presenta botones de mantenimiento condicionales. El usuario confirmó
+el título de pestaña del registro. [Cierre y verificaciones del día](estado-proyecto.md#cierre-del-2026-11-14).
 
-1. Confirmar con el usuario que la lista ya abre y muestra el logo después de la
-   corrección de related. No volver a generar Vehicle ni expulsar vistas existentes.
-2. Practicar opciones de colección del modelo: por ejemplo, añadir matrícula a la
-   búsqueda junto a name. Revisar el estado actual antes de proponer el cambio.
-3. Organizar el manifest con Vehículos y Configuración → Fabricantes/Modelos,
-   conservando las claves de modelos y sus rutas. La agrupación aún no está declarada.
-4. Declarar grupos, permisos CRUD y reglas de registros, asignarlos desde Control
-   de accesos y comprobarlos con cuentas de prueba acordadas. El módulo actual no
-   declara grupos propios; no confundir ocultar controles con autorización.
-5. Acordar un caso real para estado/statebar, condiciones useWatch y acciones con
-   FormHeader/FormButton una vez implementados. Vehicle todavía no declara un campo
-   de estado ni acciones de transición; los ejemplos de Confirmar/Ventas sólo fueron
-   explicativos. No inventar reglas de Flota ni crear Ventas anticipadamente.
+Verificado searchable:true en name/plate. El usuario dio por completados el
+ejercicio de búsqueda y el de filtro Activo y agrupación Modelo → Activo;
+son confirmaciones del usuario, sin repetición independiente en navegador.
+Menú completado por el usuario y verificado en manifest: Vehículos → vehicle y
+Configuración → Fabricantes/Modelos (fabricante/modelo), conservando clases,
+claves y vistas personalizadas. Grupos consulta (lectura de los tres modelos) y
+operador (hereda consulta y añade cru en vehicle) declarados y verificados en
+manifest. El usuario comprobó rechazo de guardado sin escritura. Se diagnosticó
+que overrides sin lectura de Modelo impedían resolver etiquetas de la lista;
+también que declarar operador no asignaba automáticamente la cuenta al grupo.
+El usuario dio por completado el paso tras indicar la asignación; no se repitió
+el guardado en navegador por el asistente. Regla vehiculos-propios (label «Mis
+vehículos») ya declarada y verificada: grupo operador, createBy = actor.id.
+El usuario dio por completado el ejercicio; sin repetición funcional independiente.
+Responsable ya declarado y verificado: hereda operador y regla vehiculos-todos
+con domain:[]; usuario dio por completado el ejercicio, sin prueba funcional
+independiente. Conserva cru sólo sobre Vehicle, sin eliminación ni escritura
+de catálogos. El usuario aceptó el ejercicio Disponible ↔ En mantenimiento.
+Vehicle ya declara estado Selection obligatorio, default disponible y tracking;
+verificados enum/campo en prisma/models/orm-flota.prisma y migración
+20261114180636_sync_flota. El usuario dio por completado orm:sync, sin comprobación
+independiente de la BD. Statebar ya colocado en FormHeader; métodos
+enviarMantenimiento/finalizarMantenimiento verificados con grupo operador y
+validación de estado previo. Label de envío corregido y ambos botones ya conectados
+con useWatch de estado e invisible; usuario retiró el botón testing del formulario
+y volvió a mostrar active. Revisión detectó finalizarMantenimiento fuera del div
+que agrupa botones: indicar colocarlo dentro para evitar hueco/distribución al
+ocultar enviarMantenimiento. Las pruebas de ambas transiciones desde formulario,
+guardado previo e historial fueron confirmadas por el usuario, sin repetición
+independiente por el asistente.
+Posteriormente, por petición del usuario, se implementó widget badge compartido y
+se conectó VehicleList.estado con disponible success y mantenimiento warning;
+presentación sin SQL. Demo y verificación en el estado del proyecto; no confirma
+las pruebas funcionales de mantenimiento. Después el usuario dio por completado
+el recorrido de transiciones, guardado previo, reapertura e historial; confirmación
+del usuario, sin repetición independiente por el asistente.
+Tablero Kanban por estado creado y conectado por el usuario mediante views.list
+a VehicleKanban, conservando VehicleList. El usuario dio por completada su apertura.
+Después autorizó transiciones mediante acciones: se amplió kanban a
+{field:"estado",transitions:[...]} con disponible → mantenimiento mediante
+enviarMantenimiento y mantenimiento → disponible mediante finalizarMantenimiento.
+VehicleKanban conecta modelMove y config.kanbanTransitions: el selector/arrastre
+usan los destinos publicados y el servidor ejecuta la acción con sus grupos y
+reglas. Se conservan estados, clases, métodos y diseño; no se añadió SQL ni se
+modificaron registros de Flota. Pruebas y límites en el estado del proyecto.
+Siguiente paso del usuario: probar ambos movimientos, reapertura e historial de
+acción, incluyendo el rechazo con una cuenta sin escritura o grupo autorizado.
+ModelCollection actualmente sólo presenta list/card; la vista Kanban requiere
+KanbanView con modelKanban autorizado. Valorar integración compartida si repetir
+esa coordinación en la vista resulta excesivo; aún sin ampliación implementada.
+
+Próximo bloque, un ejercicio por vez:
+
+1. Comprobar el arrastre/selector real de Flota en ambos sentidos, historial y
+   reapertura, con cuenta autorizada y rechazo sin escritura. El framework ya se
+   probó con BD temporal y demos ficticias; no equivale a esta prueba de Flota.
+2. Corregir la agrupación visual de los dos botones cuando el usuario retome su
+   formulario; finalizarMantenimiento sigue fuera del div de botones.
+3. Acordar el siguiente diseño: [multivistas Lista/Kanban/Tarjetas](ideas/multivistas-colecciones.md)
+   coordinadas con [eject:view kanban](ideas/eject-kanban.md). Sólo pendientes,
+   sin permiso implícito para implementarlos o reemplazar vistas.
+
+También quedaron anotados [menús por permisos efectivos](ideas/menus-permisos-efectivos.md)
+y [permisos por campo](ideas/permisos-campos.md). La propuesta render/children se
+retiró al confirmar que renderCard ya personaliza tarjetas. Mantener reglas
+definitivas en servidor; ocultar un botón no impide escribir un estado desde una
+petición. No crear Ventas ni adelantar archivos de Flota.
 
 Conservar la preferencia de maquetación libre, el logo related, los hooks existentes
 y las personalizaciones. Los menús/accesos y nuevos ejercicios se hacen al ritmo

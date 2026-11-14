@@ -24,7 +24,7 @@ export class Modelo extends Model {
       fabricante: Readonly<{ name: string }> | null;
     }>,
   ): string {
-    return [record.name, record.fabricante?.name].filter(Boolean).join(" / ");
+    return [record.fabricante?.name, record.name].filter(Boolean).join("/");
   }
   // Define aquí normalize, beforeSave y afterSave cuando tu negocio lo necesite.
 }

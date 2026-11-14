@@ -58,9 +58,11 @@ declarativos con el ID `flota`, disponible tras retirar la aplicación anterior.
 [Punto de partida y ritmo](docs/tutorial-flota.md).
 
 Continuidad: [avance actual y siguiente paso](docs/estado-proyecto.md).
-Siguiente pendiente, ampliado el 2026-11-14:
-[Acciones como métodos del modelo y FormHeader/FormButton](docs/ideas/acciones-formulario.md),
-pendientes de implementación.
+Implementado el 2026-11-14:
+[acciones como métodos del modelo y FormHeader/FormButton](docs/ideas/acciones-formulario.md),
+incluidas transiciones Kanban autorizadas. Propuestas por diseñar:
+[multivistas Lista/Kanban/Tarjetas](docs/ideas/multivistas-colecciones.md) y
+[eject:view Kanban](docs/ideas/eject-kanban.md).
 
 | Caso | Guía |
 | --- | --- |

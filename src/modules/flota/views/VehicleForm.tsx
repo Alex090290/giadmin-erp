@@ -12,6 +12,8 @@ import type { Vehicle } from "../models/vehicle";
 import Stack from "@/components/ui/form/Stack";
 import FormHeader from "@/components/ui/form/FormHeader";
 import FormButton from "@/components/ui/form/FormButton";
+import { useWatch } from "react-hook-form";
+import FieldSelect from "@/components/ui/form/FieldSelect";
 
 type Values = FormValues<typeof Vehicle>;
 
@@ -28,8 +30,27 @@ export default function VehicleForm({
 }) {
   return (
     <ModelForm config={config} id={id}>
+      <FormContent />
+    </ModelForm>
+  );
+}
+
+function FormContent() {
+  const [estado] = useWatch<Values>({ name: ["estado"] });
+  return (
+    <>
       <FormHeader>
-        <FormButton action="testing">Testear</FormButton>
+        <div className="flex flex-wrap gap-2">
+          <FormButton
+            action="enviarMantenimiento"
+            invisible={estado !== "disponible"}
+          />
+        </div>
+        <FormButton
+          action="finalizarMantenimiento"
+          invisible={estado !== "mantenimiento"}
+        />
+        <FieldSelect name="estado" widget="statebar" label="" />
       </FormHeader>
 
       <div className="col-span-full flex flex-wrap items-center gap-4">
@@ -49,8 +70,8 @@ export default function VehicleForm({
           <FieldText<Values> name="plate" />
           <FieldMany2One<Values> name="modeloId" />
         </Stack>
-        <FieldBoolean<Values> name="active" direction="inline" />
+        <FieldBoolean<Values> name="active" />
       </FormGroup>
-    </ModelForm>
+    </>
   );
 }

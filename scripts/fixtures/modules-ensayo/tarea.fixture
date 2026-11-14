@@ -18,6 +18,11 @@ export class Tarea extends Model {
     return { ...values, name: typeof values.name === "string" ? values.name.replace(/\s+/g, " ") : values.name };
   }
   // Business actions: published by name, executed by the service through the save pipeline.
+  @action({ label: "Iniciar" })
+  iniciar(record: ActionRecord<Tarea>) {
+    if (record.estado !== "pendiente") throw new ModelValidationError("Sólo se inician tareas pendientes.");
+    return { estado: "curso" as const };
+  }
   @action({ label: "Completar" })
   completar(record: ActionRecord<Tarea>) {
     if (record.estado === "hecha") throw new ModelValidationError("La tarea ya está hecha.");
@@ -34,6 +39,8 @@ export class Tarea extends Model {
   ayudante() { return { estado: "hecha" as const }; }
 
   beforeSave(values: Record<string, unknown>) {
+    // Intentional fixture fault: verify the move rolls back if hooks change its target.
+    if (values.name === "Destino incorrecto" && values.estado === "curso") return {...values,estado:"hecha"};
     if (values.estado === "hecha" && values.prioridad === 5) throw new ModelValidationError("Revisa la tarea.", { prioridad: "Una tarea urgente no puede cerrarse sin revisión." });
     return values;
   }

@@ -69,6 +69,12 @@ valores en la URL. ModelForm conecta todo desde su configuración.
 Demo ficticia: `/sample#form-actions`. Contrato de servidor en
 [Acciones de formulario](../../../../docs/ideas/acciones-formulario.md).
 
+En FormHeader, FieldSelect con widget statebar ocupa sólo su ancho necesario y
+se alinea a la derecha, centrado verticalmente junto a los botones cuando caben.
+Con poco espacio pasa a otra línea y conserva scroll horizontal dentro del
+control. Separación y padding superior de esa fila: 8px. Fuera de FormHeader el
+Field mantiene su ancho normal; no hace falta personalizar cada vista.
+
 ## Presentación
 
 El header es compacto: navegación y acciones comparten fila cuando hay espacio,

@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useDraggable, useDroppable, useDndContext } from "@dnd-kit/core";
 import { GripVertical, LoaderCircle, MoveRight } from "lucide-react";
 import { readListValue, type ListPage, type ListRecord, type ListState, type ListResult } from "@/lib/list/types";
-import { mergeKanbanRows, type KanbanGroup } from "@/lib/kanban/types";
+import { canMoveKanban, mergeKanbanRows, type KanbanGroup } from "@/lib/kanban/types";
 import RecordCard, { recordCardTitle } from "../collection/RecordCard";
 import { CollectionMessage } from "../collection/CollectionShell";
 import type { KanbanViewProps } from "./KanbanView";
@@ -13,11 +13,11 @@ type ColumnProps = KanbanViewProps & { group: KanbanGroup; state: ListState; cur
 
 function KanbanCard({ record, ...props }: Omit<ColumnProps, "state" | "load"> & { record: ListRecord }) {
   const validRevision = typeof record.revision === "string" && Boolean(record.revision);
-  const disabled = !props.onMove || !validRevision || Boolean(props.pending);
+  const disabled = !props.onMove || !validRevision || Boolean(props.pending) || !props.groups.some(group => canMoveKanban(props.group.value, group.value, props.transitions));
   const { setNodeRef, setActivatorNodeRef, attributes, listeners, isDragging } = useDraggable({ id: record.id, data: { record, group: props.group.value }, disabled });
   const title = recordCardTitle(record, props.titleField, props.columns);
   return <article ref={setNodeRef} className={`card min-w-0 rounded-xl border border-base-300 bg-base-100 shadow-xs transition-shadow hover:shadow-md motion-reduce:transition-none ${isDragging ? "opacity-30" : ""} ${props.pending === record.id ? "opacity-60" : ""}`} aria-busy={props.pending === record.id}>
-    {props.onMove && <div className="flex items-center justify-between gap-2 px-3 pt-2"><button ref={node => { setActivatorNodeRef(node); props.registerHandle(record.id, node); }} type="button" {...attributes} {...listeners} disabled={disabled} className="btn btn-square btn-ghost btn-xs touch-none cursor-grab text-base-content/35 active:cursor-grabbing" aria-label={`Arrastrar ${title}`}><GripVertical size={16} aria-hidden="true" /></button><label className="flex min-w-0 items-center gap-1 text-xs text-base-content/50"><MoveRight size={12} aria-hidden="true" /><select autoComplete="off" className="select select-xs min-w-0 max-w-36 rounded-lg border-base-300" aria-label={`Mover ${title}`} value={props.group.value} disabled={disabled} onChange={event => props.move(record, props.group.value, event.currentTarget.value)}>{props.groups.map(group => <option key={group.value} value={group.value}>{group.label}</option>)}</select></label></div>}
+    {props.onMove && <div className="flex items-center justify-between gap-2 px-3 pt-2"><button ref={node => { setActivatorNodeRef(node); props.registerHandle(record.id, node); }} type="button" {...attributes} {...listeners} disabled={disabled} className="btn btn-square btn-ghost btn-xs touch-none cursor-grab text-base-content/35 active:cursor-grabbing" aria-label={`Arrastrar ${title}`}><GripVertical size={16} aria-hidden="true" /></button><label className="flex min-w-0 items-center gap-1 text-xs text-base-content/50"><MoveRight size={12} aria-hidden="true" /><select autoComplete="off" className="select select-xs min-w-0 max-w-36 rounded-lg border-base-300" aria-label={`Mover ${title}`} value={props.group.value} disabled={disabled} onChange={event => props.move(record, props.group.value, event.currentTarget.value)}>{props.groups.map(group => <option key={group.value} value={group.value} disabled={group.value !== props.group.value && !canMoveKanban(props.group.value, group.value, props.transitions)}>{group.label}</option>)}</select></label></div>}
     <RecordCard {...props} record={record} />
     {props.pending === record.id && <span role="status" className="flex items-center gap-2 px-4 pb-3 text-xs text-primary"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Guardando movimiento…</span>}
   </article>;
@@ -28,7 +28,9 @@ export default function KanbanColumn(props: ColumnProps) {
   const [page, setPage] = useState(1), [attempt, setAttempt] = useState(0);
   const [response, setResponse] = useState<{ key: string; data: ListPage | null; error: string | null } | null>(null);
   const key = JSON.stringify({ group: group.value, state: { ...state, page }, attempt });
-  const { setNodeRef, isOver } = useDroppable({ id: group.value, disabled: !props.onMove || Boolean(props.pending) });
+  const { active } = useDndContext();
+  const origin = active?.data.current?.group;
+  const { setNodeRef, isOver } = useDroppable({ id: group.value, disabled: !props.onMove || Boolean(props.pending) || (typeof origin === "string" && !canMoveKanban(origin, group.value, props.transitions)) });
   useEffect(() => {
     let current = true;
     const timer = setTimeout(async () => {

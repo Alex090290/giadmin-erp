@@ -197,7 +197,7 @@ await assert.rejects(moduleCatalogue(prisma, ana, catalogueContext), /administra
 await assert.rejects(moduleCatalogue(prisma, { ...root, sessionVersion: root.sessionVersion + 1 }, catalogueContext), /sesión/);
 // Business actions (@action): published names only, write access + rules + groups, revision,
 // transition rules, the save pipeline (hooks/constraints/tracking) and canonical result.
-assert.deepEqual(modelClientConfig("ensayo.tarea").actions, [{ name: "completar", label: "Completar" }, { name: "reabrir", label: "Reabrir" }]);
+assert.deepEqual(modelClientConfig("ensayo.tarea").actions, [{ name: "iniciar", label: "Iniciar" }, { name: "completar", label: "Completar" }, { name: "reabrir", label: "Reabrir" }]);
 await setGroupMembers(prisma, root, "ensayo.usuario", [ana.id, beto.id]);
 const deAnaAccion = await taskOf(ana, "Acción de Ana");
 const deBetoAccion = await taskOf(beto, "Acción de Beto");
@@ -230,5 +230,39 @@ assert.equal((await prisma.ensayoTarea.findUniqueOrThrow({ where: { id: urgent.i
 // Admin superuser runs any action.
 const betoNow = ok(await tareas.read(prisma, root, deBetoAccion.id), "leer como superusuario").values;
 ok(await run(root, "completar", betoNow), "superusuario");
+// Kanban dispatches the published action in its own transaction, never a direct patch.
+assert.deepEqual(modelClientConfig("ensayo.tarea").kanbanTransitions, [
+  {from:"pendiente",to:"curso"},{from:"pendiente",to:"hecha"},{from:"curso",to:"hecha"},{from:"hecha",to:"pendiente"},
+], "client only receives graph routes, not dispatch configuration");
+const boardTask = await taskOf(ana, "Tablero de Ana");
+const moveTask = (who: typeof ana, record: {id?:unknown;revision?:unknown}, from: string, to: string) => tareas.move(prisma, who, {id:record.id,revision:record.revision,from,to});
+denied(await moveTask(readerActor,boardTask,"pendiente","curso"),"Kanban requires write permission");
+denied(await moveTask(beto,boardTask,"pendiente","curso"),"Kanban keeps record rules");
+assert.equal((await moveTask({...ana,sessionVersion:ana.sessionVersion+1},boardTask,"pendiente","curso")).ok,false,"Kanban revalidates session");
+assert.equal((await tareas.move(prisma,ana,{id:boardTask.id,revision:boardTask.revision,from:"pendiente",to:"curso",action:"completar"})).ok,false,"client cannot choose the action");
+assert.equal((await moveTask(ana,boardTask,"curso","hecha")).ok,false,"source must match persisted state");
+ok(await moveTask(ana,boardTask,"pendiente","curso"),"Kanban starts through action");
+const inProgress=ok(await tareas.read(prisma,ana,boardTask.id),"read moved task").values;
+assert.equal(inProgress.estado,"curso"); assert.notEqual(inProgress.revision,boardTask.revision);
+assert.equal((await moveTask(ana,boardTask,"pendiente","curso")).ok,false,"stale move cannot execute twice");
+const moveHistory=ok(await tareas.activity(prisma,ana,{id:boardTask.id}),"Kanban history");
+assert.equal(moveHistory.data.entries.filter(entry=>entry.kind==="update"&&entry.body==="Iniciar").length,1,"exactly one action history event");
+assert.equal((await moveTask(ana,inProgress,"curso","pendiente")).ok,false,"missing edge has no direct-write fallback");
+ok(await moveTask(ana,inProgress,"curso","hecha"),"Kanban completes through action");
+const doneTask=ok(await tareas.read(prisma,ana,boardTask.id),"read completed task").values;
+denied(await moveTask(ana,doneTask,"hecha","pendiente"),"action groups still apply to Kanban");
+ok(await moveTask(jefa,doneTask,"hecha","pendiente"),"responsible reopens through action");
+const beforeUrgent=await prisma.ensayoTarea.findUniqueOrThrow({where:{id:urgent.id}});
+const urgentEvents=await prisma.recordActivity.count({where:{model:"EnsayoTarea",recordId:urgent.id}});
+assert.equal((await moveTask(beto,urgent,"pendiente","hecha")).ok,false,"beforeSave rejects Kanban completion");
+assert.deepEqual(await prisma.ensayoTarea.findUniqueOrThrow({where:{id:urgent.id}}),beforeUrgent,"hook failure rolls back all record changes");
+assert.equal(await prisma.recordActivity.count({where:{model:"EnsayoTarea",recordId:urgent.id}}),urgentEvents,"hook failure creates no action event");
+const wrongTarget=await taskOf(ana,"Destino incorrecto");
+const wrongEvents=await prisma.recordActivity.count({where:{model:"EnsayoTarea",recordId:wrongTarget.id}});
+const wrongResult=await moveTask(ana,wrongTarget,"pendiente","curso");
+assert.equal(wrongResult.ok,false); assert.match(!wrongResult.ok ? wrongResult.error : "",/estado de destino/);
+const unchanged=ok(await tareas.read(prisma,ana,wrongTarget.id),"read rolled back move").values;
+assert.equal(unchanged.estado,"pendiente");assert.equal(unchanged.revision,wrongTarget.revision);
+assert.equal(await prisma.recordActivity.count({where:{model:"EnsayoTarea",recordId:wrongTarget.id}}),wrongEvents,"target mismatch also rolls back activity");
 await prisma.$disconnect();
 console.log("modules-check ok");

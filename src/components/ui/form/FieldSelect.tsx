@@ -92,7 +92,7 @@ function SelectControl<TFieldValues extends FieldValues = FieldValues, TValue ex
   }
 
   return (
-    <div data-form-field={name} className={fieldDirectionClassName(direction, fieldLabel)}>
+    <div data-form-field={name} data-form-widget={widget} className={fieldDirectionClassName(direction, fieldLabel)}>
       {fieldLabel && (type === "dropdown" && widget !== "statebar" ? (
         <label id={labelId} htmlFor={inputId} className={fieldLabelClassName(direction)}>{fieldLabel}</label>
       ) : (

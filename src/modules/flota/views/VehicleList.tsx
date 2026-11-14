@@ -6,5 +6,21 @@ import type { ModelClientConfig } from "@/lib/modules/config";
  * Sólo se aceptan campos publicados por la política de lista del servidor.
  */
 export default function VehicleList({ config }: { config: ModelClientConfig }) {
-  return <ModelCollection config={config} columns={[{ field: "fabricanteLogo", widget: "image" }, { field: "name" }, { field: "plate" }, { field: "modeloId" }, { field: "active" }]} />;
+  return (
+    <ModelCollection
+      config={config}
+      columns={[
+        { field: "fabricanteLogo", widget: "image" },
+        { field: "name" },
+        {
+          field: "estado",
+          widget: "badge",
+          colors: { disponible: "success", mantenimiento: "warning" },
+        },
+        { field: "plate" },
+        { field: "modeloId" },
+        { field: "active" },
+      ]}
+    />
+  );
 }

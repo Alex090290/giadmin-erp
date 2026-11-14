@@ -7,7 +7,6 @@ import {
   type DisplayRecord,
   type ModelContext,
   ActionRecord,
-  ActionContext,
 } from "@/lib/orm";
 
 export class Vehicle extends Model {
@@ -16,6 +15,7 @@ export class Vehicle extends Model {
     required: false,
     maxLength: 300,
     tracking: true,
+    searchable: true,
   });
   active = Fields.Boolean({ label: "Activo", default: true, tracking: true });
 
@@ -25,6 +25,7 @@ export class Vehicle extends Model {
     unique: true,
     maxLength: 20,
     tracking: true,
+    searchable: true,
   });
 
   modeloId = Fields.Many2one("FlotaModelo", {
@@ -39,11 +40,42 @@ export class Vehicle extends Model {
     related: "modeloId.fabricanteId.logo",
   });
 
+  estado = Fields.Selection(
+    [
+      { value: "disponible", label: "Disponible" },
+      { value: "mantenimiento", label: "En mantenimiento" },
+    ],
+    {
+      label: "Estado",
+      required: true,
+      default: "disponible",
+      tracking: true,
+    },
+  );
+
   @action({ label: "Testing" })
   testing(record: ActionRecord<Vehicle>) {
     return {
       active: !record.active,
     };
+  }
+
+  @action({ label: "Enviar a mantenimiento", groups: ["operador"] })
+  enviarMantenimiento(record: ActionRecord<Vehicle>) {
+    if (record.estado !== "disponible") {
+      throw new Err("Sólo puedes enviar vehículos disponibles a mantenimiento");
+    }
+
+    return { estado: "mantenimiento" as const };
+  }
+
+  @action({ label: "Finalizar mantenimiento", groups: ["operador"] })
+  finalizarMantenimiento(record: ActionRecord<Vehicle>) {
+    if (record.estado !== "mantenimiento") {
+      throw new Err("El vehículo no está en mantenimiento");
+    }
+
+    return { estado: "disponible" as const };
   }
 
   normalize(values: Readonly<Record<string, unknown>>) {

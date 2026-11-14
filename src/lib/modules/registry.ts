@@ -71,7 +71,7 @@ export function modelService(id: string): Service {
       const groups = await userGroups(tx, actor.id);
       if (!action.groups?.some(group => groups.has(group.includes(".") ? group : `${module.id}.${group}`))) throw new AccessError("DENIED");
     },
-    ...(entry.kanban ? { kanban: { field: entry.kanban } } : {}),
+    ...(entry.kanban ? { kanban: { field: entry.kanban, ...(entry.kanbanTransitions !== undefined ? {transitions:entry.kanbanTransitions} : {}) } } : {}),
     ...(Object.keys(relations).length ? { relations } : {}),
   });
   services.set(id, service);
@@ -129,6 +129,7 @@ export function modelClientConfig(id: string): ModelClientConfig {
     view: entry.view,
     // Plain JSON: omit absent options instead of sending undefined.
     ...(entry.kanban ? { kanban: entry.kanban } : {}),
+    ...(entry.kanbanTransitions !== undefined ? {kanbanTransitions:entry.kanbanTransitions.map(({from,to})=>({from,to}))} : {}),
     ...(entry.defaultSort ? { defaultSort: entry.defaultSort } : {}),
   };
 }

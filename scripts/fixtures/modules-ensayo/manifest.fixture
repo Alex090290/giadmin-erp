@@ -11,7 +11,12 @@ export default defineModule({
   models: {
     tarea: {
       model: Tarea,
-      kanban: "estado",
+      kanban: { field: "estado", transitions: [
+        { from: "pendiente", to: "curso", action: "iniciar" },
+        { from: "pendiente", to: "hecha", action: "completar" },
+        { from: "curso", to: "hecha", action: "completar" },
+        { from: "hecha", to: "pendiente", action: "reabrir" },
+      ] },
       views: {
         form: () => import("./views/TareaForm"),
         list: () => import("./views/TareaList"),

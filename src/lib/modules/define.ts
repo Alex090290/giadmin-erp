@@ -8,6 +8,8 @@ import type { ModelListPolicy } from "../orm/service";
 import type { GenerationProfile } from "../orm/generator/profile";
 import type { ListViewConfig } from "../list/types";
 import { declareAccess, readGroups, type AccessSpec, type ModuleAccess } from "../access/declare";
+import { compileKanbanConfig } from "../kanban/config";
+import type { KanbanConfig, KanbanTransition } from "../kanban/types";
 
 type ModelClass = new () => Model;
 export type ModuleModelSpec = ModelClass | {
@@ -16,7 +18,7 @@ export type ModuleModelSpec = ModelClass | {
   readonly table?: string;
   /** Override of the list policy derived from Field metadata. */
   readonly list?: Partial<ModelListPolicy>;
-  readonly kanban?: string;
+  readonly kanban?: string | KanbanConfig;
   readonly view?: "list" | "card";
   readonly defaultSort?: ListViewConfig["defaultSort"];
   /** Custom views (eject). Without them the default list/form are used. */
@@ -61,6 +63,7 @@ export type ModuleModel = {
   readonly clientFields: readonly string[];
   readonly list: ModelListPolicy;
   readonly kanban?: string;
+  readonly kanbanTransitions?: readonly KanbanTransition[];
   readonly view: "list" | "card";
   readonly defaultSort?: ListViewConfig["defaultSort"];
   readonly views: ModelViews;
@@ -132,12 +135,15 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
       related: Object.keys(contract.relatedFields),
     });
     const list = derivedListPolicy(collectionMetadata, options.list);
+    const kanban = compileKanbanConfig(options.kanban, contract.metadata, contract.actions, list.fields);
     const view = options.view ?? "list";
     if (!["list", "card"].includes(view)) throw new Error(`${id}.${modelKey}: vista de lista inválida.`);
     return Object.freeze({
       id: `${id}.${modelKey}`, key: modelKey, module: id, route: `/erp/${id}/${modelKey}` as const,
       label: menuLabel(spec.menu, modelKey), delegate: name[0].toLowerCase() + name.slice(1),
-      contract, metadata: contract.metadata as Readonly<Record<string, FieldMetadata>>, clientFields, list, kanban: options.kanban, view, defaultSort: options.defaultSort, views: options.views ?? {},
+      contract, metadata: contract.metadata as Readonly<Record<string, FieldMetadata>>, clientFields, list, kanban: kanban?.field,
+      ...(kanban?.transitions !== undefined ? {kanbanTransitions:kanban.transitions} : {}),
+      view, defaultSort: options.defaultSort, views: options.views ?? {},
     });
   });
   const byKey = new Map(models.map(model => [model.key, model]));

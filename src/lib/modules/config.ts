@@ -1,6 +1,7 @@
 import type { FieldMetadata } from "../orm/fields";
 import type { ReactionRule } from "../orm/reactions.types";
 import type { ListViewConfig } from "../list/types";
+import type { KanbanRoute } from "../kanban/types";
 
 /** Serializable, browser-safe description of a module model. Never contains functions or server classes. */
 export type ModelClientConfig = {
@@ -28,6 +29,8 @@ export type ModelClientConfig = {
   };
   readonly view: "list" | "card";
   readonly kanban?: string;
+  /** UI routes only; action dispatch remains fixed in the server registry. */
+  readonly kanbanTransitions?: readonly KanbanRoute[];
   readonly defaultSort?: ListViewConfig["defaultSort"];
 };
 

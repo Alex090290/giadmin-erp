@@ -291,7 +291,7 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
         </fieldset>}
       </div>
       {/* FormHeader portal target: hidden while empty. */}
-      <div ref={setHeaderSlot} className="flex min-w-0 flex-wrap items-center gap-3 border-t border-base-300/70 pt-4 empty:hidden" />
+      <div ref={setHeaderSlot} className="flex min-w-0 flex-wrap items-center gap-2 border-t border-base-300/70 pt-2 empty:hidden" />
       {(actions || statebar) && <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-base-300/70 pt-4">
         {actions && <fieldset disabled={locked} className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">{actions}</fieldset>}
         {statebar && <fieldset disabled={locked || readOnly} className="m-0 ml-auto min-w-0 max-w-full border-0 p-0">{statebar}</fieldset>}

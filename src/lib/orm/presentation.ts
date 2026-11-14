@@ -1,5 +1,6 @@
 import type { Field, FieldMetadata } from "./fields";
 import type { ListColumn } from "../list/types";
+import { validBadgeColumnOptions } from "../list/badge";
 
 /** Browser-safe descriptors from the published contract, never a server Model. */
 export type PublishedFields = Readonly<Record<string, Pick<Field, "metadata">>>;
@@ -17,6 +18,13 @@ export function modelColumns<F extends PublishedFields>(fields: F, columns: read
   return columns.map(column => {
     if (!Object.hasOwn(fields, column.field)) throw new Error(`Campo no publicado: ${column.field}.`);
     if (fields[column.field].metadata.readOnly && (column.sortable || column.filterable || column.groupable)) throw new Error(`El campo de lectura ${column.field} no permite orden, filtros ni agrupación.`);
-    return { ...fieldColumn(column.field, fields[column.field].metadata), ...column };
+    const metadata = fields[column.field].metadata;
+    const result = { ...fieldColumn(column.field, metadata), ...column };
+    if (column.widget === "badge" || column.colors !== undefined) {
+      if (metadata.kind !== "selection") throw new Error(`El widget badge y colors requieren un campo Selection: ${column.field}.`);
+      result.options = metadata.choices;
+    }
+    if (!validBadgeColumnOptions(result)) throw new Error(`Colores o configuración de badge inválidos: ${column.field}.`);
+    return result;
   });
 }

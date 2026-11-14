@@ -7,6 +7,11 @@ sin crearse.
 
 ## Contrato implementado (2026-11-14)
 
+Kanban también puede ejecutar estos métodos mediante transiciones declaradas
+from/to/action. Comparte la ejecución autorizada y persistencia de la acción
+con el botón, dentro de la transacción del movimiento. No hay borrador de
+formulario que guardar en ese flujo. [Contrato Kanban](../modulos-declarativos.md#kanban-mediante-acciones-publicadas).
+
 Decisión del usuario: **nombre validado**. La vista escribe
 `<FormButton action="confirmar">`; el navegador sólo envía ese nombre con ID y
 revisión a una Server Action fija (`modelAction`), y el servidor lo compara con la

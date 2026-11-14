@@ -7,12 +7,15 @@ export type ListModel = keyof typeof listModels;
 export type ListDataType = "text" | "number" | "integer" | "date" | "datetime" | "boolean";
 export type ListFilterOperator = "contains" | "eq" | "neq" | "startsWith" | "endsWith" | "gt" | "gte" | "lt" | "lte" | "between" | "empty" | "notEmpty";
 export type ListFilter = { field: string; operator: ListFilterOperator; value?: string; to?: string; precision?: "day" | "instant" };
+export type BadgeColor = "primary" | "secondary" | "accent" | "info" | "success" | "warning" | "error" | "neutral";
 export type ListColumn = {
   field: string;
   label: string;
   /** Use the server record label; defaults to true for name/id. False preserves the field value. */
   displayName?: boolean;
-  widget?: "partner" | "image" | "many2one";
+  widget?: "partner" | "image" | "many2one" | "badge";
+  /** Selection value → theme color. Badge background with widget badge; text color without a widget. */
+  colors?: Readonly<Record<string, BadgeColor>>;
   options?: readonly { value: string; label: string }[];
   imageSize?: "sm" | "md" | "lg";
   imageShape?: "rounded" | "squared";

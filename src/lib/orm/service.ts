@@ -10,12 +10,14 @@ import { normalizeListState } from "../list/state";
 import { compileColumnFilter, filterValueError } from "../list/filters";
 import type { ListColumn, ListDataType, ListResult, ListViewConfig } from "../list/types";
 import { validImageColumnOptions } from "../list/types";
+import { validBadgeColumnOptions } from "../list/badge";
 import { recordIdentitySchema, type RecordIdentity } from "./record";
 import { ModelValidationError, type ModelActor, type ModelContext } from "./context";
 import type { ModelRepository } from "./repository";
 import { INTEGER_MIN, INTEGER_MAX, type FieldMetadata, type Field } from "./fields";
 import { resolveCollectionRelated } from "./collection-related";
-import type { KanbanMoveResult, KanbanRequest } from "../kanban/types";
+import type { KanbanMoveResult, KanbanRequest, KanbanConfig } from "../kanban/types";
+import { compileKanbanConfig } from "../kanban/config";
 import { auditAvatarField, auditColumnType } from "./audit";
 import { compileListDomain, type ListActionOptions, type ListDomainContext } from "./domain";
 import { deleteListSelection } from "../list/delete";
@@ -102,7 +104,7 @@ export type ServiceOperation = "read" | "create" | "write" | "unlink";
  */
 export type ServiceAuthorizer = (tx: Prisma.TransactionClient, actor: ModelActor, operation: ServiceOperation) => Promise<Record<string, unknown> | undefined>;
 type ServicePresentation = {
-  defaultSort?: ListViewConfig["defaultSort"]; kanban?: { field: string }; audit?: boolean;
+  defaultSort?: ListViewConfig["defaultSort"]; kanban?: KanbanConfig; audit?: boolean;
   relations?: Readonly<Record<string, Many2OneLoader>>;
   authorize?: ServiceAuthorizer;
   /** Extra check for actions that declare groups (resolved by the module registry). Superusers are handled by the caller. */
@@ -133,11 +135,17 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
   const allowed = new Set(["id", ...Object.keys(collectionMetadata)]);
   if (presentation.audit) for (const field of ["createdAt", "updatedAt", "createBy", "createByUser.login", "createByUser.partner.name"]) allowed.add(field);
   const columnType = (field: string) => collectionMetadata[field] ? fieldListType(collectionMetadata[field]) : presentation.audit ? auditColumnType(field) ?? "text" : "text";
+  config.columns = config.columns.map(column => {
+    const field = collectionMetadata[column.field];
+    return (column.widget === "badge" || column.colors !== undefined) && field?.kind === "selection" ? { ...column, options: field.choices } : column;
+  });
   if (!config.columns.length || config.columns.length > 12 || new Set(config.columns.map(column => column.field)).size !== config.columns.length || config.columns.some(column => {
     const avatar = presentation.audit && auditAvatarField(column.field);
     const image = column.widget === "image" && collectionMetadata[column.field]?.kind === "image" && !collectionMetadata[column.field].sensitive && (!column.format || column.format === "text");
     const relation = column.widget === "many2one" && model.metadata[column.field]?.kind === "many2one" && !model.metadata[column.field].sensitive && (!column.format || column.format === "text");
-    return !allowed.has(column.field) || (Object.hasOwn(relatedFields,column.field) && (column.sortable || column.filterable || column.groupable)) || !validImageColumnOptions(column) || (column.widget && !(image || relation || (column.widget === "partner" && avatar && (!column.avatarField || column.avatarField === avatar) && (!column.format || column.format === "text")))) || (column.avatarField !== undefined && (column.widget !== "partner" || column.avatarField !== avatar)) || (column.type && column.type !== columnType(column.field));
+    const badge = column.widget === "badge" && collectionMetadata[column.field]?.kind === "selection" && !collectionMetadata[column.field].sensitive;
+    const colored = column.colors === undefined || (collectionMetadata[column.field]?.kind === "selection" && !collectionMetadata[column.field].sensitive);
+    return !allowed.has(column.field) || !colored || (Object.hasOwn(relatedFields,column.field) && (column.sortable || column.filterable || column.groupable)) || !validImageColumnOptions(column) || !validBadgeColumnOptions(column) || (column.widget && !(image || relation || badge || (column.widget === "partner" && avatar && (!column.avatarField || column.avatarField === avatar) && (!column.format || column.format === "text")))) || (column.avatarField !== undefined && (column.widget !== "partner" || column.avatarField !== avatar)) || (column.type && column.type !== columnType(column.field));
   }) || config.searchFields.length > 6 || config.searchFields.some(name => name !== "id" && model.metadata[name]?.kind !== "text" && model.metadata[name]?.kind !== "many2one" && !(presentation.audit && ["createByUser.login", "createByUser.partner.name"].includes(name)))) throw new Error("La lista sólo puede publicar campos declarados o auditoría habilitada y búsquedas de texto permitidas.");
   // Normalize date types for server filters even when the view omitted an explicit type.
   config.columns = config.columns.map(column => ({ ...column, type: columnType(column.field), ...(Object.hasOwn(relatedFields,column.field)?{filterable:false,sortable:false,groupable:false}:{}), ...(column.widget === "partner" && auditAvatarField(column.field) ? { avatarField: auditAvatarField(column.field)! } : {}) }));
@@ -158,10 +166,9 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     return { displayName: names.get(values.id!)! };
   }
   if (config.defaultSort && !config.columns.some(column => column.field === config.defaultSort?.field && column.sortable)) throw new Error("El orden predeterminado debe apuntar a una columna ordenable de la lista.");
-  const groupField = presentation.kanban?.field;
-  if (policy && groupField && !policy.fields.includes(groupField)) throw new Error("El estado kanban debe estar publicado en list.fields.");
+  const kanbanConfig = compileKanbanConfig(presentation.kanban, model.metadata, model.actions ?? [], config.columns.map(column=>column.field));
+  const groupField = kanbanConfig?.field;
   const groupMetadata = groupField && Object.hasOwn(model.metadata, groupField) ? model.metadata[groupField] : null;
-  if (groupField && (groupMetadata?.kind !== "selection" || !groupMetadata.required || groupMetadata.choices.length > 12)) throw new Error("El kanban inicial requiere una selección obligatoria con un máximo de 12 estados.");
   const groups = groupMetadata?.kind === "selection" ? groupMetadata.choices : [];
 
   async function read(prisma: PrismaClient, actor: ModelActor, input: unknown): Promise<FormViewLoadResult<Values>> {
@@ -240,16 +247,22 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
       if (!declared || !model.runAction) throw new ModelValidationError("La acción no está publicada en este modelo.");
       const record = await prisma.$transaction(async tx => {
         const scope = await authorize(tx, actor, "write");
-        if (declared.groups && presentation.authorizeAction) await presentation.authorizeAction(tx, actor, declared);
         const current = await inScope(tx, request.data.id, scope) ? await repository.read(tx, request.data.id) : null;
         if (!current || current.revision !== request.data.revision) throw new ModelValidationError(conflict);
-        const patch = await model.runAction!(declared.name, current, { tx, actor: Object.freeze({ ...actor }), action: declared.name });
-        const { id, revision, ...values } = current;
-        const values2 = await persist(tx, actor, { ...values, ...patch, id, revision }, declared.label);
+        const values2 = await persistAction(tx, actor, declared, current);
         return { values: values2, ...await readAudit(tx, values2.id), ...await readDisplayName(tx, values2) };
       }, { isolationLevel: "Serializable" });
       return { ok: true, ...record, message: `${declared.label}: acción completada.` };
     } catch (error) { return writeFailure(error); }
+  }
+
+  /** Shared by form actions and Kanban moves; always uses the caller's transaction. */
+  async function persistAction(tx: Prisma.TransactionClient, actor: ModelActor, declared: ModelAction, current: Values) {
+    if (declared.groups && presentation.authorizeAction) await presentation.authorizeAction(tx, actor, declared);
+    if (!model.runAction) throw new ModelValidationError("La acción no está publicada en este modelo.");
+    const patch = await model.runAction(declared.name, current, { tx, actor: Object.freeze({ ...actor }), action: declared.name });
+    const { id, revision, ...values } = current;
+    return persist(tx, actor, { ...values, ...patch, id, revision }, declared.label);
   }
 
   async function list(prisma: PrismaClient, actor: ModelActor, input: unknown, group?: { field: string; value: string }, domain?: (context: ListDomainContext) => Promise<Record<string, unknown>>): Promise<ListResult> {
@@ -329,7 +342,15 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         if (!groupField || !parsed.success || !groups.some(group => group.value === parsed.data.from) || !groups.some(group => group.value === parsed.data.to)) throw new ModelValidationError("El movimiento no corresponde a los estados permitidos.");
         const current = await inScope(tx, parsed.data.id, scope) ? await repository.read(tx, parsed.data.id) : null;
         if (!current || current.revision !== parsed.data.revision || current[groupField] !== parsed.data.from) throw new ModelValidationError(conflict);
-        if (parsed.data.from !== parsed.data.to) await persist(tx, actor, { ...current, [groupField]: parsed.data.to });
+        if (parsed.data.from === parsed.data.to) return;
+        if (kanbanConfig?.transitions !== undefined) {
+          const route = kanbanConfig.transitions.find(route => route.from === parsed.data.from && route.to === parsed.data.to);
+          if (!route) throw new ModelValidationError("La transición solicitada no está permitida.");
+          const declared = model.actions?.find(action => action.name === route.action);
+          if (!declared) throw new ModelValidationError("La acción no está publicada en este modelo.");
+          const saved = await persistAction(tx, actor, declared, current);
+          if (saved[groupField] !== parsed.data.to) throw new ModelValidationError("La acción no dejó el registro en el estado de destino. Se revirtió el movimiento.");
+        } else await persist(tx, actor, { ...current, [groupField]: parsed.data.to });
       }, { isolationLevel: "Serializable" });
       return { ok: true };
     } catch (error) { return { ok: false, kind: error instanceof ModelValidationError || error instanceof z.ZodError || ["P2002", "P2003", "P2025", "P2034"].includes(codeOf(error)) ? "validation" : "server", error: messageFor(error) }; }

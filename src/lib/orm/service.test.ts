@@ -36,6 +36,55 @@ test("collection images require a declared public Image scalar and bounded prese
   for (const patch of [{ field: "name" }, { field: "hidden" }, { field: "createByUser.password" }, { field: "unknown" }, { avatarField: "hidden" }, { imageSize: "huge" }, { imageShape: "other" }, { format: "boolean" }, { type: "integer" }, { widget: undefined }]) assert.throws(() => create(patch), /auditoría habilitada/);
 });
 
+test("badge service columns require public Selection and valid semantic colors", () => {
+  const selection = defineModel(class extends Model {
+    state = Fields.Selection([{value:"draft",label:"Borrador"}], {required:true});
+    name = Fields.Text();
+    secret = Fields.Selection([{value:"draft",label:"Secreto"}], {sensitive:true});
+  }, {name:"BadgeExample",table:"badge_examples"});
+  const create = (patch: Record<string,unknown>) => createModelService(selection, unboundRepository<ReturnType<typeof selection.parse>>(), {
+    columns:[{field:"state",label:"Estado",widget:"badge",colors:{draft:"info"},...patch}],searchFields:[],
+  });
+  assert.doesNotThrow(() => create({}));
+  assert.doesNotThrow(() => create({colors:undefined}));
+  assert.doesNotThrow(() => create({widget:undefined}));
+  for (const patch of [{field:"name"},{field:"secret"},{colors:{other:"info"}},{colors:{draft:"red"}},{field:"name",widget:undefined},{field:"secret",widget:undefined},{format:"number"}]) {
+    assert.throws(() => create(patch));
+  }
+});
+
+test("legacy Kanban moves stay compatible, while an explicit empty graph never writes", async () => {
+  const workflow=defineModel(class extends Model {
+    name=Fields.Text({required:true});
+    estado=Fields.Selection([{value:"a",label:"A"},{value:"b",label:"B"}],{required:true});
+  },{name:"LegacyBoard",table:"legacy_board"});
+  for(const transitions of [undefined,[]] as const) {
+    const original={id:"r1",revision:"2026-11-14T00:00:00.000Z",name:"A",estado:"a" as const};
+    let stored: ReturnType<typeof workflow.parse> & {id:string;revision:string}={...original};
+    let writes=0;
+    const tx={} as Prisma.TransactionClient;
+    const prisma={$transaction:async(run:(tx:Prisma.TransactionClient)=>unknown,options:unknown)=>{
+      assert.deepEqual(options,{isolationLevel:"Serializable"}); return run(tx);
+    }} as unknown as PrismaClient;
+    const service=createModelService(workflow,{
+      ...unboundRepository<ReturnType<typeof workflow.parse>>(),
+      read:async()=>({...stored}),
+      update:async(_tx,_id,_revision,values)=>{
+        writes++; stored={...stored,...values,revision:"2026-11-14T00:00:01.000Z"}; return {...stored};
+      },
+    },{columns:[{field:"name",label:"Nombre"},{field:"estado",label:"Estado"}],searchFields:["name"],
+      kanban:{field:"estado",...(transitions?{transitions}:{})},authorize:async()=>undefined});
+    const actor={id:"actor",sessionVersion:0};
+    assert.equal((await service.move(prisma,actor,{...original,from:"a",to:"b"})).ok,false,"extra fields rejected");
+    assert.equal((await service.move(prisma,actor,{id:original.id,revision:original.revision,from:"a",to:"a"})).ok,true);
+    assert.equal(writes,0,"same-state request is a no-op");
+    const result=await service.move(prisma,actor,{id:original.id,revision:original.revision,from:"a",to:"b"});
+    assert.equal(result.ok,transitions===undefined);
+    assert.equal(writes,transitions===undefined?1:0);
+    assert.equal(stored.estado,transitions===undefined?"b":"a");
+  }
+});
+
 test("audit presentation is opt-in and only accepts public paths and approved avatars", () => {
   assert.doesNotThrow(() => createModelService(model, repository, { audit: true, columns: recordAuditColumns, searchFields: ["createByUser.login", "createByUser.partner.name"] }));
   assert.throws(() => createModelService(model, repository, { columns: recordAuditColumns, searchFields: [] }), /auditoría habilitada/);

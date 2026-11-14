@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Fields, Model } from "../orm";
+import { Fields, Model, action } from "../orm";
 import { defineModule, derivedListPolicy } from "./define";
 import { fieldFromMetadata } from "./fields";
 import { collectionFieldMetadata, modelIdPattern } from "./config";
@@ -16,6 +16,18 @@ class Etiqueta extends Model {
   name = Fields.Text({ required: true, maxLength: 40 });
   secreto = Fields.Text({ sensitive: true });
 }
+
+test("module Kanban resolves published action transitions while preserving its field contract", () => {
+  class Task extends Model {
+    estado=Fields.Selection([{value:"a",label:"A"},{value:"b",label:"B"}],{required:true});
+    @action({label:"Iniciar"}) iniciar() {return {estado:"b" as const};}
+  }
+  const spec={id:"graph",name:"Graph",icon:"boxes",models:{task:{model:Task,kanban:{field:"estado",transitions:[{from:"a",to:"b",action:"iniciar"}]}}}};
+  const [entry]=defineModule(spec).models;
+  assert.equal(entry.kanban,"estado");
+  assert.deepEqual(entry.kanbanTransitions,[{from:"a",to:"b",action:"iniciar"}]);
+  assert.throws(()=>defineModule({...spec,models:{task:{model:Task,kanban:{field:"estado",transitions:[{from:"a",to:"b",action:"normalize"}]}}}}),/publicada/);
+});
 
 test("defineModule deriva nombres, tablas, rutas, delegates y perfil desde las claves", () => {
   const [tarea, categoria] = unit.models;
