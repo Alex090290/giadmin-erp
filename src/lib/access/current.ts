@@ -2,7 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "../auth/access";
 import { prisma } from "../prisma";
-import { userGroups } from "./engine";
+import { readAccessCapabilities } from "./engine";
+import { AccessError } from "../auth/policy";
 
 /**
  * Session user plus effective access groups, once per request. Presentation only
@@ -11,6 +12,11 @@ import { userGroups } from "./engine";
 export const getCurrentAccessUser = cache(async () => {
   const user = await getCurrentUser();
   if (!user?.id) return null;
-  const groups = user.isAdmin ? new Set<string>() : await userGroups(prisma, user.id);
-  return { ...user, groups: groups as ReadonlySet<string> };
+  try {
+    const access = await prisma.$transaction(tx => readAccessCapabilities(tx, user), { isolationLevel: "RepeatableRead" });
+    return { ...user, ...access };
+  } catch (error) {
+    if (error instanceof AccessError && error.code === "UNAUTHENTICATED") return null;
+    throw error;
+  }
 });

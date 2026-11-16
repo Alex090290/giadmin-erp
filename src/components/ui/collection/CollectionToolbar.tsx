@@ -1,7 +1,9 @@
 "use client";
+import type { Many2OneLoader } from "@/lib/many2one/model-lookup";
 import { useId, useState, type ReactNode } from "react";
 import { ArrowDownWideNarrow, Filter, Search, X } from "lucide-react";
 import type { ListFilter, ListState } from "@/lib/list/types";
+import RelationFilterLabel from "../list/RelationFilterLabel";
 import ColumnFilter from "../list/ColumnFilter";
 import { filterDescription } from "../list/filterInputs";
 import type { CollectionField } from "./types";
@@ -14,7 +16,7 @@ function SearchBox({ query, search, disabled }: { query: string; search: (query:
   </form>;
 }
 
-export default function CollectionToolbar({ columns, state, update, setFilter, clear, disabled = false, leading, actions }: { columns: readonly CollectionField[]; state: ListState; update: (patch: Partial<ListState>) => void; setFilter: (field: string, filter: ListFilter | null) => void; clear: () => void; disabled?: boolean; leading?: ReactNode; actions?: ReactNode }) {
+export default function CollectionToolbar({ filterLookups, columns, state, update, setFilter, clear, disabled = false, leading, actions }: { filterLookups?: Readonly<Record<string, Many2OneLoader>>; columns: readonly CollectionField[]; state: ListState; update: (patch: Partial<ListState>) => void; setFilter: (field: string, filter: ListFilter | null) => void; clear: () => void; disabled?: boolean; leading?: ReactNode; actions?: ReactNode }) {
   const [open, setOpen] = useState(false), panelId = useId();
   const sortable = columns.filter(column => column.sortable);
   const count = state.filters.length + (state.query ? 1 : 0) + (state.invalidFilters ? 1 : 0);
@@ -26,10 +28,10 @@ export default function CollectionToolbar({ columns, state, update, setFilter, c
       {sortable.length > 0 && <div className="order-4 ml-auto flex w-full min-w-0 items-center gap-1 sm:order-3 sm:w-auto"><ArrowDownWideNarrow size={15} className="shrink-0 text-base-content/50" aria-hidden="true" /><select aria-label="Ordenar por" autoComplete="off" className="select select-sm min-w-0 flex-1 rounded-lg border-base-300 sm:w-40 sm:flex-none" value={state.sort} disabled={disabled} onChange={event => update({ sort: event.currentTarget.value })}>{sortable.map(column => <option key={column.field} value={column.field}>{column.label}</option>)}</select><select aria-label="Dirección del orden" autoComplete="off" className="select select-sm w-24 shrink-0 rounded-lg border-base-300" value={state.direction} disabled={disabled} onChange={event => update({ direction: event.currentTarget.value as "asc" | "desc" })}><option value="asc" aria-label="Ascendente">↑ Asc.</option><option value="desc" aria-label="Descendente">↓ Desc.</option></select></div>}
       {actions}
     </div>
-    {open && <fieldset id={panelId} disabled={disabled} className="rounded-xl bg-base-200/65 p-3"><legend className="sr-only">Filtros disponibles</legend><p className="mb-2 text-xs text-base-content/60">Elige el campo que quieres filtrar.</p><div className="flex flex-wrap gap-2">{columns.filter(column => column.filterable !== false).map(column => <ColumnFilter key={column.field} field={column.field} label={column.label} triggerLabel={column.label} type={column.type ?? "text"} options={column.options} filter={state.filters.find(filter => filter.field === column.field)} onApply={filter => setFilter(column.field, filter)} />)}</div></fieldset>}
+    {open && <fieldset id={panelId} disabled={disabled} className="rounded-xl bg-base-200/65 p-3"><legend className="sr-only">Filtros disponibles</legend><p className="mb-2 text-xs text-base-content/60">Elige el campo que quieres filtrar.</p><div className="flex flex-wrap gap-2">{columns.filter(column => column.filterable !== false).map(column => <ColumnFilter lookup={filterLookups?.[column.field]} key={column.field} field={column.field} label={column.label} triggerLabel={column.label} type={column.type ?? "text"} options={column.options} filter={state.filters.find(filter => filter.field === column.field)} onApply={filter => setFilter(column.field, filter)} />)}</div></fieldset>}
     {count > 0 && <div aria-label="Filtros activos" className="flex flex-wrap items-center gap-2">
       {state.query && <button type="button" disabled={disabled} className="badge badge-soft badge-primary h-auto max-w-full cursor-pointer gap-1 py-1.5 text-left wrap-anywhere" onClick={() => update({ query: "" })} aria-label="Quitar búsqueda">Búsqueda: {state.query}<X size={12} className="shrink-0" aria-hidden="true" /></button>}
-      {state.filters.map(filter => { const column = columns.find(column => column.field === filter.field); return <button key={filter.field} type="button" disabled={disabled} className="badge badge-soft h-auto max-w-full cursor-pointer gap-1 py-1.5 text-left wrap-anywhere" onClick={() => setFilter(filter.field, null)} aria-label={`Quitar filtro ${column?.label ?? filter.field}`}>{column?.label ?? filter.field}: {column?.options && filter.value ? `${filter.operator === "neq" ? "Distinto de " : ""}${column.options.find(option => option.value === filter.value)?.label ?? filter.value}` : filterDescription(column?.type ?? "text", filter)}<X size={12} className="shrink-0" aria-hidden="true" /></button>; })}
+      {state.filters.map(filter => { const column = columns.find(column => column.field === filter.field); return <button key={filter.field} type="button" disabled={disabled} className="badge badge-soft h-auto max-w-full cursor-pointer gap-1 py-1.5 text-left wrap-anywhere" onClick={() => setFilter(filter.field, null)} aria-label={`Quitar filtro ${column?.label ?? filter.field}`}>{column?.label ?? filter.field}: {filterLookups?.[filter.field] ? <RelationFilterLabel filter={filter} load={filterLookups[filter.field]} /> : column?.options && filter.value ? `${filter.operator === "neq" ? "Distinto de " : ""}${column.options.find(option => option.value === filter.value)?.label ?? filter.value}` : filterDescription(column?.type ?? "text", filter)}<X size={12} className="shrink-0" aria-hidden="true" /></button>; })}
       {state.invalidFilters && <span role="alert" className="text-xs text-error">El enlace contiene filtros inválidos.</span>}
       <button type="button" disabled={disabled} className="btn btn-ghost btn-xs" onClick={clear}>Limpiar todo</button>
     </div>}

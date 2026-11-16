@@ -37,7 +37,7 @@ function fixture() {
     read: async () => { reads++; return row ? { ...row } : null; },
     create: async (_tx, values) => row = { ...values, id: "one", revision: "2026-11-10T00:00:00.000Z" },
     update: async (_tx, _id, revision, values) => row = { ...values, id: "one", revision: new Date(Date.parse(revision) + 1).toISOString() },
-  }, { columns: [{ field: "plate", label: "Placas" }], searchFields: ["plate"], kanban: { field: "state" } });
+  }, { columns: [{ field: "plate", label: "Placas" }, { field: "state", label: "Estado" }], searchFields: ["plate"], kanban: { field: "state" } });
   return { model, service, prisma, contexts, history, row: () => row, reads: () => reads, normalized: () => normalizations, revoke: () => { authorized = false; } };
 }
 

@@ -3,17 +3,26 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import ModelCollection from "@/components/modules/ModelCollection";
 import ModelForm from "@/components/modules/ModelForm";
+import CollectionViews from "@/components/modules/CollectionViews";
+import { selectedCollectionView } from "@/lib/modules/config";
 import { getModule, getModuleModel, modelClientConfig } from "@/lib/modules/registry";
 import { modelRead } from "@/lib/modules/actions";
+import { getCurrentAccessUser } from "@/lib/access/current";
 
-type Props = { params: Promise<{ module: string; path?: string[] }> };
+type Props = { params: Promise<{ module: string; path?: string[] }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 /** Shared route validation for the page and its metadata. */
 async function resolveRoute(params: Props["params"]) {
   const { module: moduleId, path = [] } = await params;
   const definition = getModule(moduleId);
   if (!definition || !definition.models.length) notFound();
-  if (!path.length) redirect(definition.models[0].route);
+  if (!path.length) {
+    const actor = await getCurrentAccessUser();
+    if (!actor) redirect("/auth");
+    const first = definition.models.find(model => actor.modelAccess[model.id]?.read);
+    if (!first) redirect("/erp");
+    redirect(first.route);
+  }
   const found = getModuleModel(`${moduleId}.${path[0]}`);
   if (!found || path.length > 2) notFound();
   const id = path.length === 1 || path[1] === "nuevo" ? undefined : decodeURIComponent(path[1]);
@@ -32,13 +41,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 /** Convention: /erp/<module>/<model>, /nuevo and /<id>. Only registered models resolve. */
-async function Resolve({ params }: Props) {
+async function Resolve({ params, searchParams }: Props) {
   const { entry, collection, id } = await resolveRoute(params);
-  const config = modelClientConfig(entry.id);
+  const actor = await getCurrentAccessUser();
+  if (!actor) redirect("/auth");
+  const permissions = actor.modelAccess[entry.id];
+  if (!permissions?.read || (!collection && !id && !permissions.create)) return <p role="alert" className="p-6">No tienes permiso para abrir esta vista.</p>;
+  const config = modelClientConfig(entry.id, actor);
   const { views } = entry;
   if (collection) {
-    const List = views.list ? (await views.list()).default : ModelCollection;
-    return <List config={config} />;
+    const query = await searchParams;
+    const selected = selectedCollectionView(query.view, entry.collectionViews, entry.view);
+    const loader = views[selected];
+    const Presentation = typeof loader === "function" ? (await loader()).default : ModelCollection;
+    return <CollectionViews views={entry.collectionViews} selected={selected}><Presentation config={{ ...config, view: selected }} /></CollectionViews>;
   }
   const Form = views.form ? (await views.form()).default : ModelForm;
   return <Form key={id ?? "nuevo"} config={config} id={id} />;

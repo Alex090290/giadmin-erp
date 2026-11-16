@@ -7,6 +7,7 @@ import { ModelValidationError } from "./context";
 import { decoratedMethods, type ReactionDeclaration, type ConstraintDeclaration, type DisplayDeclaration } from "./decorators";
 import type { ReactionRule } from "./reactions.types";
 
+export type ComputedRule = { readonly reads: readonly string[]; readonly outputs: readonly string[] };
 export type ReactionValues = Readonly<Record<string, unknown>>;
 export type ReactionContext = Pick<ModelContext,"tx"|"actor"|"id"> & {
   resolveRelated?: (field: string, id: string) => Promise<Record<string, unknown>>;
@@ -83,9 +84,36 @@ export function compileModelMethods(instance:object & Declarations, fields:Reado
   if(decorated.displays.length>1) throw new Error("Sólo se admite un método displayName decorado.");
   const display:DisplayDeclaration|undefined=decorated.displays[0];
   if(display)method(display.method);
+  const computedRules = rules.filter(item => computedGroups.has(item.declaration.method));
+  function computedOutput(name: string, result: unknown) {
+    const computed = computedGroups.get(name)!;
+    const output = computed.length === 1 ? { [computed[0]]: result } : result;
+    if (!output || typeof output !== "object" || Array.isArray(output) || Object.keys(output).length !== computed.length || computed.some(name => !Object.hasOwn(output, name))) throw new ModelValidationError("El método compute debe devolver todos sus campos declarados.");
+    return output as Record<string, unknown>;
+  }
   return {
     rules:Object.freeze(rules.map(item=>item.rule)),
     preview,
+    computedRules: Object.freeze(computedRules.map(({rule}) => Object.freeze({ reads: rule.reads, outputs: rule.preview }))),
+    async compute(names: readonly string[], input: ReactionValues, context: ReactionContext) {
+      if (names.some(name => !Object.hasOwn(computedFields, name))) throw new ModelValidationError("Campo compute no publicado.");
+      const requested = new Set(names), result: Record<string, string | number | null> = {};
+      for (const { declaration, rule } of computedRules) {
+        if (!rule.preview.some(name => requested.has(name))) continue;
+        const values = Object.fromEntries(rule.reads.map(name => {
+          if (!Object.hasOwn(input, name)) throw new ModelValidationError("Faltan dependencias del campo calculado.");
+          return [name, fields[name].schema.parse(input[name])];
+        }));
+        const output = computedOutput(declaration.method, await method(declaration.method).call(instance, Object.freeze(values), context));
+        // Validate the complete method output even if only one of its fields is published.
+        for (const [name, value] of Object.entries(output)) {
+          const parsed = preview[name].schema.parse(value);
+          if (parsed !== null && typeof parsed !== "string" && typeof parsed !== "number") throw new ModelValidationError("Compute no serializable.");
+          if (requested.has(name)) result[name] = parsed as string | number | null;
+        }
+      }
+      return result;
+    },
     display,
     format(record:ReactionValues) {return method(display!.method).call(instance,record,{} as ReactionContext);},
     async constrain(values:ReactionValues,context:ModelContext) {
@@ -108,9 +136,8 @@ export function compileModelMethods(instance:object & Declarations, fields:Reado
         const values=inputSchema.parse(Object.fromEntries(Object.entries(effectiveInput).filter(([name])=>rule.reads.includes(name))));
         const result=await method(declaration.method).call(instance,Object.freeze(values),context);
         const computed = computedGroups.get(declaration.method);
-        const output = computed?.length === 1 ? {[computed[0]]:result} : result;
+        const output = computed ? computedOutput(declaration.method, result) : result;
         if(!output||typeof output!=="object"||Array.isArray(output)) throw new ModelValidationError("La reacción debe devolver un patch.");
-        if (computed && (Object.keys(output).length!==computed.length || computed.some(name=>!Object.hasOwn(output,name)))) throw new ModelValidationError("El método compute debe devolver todos sus campos declarados.");
         for(const [name,value] of Object.entries(output)) {
           if(rule.writes.includes(name)) {
             if(Object.hasOwn(patch,name)) throw new ModelValidationError("Dos reacciones intentan modificar el mismo campo.");

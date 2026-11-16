@@ -71,6 +71,8 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
     previewFields: methods.preview,
     relatedFields: Object.freeze(relatedFields),
     computedFields: Object.freeze(computedFields),
+    computedRules: methods.computedRules,
+    computeCollection(names: readonly string[], values: Readonly<Record<string, unknown>>, context: ReactionContext) { return methods.compute(names, values, context); },
     react(field:string,values:Readonly<Record<string,unknown>>,context:ReactionContext) {return methods.react(field,values,context);},
     displayName(record: Readonly<Record<string, unknown>>): string {
       const projected = projectDisplayRecord(record, displayKeys);

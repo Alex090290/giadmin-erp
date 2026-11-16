@@ -47,8 +47,8 @@ test("defineModule deriva nombres, tablas, rutas, delegates y perfil desde las c
   assert.equal(unit.application.access, "authenticated");
   assert.deepEqual(unit.application.groups, ["unit.usuario", "unit.responsable"]);
   assert.deepEqual(unit.application.menus, [
-    { id: "tarea-list", label: "Tareas", href: "/erp/unit/tarea", access: "authenticated", groups: ["unit.usuario", "unit.responsable"] },
-    { id: "configuracion-group", label: "Configuración", access: "authenticated", groups: ["unit.usuario", "unit.responsable"], items: [{ id: "categoria-list", label: "Categorías", href: "/erp/unit/categoria", access: "authenticated", groups: ["unit.usuario", "unit.responsable"] }] },
+    { id: "tarea-list", label: "Tareas", href: "/erp/unit/tarea", model: "unit.tarea", access: "authenticated", groups: ["unit.usuario", "unit.responsable"] },
+    { id: "configuracion-group", label: "Configuración", access: "authenticated", groups: ["unit.usuario", "unit.responsable"], items: [{ id: "categoria-list", label: "Categorías", href: "/erp/unit/categoria", model: "unit.categoria", access: "authenticated", groups: ["unit.usuario", "unit.responsable"] }] },
   ]);
   // Without groups a module stays admin-only.
   const plain = defineModule({ id: "prueba", name: "Prueba", icon: "flask-conical", models: { etiqueta: Etiqueta } });

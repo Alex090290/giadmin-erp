@@ -1,13 +1,17 @@
 # Permisos por campo y presentación por grupo
 
-Pendiente solicitado el 2026-11-14. Sin implementación autorizada por esta nota;
-no sustituye el siguiente ejercicio de grupos/permisos de Flota.
+Pendiente solicitado y ampliado el 2026-11-14. El usuario confirmó mantenerlo como
+pendiente de diseño; esta nota no autoriza implementación ni cambios en Flota.
 
 ## Objetivo y alcance
 
 Ampliar el sistema actual de grupos, permisos por modelo y reglas de registro
 para admitir restricciones de lectura/escritura por campo y condiciones de
 interfaz por grupo: invisible, readOnly, required y visibilidad de NotebookPage.
+La futura administración se haría desde el módulo de **Accesos**, incluyendo
+presentaciones disponibles (Lista/Card/Kanban), Fields de formularios y columnas
+de colecciones. El núcleo compartido consumiría las capacidades una vez para
+evitar condiciones y consultas de permisos repetidas en cada presentación.
 Buscar una declaración coherente con Fields/modelos y manifest, conservando TSX
 personalizable. La sintaxis y la distribución exacta de responsabilidades están
 por diseñar; no hay una API nueva disponible.
@@ -19,6 +23,18 @@ el servidor, sin que una prop de UI relaje constraints o reglas del modelo.
 
 ## Diseño pendiente y criterios de aceptación
 
+- Separar en Accesos las políticas de datos (leer/escribir un campo) de las de
+  presentación (vistas disponibles, campos/columnas visibles y sólo lectura).
+  La habilitación visual de una vista no concede acceso a los datos del modelo.
+  Definir cómo se guardan/configuran reglas por grupo y se combinan con Fields,
+  manifest y personalizaciones TSX; no hay sintaxis ni interfaz decididas todavía.
+- Extender la [proyección de capacidades por modelo ya implementada](../capacidades-modelos.md)
+  a los contratos de campos/presentación que se acuerden. Menús, Nuevo/Eliminar,
+  formularios y colecciones ya comparten CRUD por actor; no duplicar ese motor
+  ni crear cachés privadas compartidas entre usuarios.
+- Respetar esta precedencia: invisible=false puede anular ocultación por diseño,
+  pero no un permiso de lectura denegado; readOnly=false tampoco puede conceder
+  escritura. Campos sin lectura no llegan al navegador ni a renderCard/renderCell.
 - Definir composición de grupos, herencia, overrides, superusuario y políticas
   por defecto, preservando los contratos actuales cuando no se declaren opciones.
 - Revalidar permisos por campo junto con sesión, modelo y reglas de registro en

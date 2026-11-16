@@ -12,7 +12,7 @@ async function ApplicationAccess({ applicationId, children }: { applicationId: s
   if (!user) redirect("/auth");
   if (!canOpenApplication(application, user)) return (
     <div role="alert" className="space-y-3 p-6">
-      <p>{application.groups ? `No tienes acceso a ${application.name}. Pide a un administrador que te asigne un grupo.` : `Necesitas permisos de administrador para abrir ${application.name}.`}</p>
+      <p>{application.accessModels ? `No tienes permiso de lectura para abrir ${application.name}.` : application.groups ? `No tienes acceso a ${application.name}. Pide a un administrador que te asigne un grupo.` : `Necesitas permisos de administrador para abrir ${application.name}.`}</p>
       <Link href="/erp" className="btn btn-soft btn-sm">Volver a aplicaciones</Link>
     </div>
   );

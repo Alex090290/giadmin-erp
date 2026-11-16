@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ModuleDefinition } from "../src/lib/modules/define";
@@ -6,21 +6,25 @@ import { formViewSource, listViewSource, manifestModel, registerView, viewName, 
 import { assertNoSymlinks } from "../src/lib/orm/generator/write";
 import { assertNoOtherModuleOperation } from "../src/lib/module-manager/operation-lock";
 
-const usage = "Uso: npm run eject:view -- modulo modelo form|list [--dry-run]";
+const usage = "Uso: npm run eject:view -- modulo modelo form|list|card|kanban [--dry-run]";
 
 /** Copy a default view into src/modules/<id>/views and register it lazily in the manifest. Never overwrites. */
 async function main() {
   const [id, key, kind, flag, ...extra] = process.argv.slice(2);
-  if (!id || !key || !["form", "list"].includes(kind) || extra.length || (flag && flag !== "--dry-run") || !/^[a-z][a-z0-9]*$/.test(id) || !/^[a-z][a-z0-9]*$/.test(key)) throw new Error(usage);
+  if (!id || !key || !["form", "list", "card", "kanban"].includes(kind) || extra.length || (flag && flag !== "--dry-run") || !/^[a-z][a-z0-9]*$/.test(id) || !/^[a-z][a-z0-9]*$/.test(key)) throw new Error(usage);
   const root = process.cwd();
   await assertNoOtherModuleOperation(root);
   const manifestPath = join(root, "src/modules", id, "manifest.ts");
   const viewPath = join(root, "src/modules", id, "views", `${viewName(key, kind as EjectKind)}.tsx`);
   await assertNoSymlinks(manifestPath);
   await assertNoSymlinks(viewPath);
+  await lstat(viewPath).then(() => { throw new Error(`${relative(root, viewPath)} ya existe; no se sobrescribe.`); }, error => {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  });
   const definition: ModuleDefinition | undefined = (await import(pathToFileURL(manifestPath).href)).default;
   const entry = definition?.models.find(model => model.key === key);
   if (!definition || definition.id !== id || !entry) throw new Error(`No existe el modelo ${id}.${key} en src/modules/${id}/manifest.ts.`);
+  if (kind === "kanban" && !entry.kanban) throw new Error("Configura kanban en el modelo antes de expulsar su presentación.");
   const text = await readFile(manifestPath, "utf8");
   const { className, classImport } = manifestModel(text, key);
   const lookups = Object.entries(entry.metadata).filter(([, field]) => field.kind === "many2one" && !field.sensitive && definition.models.some(model => model.contract.name === field.target)).map(([name]) => name);
@@ -29,7 +33,7 @@ async function main() {
     fields: Object.fromEntries(entry.clientFields.map(name => [name, entry.metadata[name]])),
     preview: Object.fromEntries(Object.entries((entry.contract.previewFields ?? {}) as Record<string, { metadata: (typeof entry.metadata)[string] }>).map(([name, field]) => [name, field.metadata])),
   };
-  const source = kind === "form" ? formViewSource(model) : listViewSource(model);
+  const source = kind === "form" ? formViewSource(model) : listViewSource(model, kind as Exclude<EjectKind, "form">);
   const updated = registerView(text, key, kind as EjectKind);
   console.log(`${flag ? "Plan" : "Vista expulsada"}: ${id}.${key} ${kind}`);
   console.log(`  create ${relative(root, viewPath)}`);

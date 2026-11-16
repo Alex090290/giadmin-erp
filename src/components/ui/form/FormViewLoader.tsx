@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { CircleAlert, RotateCcw } from "lucide-react";
+import { FormLoadingState } from "./FormPendingStatus";
 import { useAlerts } from "../alerts/AlertProvider";
 import type { RecordAudit } from "@/lib/orm/audit";
 
@@ -21,7 +22,6 @@ export default function FormViewLoader<T>({ recordKey, load, children, timeoutMs
   useEffect(() => {
     let current = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const close = alerts.loading({ title: "Cargando…", message: "Abriendo el registro. Un momento, por favor." });
     async function run() {
       let result: FormViewLoadResult<T>;
       try {
@@ -31,21 +31,20 @@ export default function FormViewLoader<T>({ recordKey, load, children, timeoutMs
         if (!result || typeof result.ok !== "boolean" || (result.ok && !("values" in result))) throw new Error("Invalid record load response");
       }
       catch { result = { ok: false, error: "No se pudo cargar el registro. Revisa tu conexión e intenta nuevamente.", kind: "server" }; }
-      finally { clearTimeout(timer); close(); }
+      finally { clearTimeout(timer); }
       if (!current) return;
       setResponse({ key, load, result });
       if (!result.ok) void (result.kind === "validation" ? alerts.validation : alerts.error)({ title: result.kind === "validation" ? "Error de validación" : "No se pudo abrir el registro", message: result.error });
     }
     void run();
-    return () => { current = false; clearTimeout(timer); close(); };
+    return () => { current = false; clearTimeout(timer); };
   }, [key, load, alerts, timeoutMs]);
   const result = response?.key === key && response.load === load ? response.result : null;
   if (result?.ok) return <div key={key} className="flex min-h-0 min-w-0 flex-1 flex-col">{children(result.values, result.audit, result.displayName)}</div>;
-  return <div aria-busy={!result} className="card min-h-0 min-w-0 flex-1 items-center justify-center gap-4 overflow-y-auto border border-base-300 bg-base-100 p-8 text-center shadow-sm">
-    {result ? <>
-      <CircleAlert size={28} aria-hidden="true" className="text-error" />
+  if (!result) return <FormLoadingState />;
+  return <div className="card min-h-0 min-w-0 flex-1 items-center justify-center gap-4 overflow-y-auto border border-base-300 bg-base-100 p-8 text-center shadow-sm">
+    <CircleAlert size={28} aria-hidden="true" className="text-error" />
       <p role="alert" className="max-w-md text-sm text-base-content/65">{result.error}</p>
       <button type="button" className="btn btn-soft btn-sm" onClick={() => setAttempt(value => value + 1)}><RotateCcw size={15} aria-hidden="true" />Reintentar</button>
-    </> : <><span aria-hidden="true" className="loading loading-spinner text-primary" /><p role="status" className="text-sm text-base-content/60">Cargando…</p></>}
   </div>;
 }

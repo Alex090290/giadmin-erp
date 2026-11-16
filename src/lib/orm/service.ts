@@ -15,6 +15,7 @@ import { recordIdentitySchema, type RecordIdentity } from "./record";
 import { ModelValidationError, type ModelActor, type ModelContext } from "./context";
 import type { ModelRepository } from "./repository";
 import { INTEGER_MIN, INTEGER_MAX, type FieldMetadata, type Field } from "./fields";
+import { resolveCollectionComputed, validateCollectionComputed, type CollectionComputed } from "./collection-computed";
 import { resolveCollectionRelated } from "./collection-related";
 import type { KanbanMoveResult, KanbanRequest, KanbanConfig } from "../kanban/types";
 import { compileKanbanConfig } from "../kanban/config";
@@ -37,7 +38,8 @@ import { displayProjectionPaths } from "./display";
 import { modelDisplayName, resolveDisplayNames } from "./display.server";
 
 const conflict = "El registro cambió desde que lo abriste. Recarga sus datos antes de guardar.";
-type Contract<T extends Record<string, unknown>> = {
+type Contract<T extends Record<string, unknown>> = CollectionComputed & {
+  readonly computedFields?:Readonly<Record<string,Field>>;
   readonly relatedFields?:Readonly<Record<string,Field>>;
   reactionRules?:readonly ReactionRule[];
   react?(field:string,values:Readonly<Record<string,unknown>>,context:ReactionContext):Promise<{patch:Record<string,unknown>;preview:Record<string,string|number|boolean|null>}>;
@@ -117,11 +119,13 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
   const auditFields = new Set(presentation.audit ? ["createdAt", "updatedAt", "createBy", "createByUser.login", "createByUser.partner.name"] : []);
   const policy = presentation.list;
   const relatedFields=model.relatedFields??{};
-  const collectionMetadata:Readonly<Record<string,FieldMetadata>>={...model.metadata,...Object.fromEntries(Object.entries(relatedFields).map(([name,field])=>[name,{...field.metadata,readOnly:true}]))};
+  const computedFields=model.computedFields??{};
+  const virtualFields={...relatedFields,...computedFields};
+  const collectionMetadata:Readonly<Record<string,FieldMetadata>>={...model.metadata,...Object.fromEntries(Object.entries(virtualFields).map(([name,field])=>[name,{...field.metadata,readOnly:true}]))};
   if (policy && (presentation.columns || presentation.searchFields)) throw new Error("Usa list o columns, no ambas políticas.");
   if (policy) {
     for (const names of [policy.searchFields, policy.sortable ?? [], policy.groupable ?? [], policy.filterable ?? []]) {
-      if (new Set(names).size !== names.length || names.some(name => !policy.fields.includes(name) || Object.hasOwn(relatedFields,name))) throw new Error("La política sólo puede consultar campos persistentes publicados en list.fields; related es de lectura.");
+      if (new Set(names).size !== names.length || names.some(name => !policy.fields.includes(name) || Object.hasOwn(virtualFields,name))) throw new Error("La política sólo puede consultar campos persistentes publicados en list.fields; related/compute son de lectura.");
     }
     if (policy.fields.some(name => (!Object.hasOwn(collectionMetadata, name) && !auditFields.has(name)) || collectionMetadata[name]?.sensitive)) throw new Error("list.fields sólo permite campos declarados no sensibles.");
   }
@@ -135,6 +139,8 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
   const allowed = new Set(["id", ...Object.keys(collectionMetadata)]);
   if (presentation.audit) for (const field of ["createdAt", "updatedAt", "createBy", "createByUser.login", "createByUser.partner.name"]) allowed.add(field);
   const columnType = (field: string) => collectionMetadata[field] ? fieldListType(collectionMetadata[field]) : presentation.audit ? auditColumnType(field) ?? "text" : "text";
+  const computedNames = config.columns.map(column => column.field).filter(name => Object.hasOwn(computedFields, name));
+  validateCollectionComputed(model, computedNames, config.columns.map(column => column.field));
   config.columns = config.columns.map(column => {
     const field = collectionMetadata[column.field];
     return (column.widget === "badge" || column.colors !== undefined) && field?.kind === "selection" ? { ...column, options: field.choices } : column;
@@ -145,10 +151,10 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     const relation = column.widget === "many2one" && model.metadata[column.field]?.kind === "many2one" && !model.metadata[column.field].sensitive && (!column.format || column.format === "text");
     const badge = column.widget === "badge" && collectionMetadata[column.field]?.kind === "selection" && !collectionMetadata[column.field].sensitive;
     const colored = column.colors === undefined || (collectionMetadata[column.field]?.kind === "selection" && !collectionMetadata[column.field].sensitive);
-    return !allowed.has(column.field) || !colored || (Object.hasOwn(relatedFields,column.field) && (column.sortable || column.filterable || column.groupable)) || !validImageColumnOptions(column) || !validBadgeColumnOptions(column) || (column.widget && !(image || relation || badge || (column.widget === "partner" && avatar && (!column.avatarField || column.avatarField === avatar) && (!column.format || column.format === "text")))) || (column.avatarField !== undefined && (column.widget !== "partner" || column.avatarField !== avatar)) || (column.type && column.type !== columnType(column.field));
+    return !allowed.has(column.field) || !colored || (Object.hasOwn(virtualFields,column.field) && (column.sortable || column.filterable || column.groupable)) || !validImageColumnOptions(column) || !validBadgeColumnOptions(column) || (column.widget && !(image || relation || badge || (column.widget === "partner" && avatar && (!column.avatarField || column.avatarField === avatar) && (!column.format || column.format === "text")))) || (column.avatarField !== undefined && (column.widget !== "partner" || column.avatarField !== avatar)) || (column.type && column.type !== columnType(column.field));
   }) || config.searchFields.length > 6 || config.searchFields.some(name => name !== "id" && model.metadata[name]?.kind !== "text" && model.metadata[name]?.kind !== "many2one" && !(presentation.audit && ["createByUser.login", "createByUser.partner.name"].includes(name)))) throw new Error("La lista sólo puede publicar campos declarados o auditoría habilitada y búsquedas de texto permitidas.");
   // Normalize date types for server filters even when the view omitted an explicit type.
-  config.columns = config.columns.map(column => ({ ...column, type: columnType(column.field), ...(Object.hasOwn(relatedFields,column.field)?{filterable:false,sortable:false,groupable:false}:{}), ...(column.widget === "partner" && auditAvatarField(column.field) ? { avatarField: auditAvatarField(column.field)! } : {}) }));
+  config.columns = config.columns.map(column => ({ ...column, type: columnType(column.field), ...(Object.hasOwn(virtualFields,column.field)?{filterable:false,sortable:false,groupable:false}:{}), ...(column.widget === "partner" && auditAvatarField(column.field) ? { avatarField: auditAvatarField(column.field)! } : {}) }));
   const authorize: ServiceAuthorizer = presentation.authorize ?? (async (tx, actor) => { await assertActor(tx, actor); return undefined; });
   /** Record rules: the record must exist and satisfy the predicate returned by authorize. */
   async function inScope(tx: Prisma.TransactionClient, id: string, scope: Record<string, unknown> | undefined) {
@@ -268,6 +274,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
   async function list(prisma: PrismaClient, actor: ModelActor, input: unknown, group?: { field: string; value: string }, domain?: (context: ListDomainContext) => Promise<Record<string, unknown>>): Promise<ListResult> {
     try {
       const data = await prisma.$transaction(async tx => {
+        if (computedNames.length) await tx.$executeRaw`SET TRANSACTION READ ONLY`;
         const scope = await authorize(tx, actor, "read");
         const fixedDomain = domain ? await domain({ actor: Object.freeze({ id: actor.id, sessionVersion: actor.sessionVersion }), tx }) : undefined;
         const parsed = listStateSchema.safeParse(input);
@@ -316,7 +323,8 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         }
         const page = Math.min(state.page, Math.max(1, Math.ceil(total / state.pageSize)));
         const sourceRows = await repository.list(tx, { where, sort: state.sort, direction: state.direction, skip: (page - 1) * state.pageSize, take: state.pageSize, audit: presentation.audit === true });
-        const rows = await resolveCollectionRelated(tx,sourceRows,config.columns.map(column=>column.field).filter(name=>Object.hasOwn(relatedFields,name)),relatedFields,repository);
+        const relatedRows = await resolveCollectionRelated(tx,sourceRows,config.columns.map(column=>column.field).filter(name=>Object.hasOwn(relatedFields,name)),relatedFields,repository);
+        const rows = await resolveCollectionComputed(relatedRows, computedNames, model, Object.freeze({ tx, actor: Object.freeze({ ...actor }) }));
         const names = await resolveDisplayNames(tx, sourceRows, model, repository);
         // Repository contracts can contain extra edit fields: collection DTOs honor the fixed server publication.
         const publishedRows = policy ? rows.map(row => projectListRow(row, [...policy.fields, ...policy.fields.flatMap(name => auditAvatarField(name) ? [auditAvatarField(name)!] : [])])) : rows;

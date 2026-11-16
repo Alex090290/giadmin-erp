@@ -8,7 +8,8 @@ import type { FieldMetadata } from "../orm/fields";
 import { accessOperations, type AccessGrant, type AccessGroup, type AccessOperation, type AccessPerms, type AccessRule } from "./declare";
 
 type Predicate = Record<string, unknown>;
-type Catalog = { groups: Map<string, AccessGroup>; grants: Map<string, AccessGrant[]>; rules: Map<string, AccessRule[]>; models: Map<string, Readonly<Record<string, FieldMetadata>>> };
+export type AccessCatalog = { groups: Map<string, AccessGroup>; grants: Map<string, AccessGrant[]>; rules: Map<string, AccessRule[]>; models: Map<string, Readonly<Record<string, FieldMetadata>>> };
+type Catalog = AccessCatalog;
 let catalog: Catalog | undefined;
 
 /** Declarations of every installed module, indexed once. Code is the source of truth. */
@@ -38,21 +39,44 @@ export function closeGroups(direct: Iterable<string>, groups = accessCatalog().g
   return result;
 }
 
-export async function userGroups(tx: Prisma.TransactionClient, userId: string) {
+export async function userGroups(tx: Prisma.TransactionClient, userId: string, catalogGroups = accessCatalog().groups) {
   const rows = await tx.accessUserGroup.findMany({ where: { userId }, select: { groupId: true } });
-  return closeGroups(rows.map(row => row.groupId));
+  return closeGroups(rows.map(row => row.groupId), catalogGroups);
 }
 
 /** Effective permissions of a set of groups on a model: database overrides replace code defaults per group. */
 export async function modelPerms(tx: Prisma.TransactionClient, groups: ReadonlySet<string>, model: string): Promise<AccessPerms> {
-  const defaults = accessCatalog().grants.get(model) ?? [];
+  const catalog = accessCatalog();
+  const defaults = catalog.grants.get(model) ?? [];
   const overrides = groups.size ? await tx.accessModelOverride.findMany({ where: { model, groupId: { in: [...groups] } } }) : [];
+  return mergePermissions(groups, defaults, overrides);
+}
+
+function mergePermissions(groups: ReadonlySet<string>, defaults: readonly AccessGrant[], overrides: readonly (AccessPerms & { groupId: string })[]): AccessPerms {
   const result = { read: false, create: false, write: false, unlink: false };
   for (const group of groups) {
     const perms = overrides.find(row => row.groupId === group) ?? defaults.find(grant => grant.group === group)?.perms;
     if (perms) for (const operation of accessOperations) result[operation] ||= perms[operation];
   }
   return result;
+}
+
+/** One batch for all models; no record queries/rules and no cache across actors. */
+export async function readAccessCapabilities(tx: Prisma.TransactionClient, actor: ModelActor, catalog = accessCatalog()) {
+  const user = await tx.user.findUnique({ where: { id: actor.id }, select: { active: true, isAdmin: true, sessionVersion: true } });
+  if (!user?.active || user.sessionVersion !== actor.sessionVersion) throw new AccessError("UNAUTHENTICATED");
+  const groups = user.isAdmin ? new Set<string>() : await userGroups(tx, actor.id, catalog.groups);
+  const models = [...catalog.models.keys()];
+  const overrides = !user.isAdmin && groups.size && models.length ? await tx.accessModelOverride.findMany({ where: { model: { in: models }, groupId: { in: [...groups] } } }) : [];
+  const byModel = new Map<string, typeof overrides>();
+  for (const row of overrides) byModel.set(row.model, [...(byModel.get(row.model) ?? []), row]);
+  return {
+    isAdmin: user.isAdmin,
+    groups: groups as ReadonlySet<string>,
+    modelAccess: Object.freeze(Object.fromEntries(models.map(model => [model, Object.freeze(user.isAdmin
+      ? { read: true, create: true, write: true, unlink: true }
+      : mergePermissions(groups, catalog.grants.get(model) ?? [], byModel.get(model) ?? []))]))),
+  };
 }
 
 /**

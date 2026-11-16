@@ -56,6 +56,27 @@ assert.equal((await tareas.save(prisma, actor, { ...read.values, prioridad: 2 })
 const list = ok(await withActor(actor, () => tareas.list(prisma, actor, state)), "lista");
 assert.equal(list.data.total, 3);
 assert.deepEqual(list.data.rows.map(row => row.name), ["Comprar pan", "Lavar ropa", "Pagar luz"]);
+for (const row of list.data.rows) assert.equal(row.prioridadDoble, Number(row.prioridad) * 2);
+// Compute cannot turn a collection read into a write, even for the disposable admin.
+const { createModelService } = await import("./src/lib/orm/service");
+const { createRepository } = await import("./src/lib/modules/repository");
+const found = getModuleModel("ensayo.tarea")!;
+const unsafeContract: typeof found.entry.contract = {
+  ...found.entry.contract,
+  async computeCollection(_names: readonly string[], _values: Readonly<Record<string, unknown>>, context: import("./src/lib/orm/reactions").ReactionContext) {
+    await context.tx.user.update({ where: { id: admin.id }, data: { active: false } });
+    return { prioridadDoble: 1 };
+  },
+};
+const unsafe = createModelService(unsafeContract, createRepository(found.entry, found.module.profile.module), { list: found.entry.list });
+assert.equal((await unsafe.list(prisma, actor, state)).ok, false);
+assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).active, true);
+
+assert.ok(clientConfig.preview.prioridadDoble.compute);
+assert.equal(clientConfig.fields.prioridadDoble, undefined);
+assert.ok(!clientConfig.list.sortable.includes("prioridadDoble"));
+assert.equal((await tareas.list(prisma, actor, { ...state, sort: "prioridadDoble" })).ok, false);
+
 assert.equal((list.data.rows[2] as { $labels?: Record<string, { label: string }> }).$labels?.categoria.label, "Trabajo");
 assert.equal(list.data.rows[2].vence, "2026-12-01T15:00:00.000Z");
 const search = ok(await withActor(actor, () => tareas.list(prisma, actor, { ...state, query: "pan" })), "búsqueda");

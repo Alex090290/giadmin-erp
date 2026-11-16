@@ -78,10 +78,9 @@ Se consulta al abrir/resetear el formulario, cambiar una dependencia o reintenta
 Conserva debounce, agrupación, descarte de respuestas antiguas y espera de peticiones
 antes de enviar. El preview no ensucia RHF; un error vigente bloquea el envío.
 
-Esta etapa es virtual para borradores de formularios: no columnas persistidas,
-inverse, orden/búsqueda/grupos ni proyección automática desde list/read/lookup.
-La proyección por lote de related en colecciones ya existe; no implica que los
-métodos compute se ejecuten por fila en esas vistas.
+Los cálculos son virtuales: no columnas persistidas, inverse ni orden/búsqueda/
+grupos SQL. Desde el 2026-11-15 también se proyectan por página autorizada en
+colecciones. read/lookup no incorporan automáticamente estos valores.
 Sólo depende de Fields locales persistentes, sin cadenas compute/related, ciclos
 ni invalidación por cambios externos en relaciones. Agrupar fórmulas relacionadas
 en un mismo método con varias salidas evita cascadas de frontend.
@@ -92,3 +91,64 @@ en el payload y sigue ejecutando las restricciones definitivas.
 
 La siguiente etapa requiere diseñar invalidación y recomputación persistente
 ante escrituras fuera del formulario y cambios relacionados; no se habilita aquí.
+
+## Lista, Card y Kanban (2026-11-15)
+
+Los módulos declarativos incorporan los Fields compute a la política de colección
+por convención (`list: false` los excluye; se conserva el límite de columnas).
+En una vista personalizada sólo se declara su presentación:
+
+```tsx
+<ModelCollection config={config} columns={[
+  { field: "name" },
+  { field: "kilometrosRestantes" },
+]} />
+```
+
+No repetir la fórmula en React. El servicio obtiene la página autorizada y calcula
+sobre las dependencias locales ya leídas por su repositorio. Reutiliza exactamente
+el método @depends del modelo: sólo recibe sus dependencias declaradas en una copia
+congelada y contexto con tx/actor/id del registro. Un método con varios outputs se
+ejecuta una sola vez por registro y valida todos sus resultados; sólo salen los
+campos publicados. No dispara onchange, constraints, normalize ni guardado.
+
+La política exige publicar también las dependencias: no calcular salidas desde
+campos sensibles o no publicados en la colección. Omitir una columna en el TSX no
+retira su publicación de servidor. Contratos parciales deben incluir explícitamente
+las dependencias o excluir el compute. Un DTO de repositorio que no traiga las
+dependencias falla con error; no se simulan ceros o valores persistidos.
+
+Se procesan sólo registros de la página (máximo 50 del servicio), con recorrido
+acotado en lotes de hasta cien, sin consultas por registro añadidas por el framework.
+Lista y Card comparten proveedor; Kanban conserva consulta/paginación por columna.
+Las cabeceras agrupadas no calculan sumas ni agregados: el cálculo se hace al cargar
+sus hojas. Se conserva autorización, dominio, revisión y etiquetas relacionadas.
+La transacción que publica compute es RepeatableRead y READ ONLY antes de autorizar.
+Un fallo rechaza la página completa y conserva el mecanismo de reintento habitual.
+
+Los métodos deben ser de lectura y preferir fórmulas sobre dependencias locales.
+Un método que consulta tx puede introducir sus propias consultas por registro:
+no se vectoriza código arbitrario ni se autorizan otras entidades implícitamente.
+READ ONLY protege esa transacción SQL, no efectos externos ni otro Prisma Client;
+el código de modelo sigue siendo código local de confianza.
+
+CollectionFields generado incluye compute como readOnly, separado de Fields,
+defaults, valores RHF y schemas de guardado. Las apps con contratos generados deben
+regenerarlos mediante su flujo orm habitual; vistas/política manuales publican las
+salidas expresamente. Los módulos declarativos actualizan el contrato en runtime:
+recargar para recogerlo; no hay SQL nuevo por este soporte.
+
+No se habilitan filtros, búsqueda, orden ni agrupación por el virtual; la UI los
+oculta y el servidor rechaza esas capacidades/peticiones. No hay store, inverse,
+cadenas compute/related ni recomputación persistida.
+
+Demo `/sample#computed-collections` con datos ficticios y el mismo método en las
+tres presentaciones. Pruebas: test:orm incluye colección/publicación/contexto,
+validación de resultados y ausencia de lecturas extra; test:modules comprueba
+metadatos y capacidades. test:capabilities:integration usa PostgreSQL temporal,
+incluye un compute real y verifica que una escritura desde éste se rechaza.
+
+## Pendiente: store: true
+
+El usuario pidió anotarlo el 2026-11-15 para retomarlo al llegar a un caso real.
+Todavía no está disponible ni se implementa por esta nota. [Alcance y criterios](ideas/compute-persistido.md).

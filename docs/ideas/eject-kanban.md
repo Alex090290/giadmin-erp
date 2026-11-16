@@ -1,7 +1,8 @@
 # Planificar eject:view para Kanban
 
-Pendiente solicitado el 2026-11-14. Sólo planificación registrada; sin
-implementación autorizada por esta nota.
+Solicitado y posteriormente autorizado e implementado el 2026-11-14 junto al núcleo
+de colecciones. [Contrato vigente y comandos](../colecciones-modelos.md#expulsar-una-presentación).
+El diseño original se conserva abajo como referencia; card también está disponible.
 
 ## Objetivo
 
@@ -37,8 +38,10 @@ TSX personalizable y autorización de servidor.
 - Probar generación, compilación, registro y preservación de vistas con fixtures
   desechables; documentar uso, límites y ejemplo antes/después.
 
-Siguiente paso al retomarlo: diseñar la salida TSX y el registro de vistas,
-comparando el código manual actual con la generación propuesta antes de implementar.
+La salida vigente usa ModelCollection, view="kanban" y columnas; el núcleo conecta
+Selection, capacidades, carga y movimientos autorizados. Registra views.kanban sin
+reemplazar list; true permite una vista sin archivo y eject lo reemplaza por loader.
+No se han regenerado las vistas personalizadas para probar este flujo.
 
 Referencias: [Módulos declarativos](../modulos-declarativos.md),
 [Colecciones](../vistas-colecciones.md) y [tutoría de Flota](../tutorial-flota.md).

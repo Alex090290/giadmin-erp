@@ -43,6 +43,8 @@ model FlotaVehicle {
   modeloId String @map("modelo_id")
   modelo FlotaModelo @relation("FlotaVehicle_modeloId", fields: [modeloId], references: [id], onDelete: Restrict)
   estado FlotaVehicleEstadoEnum @default(disponible)
+  kilometraje Int @default(0)
+  proximoServicioKm Int @default(20000) @map("proximo_servicio_km")
   createBy String? @map("create_by")
   createByUser User? @relation("FlotaVehicle_createBy", fields: [createBy], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)

@@ -7,6 +7,25 @@ import { activeApplication, activeApplicationMenu, applicationNavigation } from 
 const contacts = defineApplication({ id: "contactos", name: "Contactos", description: "Contactos compartidos.", version: "0.1.0", icon: UsersRound, depends: [], access: "authenticated", models: ["Partner"] });
 const users = defineApplication({ ...contacts, id: "usuarios", name: "Usuarios", access: "admin", depends: ["contactos"], models: ["User"] });
 
+test("effective model reads control declarative apps/menus, overrides and empty groups; native apps keep their contract", () => {
+  const app = defineApplication({ ...contacts, groups: ["contactos.default"], accessModels: ["contactos.item", "contactos.catalog"], menus: [
+    { id: "items", label: "Items", href: "/erp/contactos/item", model: "contactos.item", groups: ["contactos.default"] },
+    { id: "settings", label: "Configuración", groups: ["contactos.default"], items: [{ id: "catalog", label: "Catálogo", href: "/erp/contactos/catalog", model: "contactos.catalog", groups: ["contactos.default"] }] },
+  ] });
+  const read = { read: true, create: false, write: false, unlink: false };
+  const denied = { ...read, read: false };
+  const actor = { isAdmin: false, groups: new Set(["override.group"]), modelAccess: { "contactos.item": read, "contactos.catalog": denied } };
+  assert.equal(canOpenApplication(app, actor), true, "effective override can grant read without a default reader group");
+  assert.deepEqual(applicationNavigation(app, actor)?.menus.map(item => item.id), ["items"]);
+  const inverse = { ...actor, modelAccess: { "contactos.item": denied, "contactos.catalog": read } };
+  assert.deepEqual(applicationNavigation(app, inverse)?.menus.map(item => item.id), ["settings"]);
+  assert.equal(applicationNavigation(app, { ...actor, modelAccess: {} }), null);
+  assert.equal(canOpenApplication(contacts, { ...actor, modelAccess: {} }), true);
+  assert.equal(canOpenApplication(users, actor), false);
+  assert.equal(canOpenApplication(users, { ...actor, isAdmin: true }), true);
+  assert.equal(app.menus[1].items.length, 1, "filtering never mutates manifests");
+});
+
 test("registered dependencies precede consumers and model ownership is explicit", () => {
   const registry = createApplicationRegistry([users, contacts]);
   assert.deepEqual(registry.all().map(app => app.id), ["contactos", "usuarios"]);

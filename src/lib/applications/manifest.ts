@@ -1,7 +1,10 @@
 import type { LucideIcon } from "lucide-react";
+import type { AccessPerms } from "../access/declare";
 
 export type ApplicationAccess = "authenticated" | "admin";
 export type ApplicationMenuLink = {
+  /** Declarative model id: effective read replaces static group hints when available. */
+  readonly model?: string;
   readonly id: string;
   readonly label: string;
   readonly href: string;
@@ -19,6 +22,8 @@ export type ApplicationMenu = ApplicationMenuLink | {
 };
 
 export type ApplicationManifest = {
+  /** Declarative models only; native/manual applications preserve their access contract. */
+  readonly accessModels?: readonly string[];
   readonly id: string;
   readonly name: string;
   readonly description: string;
@@ -51,6 +56,7 @@ function validateMenus(application: ApplicationManifest) {
       if (nested || "href" in item || !Array.isArray(item.items) || !item.items.length) throw new Error(`Grupo de menú inválido en ${application.id}.`);
       item.items.forEach(child => validateItem(child, true));
     } else {
+      if (item.model !== undefined && (!application.accessModels?.includes(item.model))) throw new Error(`Modelo de menú no declarado en ${application.id}.`);
       // Canonical application paths only; no external URLs, queries or fragments.
       if (typeof item.href !== "string" || !/^\/erp\/[a-z0-9-]+(?:\/[a-zA-Z0-9_-]+)*$/.test(item.href) || !(item.href === base || item.href.startsWith(`${base}/`))) throw new Error(`Ruta de menú inválida en ${application.id}.`);
       if (item.match !== undefined && !["exact", "prefix"].includes(item.match)) throw new Error(`Coincidencia de menú inválida en ${application.id}.`);
@@ -67,6 +73,7 @@ export function defineApplication<const T extends ApplicationManifest>(manifest:
   if (!["authenticated", "admin"].includes(manifest.access)) throw new Error(`Acceso inválido en ${manifest.id}.`);
   if (new Set(manifest.depends).size !== manifest.depends.length || manifest.depends.some(id => !identifier.test(id) || id === manifest.id)) throw new Error(`Dependencias inválidas en ${manifest.id}.`);
   if (new Set(manifest.models).size !== manifest.models.length || manifest.models.some(model => !/^[A-Z][A-Za-z0-9]*$/.test(model))) throw new Error(`Modelos inválidos en ${manifest.id}.`);
+  if (manifest.accessModels !== undefined && (!Array.isArray(manifest.accessModels) || new Set(manifest.accessModels).size !== manifest.accessModels.length || manifest.accessModels.some(model => typeof model !== "string" || !model.startsWith(`${manifest.id}.`) || !/^[a-z][a-z0-9-]*\.[a-z][a-z0-9]*$/.test(model)))) throw new Error(`Modelos de acceso inválidos en ${manifest.id}.`);
   validateMenus(manifest);
   return manifest;
 }
@@ -75,12 +82,13 @@ export function applicationHref(manifest: ApplicationManifest): `/erp/${string}`
   return `/erp/${manifest.id}`;
 }
 
-export type ApplicationUser = { isAdmin: boolean; groups?: ReadonlySet<string> } | null;
+export type ApplicationUser = { isAdmin: boolean; groups?: ReadonlySet<string>; modelAccess?: Readonly<Record<string, AccessPerms>> } | null;
 /** Presentation only: groups and admin flags decide visibility; every operation is authorized on the server. */
 export function memberOf(user: ApplicationUser, groups: readonly string[] | undefined) {
   return !groups || Boolean(user?.isAdmin) || groups.some(group => user?.groups?.has(group));
 }
 export function canOpenApplication(manifest: ApplicationManifest, user: ApplicationUser): boolean {
+  if (user && manifest.accessModels && user.modelAccess) return manifest.accessModels.some(model => user.modelAccess?.[model]?.read === true);
   return user !== null && (manifest.access === "authenticated" || user.isAdmin) && memberOf(user, manifest.groups);
 }
 

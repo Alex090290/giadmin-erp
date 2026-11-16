@@ -1,8 +1,9 @@
 "use client";
-import { Fragment, useEffect, useState, type ComponentProps } from "react";
+import { Fragment, useCallback, useState, type ComponentProps } from "react";
 import type { ListGroupValue, ListPage, ListResult, ListState } from "@/lib/list/types";
 import { groupDisplayLabel } from "@/lib/list/grouping";
 import { listDeleteSelectionSchema, type ListDeleteResult, type ListDeleteTarget } from "@/lib/list/selection";
+import { useCollectionLoad } from "../collection/useCollectionLoad";
 import ListRecordRows from "./ListRecordRows";
 import { emptyListSelection, selectedPageIds, togglePageRecord, toggleWholePage } from "./listSelection";
 import SelectionCheckbox from "./SelectionCheckbox";
@@ -18,22 +19,17 @@ type Props = Pick<ComponentProps<typeof ListRecordRows>, "recordHref" | "current
 
 /** Each expanded branch owns a bounded request and independent page; closing unmounts it. */
 function Branch({ path, ...props }: Omit<Props, "data"> & { path: ListGroupValue[] }) {
-  const [page, setPage] = useState(1), [attempt, setAttempt] = useState(0);
-  const [response, setResponse] = useState<{ key: string; result: ListResult } | null>(null);
-  const key = JSON.stringify({ state: props.state, path, page, attempt });
+  const [page, setPage] = useState(1);
+  const key = JSON.stringify({ state: props.state, path, page });
   const load = props.load;
-  useEffect(() => {
-    let current = true;
-    const request = JSON.parse(key);
-    Promise.resolve().then(() => load({ ...request.state, groupPath: request.path, page: request.page }))
-      .catch((): ListResult => ({ ok: false, error: "No pudimos cargar el grupo." }))
-      .then(result => { if (current) setResponse({ key, result }); });
-    return () => { current = false; };
-  }, [key, load]);
-  const result = response?.key === key ? response.result : null;
+  const request = useCallback(async (key: string) => {
+    const input = JSON.parse(key);
+    return load({ ...input.state, groupPath: input.path, page: input.page });
+  }, [load]);
+  const { result, refresh } = useCollectionLoad(key, request);
   const span = props.columns.length + 2;
   if (!result) return <tr><td colSpan={span} role="status">Cargando grupo…</td></tr>;
-  if (!result.ok) return <tr><td colSpan={span}><p role="alert">{result.error}</p><button type="button" className="btn btn-ghost btn-sm" onClick={() => setAttempt(value => value + 1)}>Reintentar grupo</button></td></tr>;
+  if (!result.ok) return <tr><td colSpan={span}><p role="alert">{result.error}</p><button type="button" className="btn btn-ghost btn-sm" onClick={refresh}>Reintentar grupo</button></td></tr>;
   const data = result.data;
   const hasNext = data.groups ? data.hasMoreGroups : data.page * data.pageSize < data.total;
   return <>

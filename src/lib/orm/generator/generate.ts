@@ -41,7 +41,7 @@ function clientSource({ model, clientFields }: GenerationModel) {
     `export const ${n}Schema = z.strictObject({\n${clientFields.map(name => `  ${name}: ${n}Fields.${name}.schema,`).join("\n")}\n});\n\n` +
     `export const ${n}ReactionRules = ${quote(model.reactionRules ?? [])} as const;\n` +
     `export const ${n}PreviewFields = {\n${Object.entries(model.previewFields??{}).map(([name,field])=>`  ${name}: ${fieldExpression(field.metadata)},`).join("\n")}\n} as const;\n\n` +
-    `export const ${n}CollectionFields = { ...${n}Fields,\n${Object.keys(model.relatedFields??{}).map(name=>`  ${name}: { metadata: { ...${n}PreviewFields.${name}.metadata, readOnly: true } },`).join("\n")}\n} as const;\n\n` +
+    `export const ${n}CollectionFields = { ...${n}Fields,\n${Object.keys({...model.relatedFields,...model.computedFields}).map(name=>`  ${name}: { metadata: { ...${n}PreviewFields.${name}.metadata, readOnly: true } },`).join("\n")}\n} as const;\n\n` +
     `export function create${n}Defaults() {\n  return {\n${clientFields.map(name => `    ${name}: ${n}Fields.${name}.createDefault(),`).join("\n")}\n  };\n}\n\n` +
     `export type ${n}Input = z.input<typeof ${n}Schema>;\nexport type ${n}Values = z.output<typeof ${n}Schema>;\n\n` +
     `export const ${n}RecordSchema = ${n}Schema.extend(recordIdentityShape).superRefine(validateRecordIdentity);\n` +

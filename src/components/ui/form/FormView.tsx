@@ -1,5 +1,6 @@
 "use client";
 
+import FormPendingStatus from "./FormPendingStatus";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useFormState, type FieldPath, type FieldValues } from "react-hook-form";
 import { Plus, RotateCcw, Save, Trash2 } from "lucide-react";
@@ -77,7 +78,7 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const titleId = `${id ?? generatedId}-title`;
   const { isDirty, isSubmitting, errors, defaultValues } = useFormState({ control: methods.control });
-  const markClean = useFormLeaveGuard(isDirty && !readOnly, methods.reset);
+  const markClean = useFormLeaveGuard(isDirty, methods.reset);
   const [saving, setSaving] = useState(false);
   const [startingNew, setStartingNew] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -97,7 +98,7 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
   const actions = typeof headerActions === "function" ? headerActions(context) : headerActions;
   const customActions = typeof menuActions === "function" ? menuActions(context) : menuActions;
   const savedTarget = formDeleteTarget({ id: defaultValues?.id, revision: defaultValues?.revision });
-  const canDelete = Boolean(deletion && mode === "edit" && !readOnly && savedTarget);
+  const canDelete = Boolean(deletion && mode === "edit" && (!readOnly || deletion.allowReadOnly) && savedTarget);
   const hasSecondaryActions = Boolean(customActions?.length) || canDelete;
   const secondaryActions: readonly FormViewMenuAction[] = [...(customActions ?? []), ...(canDelete ? [{ id: "form-delete", label: "Eliminar", icon: <Trash2 size={16} />, danger: true, onSelect: () => { void removeRecord(); } }] : [])];
   const footerContent = typeof footer === "function" ? footer(context) : footer;
@@ -110,7 +111,7 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
   delete formProps.icon;
 
   async function removeRecord() {
-    if (!deletion || locked || readOnly || mode !== "edit" || inFlight.current) return;
+    if (!deletion || locked || (readOnly && !deletion.allowReadOnly) || mode !== "edit" || inFlight.current) return;
     const target = savedTarget;
     if (!target) return;
     inFlight.current = true; setDeleting(true);
@@ -150,6 +151,7 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
    * ID/revision. A failed save stops; a failed action keeps the saved record and revision.
    */
   async function runFormAction(name: string): Promise<boolean> {
+    if (publishedActions && !publishedActions.some(item => item.name === name)) return false;
     // Synchronous lock: two clicks in the same frame must not both pass before `acting` renders.
     if (!runAction || locked || readOnly || inFlight.current || saveWaiter.current || actionLock.current) return false;
     actionLock.current = true;
@@ -274,6 +276,7 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
     <h2 id={titleId} className="sr-only">{title}</h2>
     <header data-slot="header" className="shrink-0 space-y-3 rounded-t-2xl border-b border-base-300 bg-linear-to-r from-primary/5 to-transparent px-4 py-3 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {busy && !deletedHref && <FormPendingStatus announce={false}>{saving || isSubmitting ? "Guardando cambios…" : deleting ? "Eliminando registro…" : acting ? "Ejecutando acción…" : "Procesando…"}</FormPendingStatus>}
         {!!breadcrumbs?.length && <div className="min-w-0 flex-1 basis-48"><Breadcrumbs items={breadcrumbs} /></div>}
         {(!readOnly || onNew || hasSecondaryActions) && <fieldset disabled={locked} className="m-0 ml-auto flex min-w-0 flex-wrap items-center gap-1 border-0 p-0 sm:gap-2">
           {onNew && <button type="button" disabled={locked} className="btn btn-soft btn-primary btn-sm gap-1.5" onClick={async () => {

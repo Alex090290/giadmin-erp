@@ -1,5 +1,6 @@
 "use client";
 
+import type { Many2OneLoader } from "@/lib/many2one/model-lookup";
 import Link from "next/link";
 import { useCallback, useId, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, CircleAlert, Inbox, Plus, RefreshCw, Search, X } from "lucide-react";
@@ -7,6 +8,7 @@ import { listColumnType, listDisplayColumn, listModels, type ListColumn, type Li
 import { columnAlignment, visibleListPages } from "./listFormat";
 import { useListView } from "./useListView";
 import ListRecordPreview from "./ListRecordPreview";
+import RelationFilterLabel from "./RelationFilterLabel";
 import ColumnFilter from "./ColumnFilter";
 import ListRecordRows from "./ListRecordRows";
 import ListGroupRows from "./ListGroupRows";
@@ -21,8 +23,10 @@ import { useListDeletion } from "./useListDeletion";
 import ListViewActionMenu from "./ListViewActionMenu";
 
 export type ListViewProps = ({ model: ListModel; load?: never } | { model: string; load: (state: ListState) => Promise<ListResult> }) & {
+  filterLookups?: Readonly<Record<string, Many2OneLoader>>;
   title: string;
   columns: readonly ListColumn[];
+  queryColumns?: readonly ListColumn[];
   searchFields?: readonly string[];
   /** Compatibility metadata; the compact header does not render this summary. */
   description?: string;
@@ -49,12 +53,12 @@ function internalHref(href?: string) { return Boolean(href && /^\/(?![\/\\])/.te
 const alignmentClasses = { left: "text-left", center: "text-center", right: "text-right" };
 
 export default function ListViewClient({
-  model, load, title, columns, searchFields = Object.hasOwn(listModels, model) ? listModels[model as ListModel].searchFields : [],
+  model, load, filterLookups, title, columns, queryColumns, searchFields = Object.hasOwn(listModels, model) ? listModels[model as ListModel].searchFields : [],
   pageSize = 25, defaultSort, paramPrefix = "",
   createHref, create = true, delete: deleteEnabled = true, onDelete, createLabel = "Nuevo", recordHref, breadcrumbs, headerActions, footer, className = "", renderCell,
 }: ListViewProps) {
   const titleId = useId();
-  const config = { model, columns, searchFields, defaultSort };
+  const config = { model, columns: queryColumns ?? columns, searchFields, defaultSort };
   const list = useListView(config, pageSize, paramPrefix, load);
   const { state, data, loading, error } = list;
   const [selection, setSelection] = useState(emptyListSelection);
@@ -116,9 +120,9 @@ export default function ListViewClient({
               return <th key={column.field} scope="col" aria-sort={column.sortable ? current ? state.direction === "asc" ? "ascending" : "descending" : "none" : undefined} className={`px-4 py-3 font-medium ${alignmentClasses[align]}`}>
                 <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : align === "center" ? "justify-center" : ""}`}>
                   {column.sortable ? <button type="button" className={`inline-flex cursor-pointer items-center gap-2 rounded-sm py-1 transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-primary ${current ? "text-base-content" : ""}`} aria-label={`Ordenar por ${column.label}`} onClick={() => list.update({ sort: column.field, direction: current && state.direction === "asc" ? "desc" : "asc" })}>{column.label}<SortIcon size={14} aria-hidden="true" /></button> : column.label}
-                  {column.filterable !== false && <ColumnFilter field={column.field} label={column.label} type={listColumnType(model, column)} options={column.options} filter={activeFilter} onApply={filter => list.setFilter(column.field, filter)} />}
+                  {column.filterable !== false && <ColumnFilter lookup={filterLookups?.[column.field]} field={column.field} label={column.label} type={listColumnType(model, column)} options={column.options} filter={activeFilter} onApply={filter => list.setFilter(column.field, filter)} />}
                 </div>
-                {activeFilter && <span className="mt-1 block max-w-48 truncate text-xs font-normal text-primary" title={description}>{description}</span>}
+                {activeFilter && <span className="mt-1 block max-w-48 truncate text-xs font-normal text-primary" title={filterLookups?.[column.field] ? undefined : description}>{filterLookups?.[column.field] ? <RelationFilterLabel filter={activeFilter} load={filterLookups[column.field]} /> : description}</span>}
               </th>;
             })}
             <th scope="col" className="w-12 px-3"><span className="sr-only">Abrir registro</span></th>

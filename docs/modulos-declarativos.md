@@ -127,8 +127,10 @@ Los campos `related` también forman parte de la política de colección por def
 (salvo `list: false` o una lista explícita en el manifest). Se presentan como columnas
 de lectura en ListView/CardView y en sus vistas personalizadas; por ejemplo,
 `{ field: "fabricanteLogo", widget: "image" }`. No admiten búsqueda, orden, filtros
-ni agrupación, ni se incluyen en los valores editables del formulario. Los campos
-`compute` de preview no se publican automáticamente en las colecciones.
+ni agrupación, ni se incluyen en los valores editables del formulario.
+Los Fields `compute` también se publican como lectura por convención; `list: false`
+los excluye. Sus dependencias deben estar publicadas. No son filtros/orden/grupos
+SQL. [Contrato de cálculo por página](campos-calculados.md#lista-card-y-kanban-2026-11-15).
 
 `invisible: true` establece la visibilidad inicial del Field en formularios, sin
 retirarlo del payload ni de la validación. En TSX, `invisible={condición}` controla
@@ -152,6 +154,12 @@ Prisma, antes de TypeScript. Un error posterior conserva los pasos completados.
 Si el manifest está vacío, pide crear el primer modelo antes de sincronizar.
 
 ## 4. Personalizar una vista (eject)
+
+Lista, Tarjetas y Kanban comparten ahora ModelCollection y el contrato de colección.
+Registrar views.list/card/kanban como true o loader permite alternarlas sin sustituir
+vistas. `view` elige la inicial; Kanban necesita su configuración del modelo.
+[API, URL, proveedores, personalización y ejemplos](colecciones-modelos.md).
+`eject:view` admite también card y kanban y conserva cada loader por separado.
 
 ```bash
 npm run eject:view -- demo tarea form

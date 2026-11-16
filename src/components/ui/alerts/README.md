@@ -59,7 +59,7 @@ const load = useCallback(() => readDocument(id), [id]);
 
 El formulario se monta únicamente después de recibir el registro; DocumentForm usa esos datos como `defaultValues` de RHF. Mantén `load` estable (`useCallback` o función importada) y cambia `recordKey` al cambiar de registro. Confirma antes si el registro actual tiene cambios pendientes.
 
-Se muestra un diálogo «Cargando…» en cada carga y reintento. Si falla, se cierra el indicador, aparece un error y queda un botón Reintentar. Las respuestas anteriores se ignoran al cambiar de registro, reintentar o desmontar. El tiempo máximo es de 30 segundos (`timeoutMs` configurable); las respuestas que lleguen después se ignoran. Las Server Actions ya iniciadas no se cancelan en el servidor.
+FormViewLoader muestra un marco de formulario con indicador discreto «Cargando registro…» en la cabecera, sin modal, backdrop ni cambio de foco. Hasta recibir los datos no monta campos editables ni presenta el registro anterior. Si falla, aparece el error y queda un botón Reintentar. Las respuestas anteriores se ignoran al cambiar de registro, reintentar o desmontar. El tiempo máximo es de 30 segundos (`timeoutMs` configurable); las respuestas que lleguen después se ignoran. Las Server Actions ya iniciadas no se cancelan en el servidor.
 
 Un FormView con datos ya disponibles no ejecuta una petición ni inventa una espera. La vista rápida de ListView continúa mostrando los datos que ya posee; las futuras rutas de edición deben envolver la consulta con FormViewLoader. Para páginas renderizadas en servidor se puede complementar con el `loading.tsx` de su ruta.
 
@@ -91,4 +91,4 @@ import Modal from "@/components/ui/alerts/Modal";
 
 Controlado con `open` y `onClose`; admite `icon`, `tone`, `size`, `initialFocusRef`, `closeOnEscape` y `closeOnBackdrop`. Usa un dialog nativo y un portal fuera de los fieldsets del formulario. Bloquea el fondo, contiene el foco y lo devuelve al elemento que abrió el diálogo si sigue disponible. Para formularios propios, incluye su propio FormLayout; no uses `method="dialog"` para cerrar un modal controlado.
 
-Ejemplos en `/sample#alerts`. El FormView principal carga un documento de demostración desde el servidor; se añade una espera de 600 ms únicamente en esa acción de ejemplo para observar Cargando. No se escribe en la base de datos. La referencia DUPLICADO permite probar un rechazo de servidor y Cancelar documento usa Confirm.
+Ejemplos en `/sample#alerts`. El FormView principal carga un documento de demostración desde el servidor; se añade una espera de 600 ms únicamente en las acciones de carga/guardado del ejemplo para observar los indicadores integrados. No se escribe en la base de datos. La referencia DUPLICADO permite probar un rechazo de servidor y Cancelar documento usa Confirm.

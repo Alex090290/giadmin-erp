@@ -262,8 +262,10 @@ se muestra como «No disponible» y una vacía conserva el estado vacío.
 
 ListView (incluidos vista rápida y grupos), CardView y KanbanView comparten esa
 presentación. Selection usa `options` en celdas y encabezados de grupo. Orden y
-filtros siguen actuando sobre los escalares originales; esta mejora no agrega
-búsqueda/orden por etiquetas ni agrupación por rutas. Para grupos propios, publicar
+filtros siguen actuando sobre los escalares originales; no hay búsqueda SQL por
+etiquetas ni agrupación por rutas. Desde el 2026-11-15, con `filterLookups`, el
+filtro de relación busca nombres mediante su lookup autorizado y aplica el ID
+seleccionado con igualdad/desigualdad/vacío; no ofrece Contiene sobre el ID. Para grupos propios, publicar
 `groupField` del nivel actual, preferiblemente mediante `groupedPage`.
 Ejemplo ficticio junto al formulario RHF/Zod en `/sample#model-display-name`.
 
@@ -280,3 +282,31 @@ npm run build
 La integración usa un esquema PostgreSQL temporal, sin datos del ERP. Cubre
 contadores por columna, filtros combinados, estados desconocidos, permisos,
 movimientos simultáneos, revisiones antiguas y rollback por reglas de negocio.
+
+## Filtros Many2one por selección (2026-11-15)
+
+ModelCollection conecta automáticamente los lookups publicados en config.lookups
+con modelLookup, sin cambiar clases, vistas de aplicación ni SQL. Lista (cabecera),
+Card y Kanban (panel Filtros) comparten ColumnFilter. Buscar muestra resultados
+paginados del proveedor autorizado; seleccionar/aplicar guarda sólo `{field,
+operator:"eq"|"neq",value:ID}` en la URL. También se admite vacío/tiene valor.
+Las etiquetas de filtros activos se resuelven por ID mediante el mismo lookup;
+no se publican objetos completos ni se sustituyen los permisos de servidor.
+
+Las vistas base aceptan `filterLookups: { campo: loaderAutorizado }`. Una fuente
+custom de ModelCollection puede suministrar `source.filterLookups`; no se mezcla
+silenciosamente con proveedores de servidor por defecto. Sin lookup se conserva
+el comportamiento anterior; las columnas de texto y Selection no cambian.
+Las consultas del lookup autorizan acceso al destino, y la lista sigue verificando
+sus permisos/reglas antes de filtrar por el escalar. La búsqueda general y el orden
+no cambian: no se busca automáticamente por displayName compuesto del destino.
+
+Si había un filtro de texto antiguo sobre la relación, quitarlo y volver a
+seleccionar el registro; no se interpreta su texto como un nombre o una ruta SQL.
+El panel descarta ese valor antiguo cuando su operador ya no está disponible.
+Búsquedas fallidas ofrecen reintento; al cambiar consulta/proveedor se descartan
+respuestas antiguas con el hook Many2one existente. Mantener autocomplete off.
+
+Demo ficticia `/sample#relation-filter`, sin BD. Comprobados buscar Corolla,
+seleccionar Toyota / Corolla, URL con model-1, un único vehículo y reapertura con
+nombre resuelto. Prueba `npm run test:relation-filter` para operadores y predicados.

@@ -6,6 +6,7 @@ import { relatedImageModel } from "./related-image.model";
 import ModelReactionsSample from "./ModelReactionsSample";
 import { sampleReactionModel } from "./reaction-model";
 import Link from "next/link";
+import { Suspense } from "react";
 import SampleForms from "./SampleForms";
 import ImageSample from "./ImageSample";
 import Many2OneSample from "./Many2OneSample";
@@ -15,6 +16,10 @@ import FormViewSample from "./FormViewSample";
 import AlertsSample from "./AlertsSample";
 import One2manySample from "./One2manySample";
 import CollectionViewsSample from "./CollectionViewsSample";
+import ComputedCollectionSample from "./ComputedCollectionSample";
+import RelationFilterSample from "./RelationFilterSample";
+import CollectionCoreSample from "./CollectionCoreSample";
+import CapabilitiesSample from "./CapabilitiesSample";
 import AuditSample from "./AuditSample";
 import ListGroupingSample from "./ListGroupingSample";
 import ModelDisplayNameSample from "./ModelDisplayNameSample";
@@ -42,10 +47,13 @@ export default function PageSample() {
             <a className="btn btn-sm btn-outline" href="#list-selection">Selección de listas</a>
             <a className="btn btn-sm btn-outline" href="#list-grouping">Agrupación anidada</a>
             <a className="btn btn-sm btn-outline" href="#card-view">CardView</a>
+            <a className="btn btn-sm btn-outline" href="#collection-core">Colección compartida</a>
+            <a className="btn btn-sm btn-outline" href="#computed-collections">Cálculos en colecciones</a>
             <a className="btn btn-sm btn-outline" href="#kanban-view">KanbanView</a>
             <a className="btn btn-sm btn-outline" href="#form-view">FormView</a>
             <a className="btn btn-sm btn-outline" href="#form-deletion">Eliminar desde formulario</a>
             <a className="btn btn-sm btn-outline" href="#form-actions">Acciones de formulario</a>
+            <a className="btn btn-sm btn-outline" href="#model-capabilities">Capacidades</a>
             <a className="btn btn-sm btn-outline" href="#record-audit">Auditoría</a>
             <a className="btn btn-sm btn-outline" href="#alerts">Alertas</a>
             <a className="btn btn-sm btn-outline" href="#notebook">Notebook</a>
@@ -77,12 +85,16 @@ export default function PageSample() {
         <ListViewSample />
         <ListGroupingSample />
         <CollectionViewsSample />
+        <Suspense fallback={<p role="status">Cargando colección compartida…</p>}><CollectionCoreSample />
+        <RelationFilterSample />
+        <ComputedCollectionSample /></Suspense>
         <ImageCollectionsSample />
         <BadgeCollectionsSample />
         <AlertsSample />
         <FormViewSample />
         <FormDeletionSample />
         <FormActionsSample />
+        <CapabilitiesSample />
         <AuditSample />
         <SampleForms />
         <Many2OneSample />

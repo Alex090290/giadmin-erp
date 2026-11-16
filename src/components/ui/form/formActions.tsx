@@ -35,8 +35,8 @@ function useFormActions(component: string) {
  * Children can use useFormContext/useWatch and decide their own visibility.
  */
 export function FormHeader({ children }: { children: ReactNode }) {
-  const { header } = useFormActions("FormHeader");
-  return header ? createPortal(<div className="flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-between gap-2 [&_[data-form-widget=statebar]]:ml-auto [&_[data-form-widget=statebar]]:w-auto [&_[data-form-widget=statebar]]:max-w-full">{children}</div>, header) : null;
+  const { header, locked, readOnly } = useFormActions("FormHeader");
+  return header ? createPortal(<fieldset disabled={locked || readOnly} className="m-0 flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-between gap-2 border-0 p-0 [&_[data-form-widget=statebar]]:ml-auto [&_[data-form-widget=statebar]]:w-auto [&_[data-form-widget=statebar]]:max-w-full">{children}</fieldset>, header) : null;
 }
 
 type FormButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "onClick" | "children"> & {
@@ -57,7 +57,7 @@ type FormButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "o
 export function FormButton({ action, children, variant = "primary", invisible = false, disabled, className = "", ...props }: FormButtonProps) {
   const { locked, readOnly, actions, run, running } = useFormActions("FormButton");
   const label = children ?? actions?.find(item => item.name === action)?.label ?? action;
-  if (invisible || readOnly || !run) return null;
+  if (invisible || readOnly || !run || (actions && !actions.some(item => item.name === action))) return null;
   return <button {...props} type="button" disabled={disabled || locked}
     className={`btn btn-sm ${variant === "primary" ? "btn-primary" : "btn-soft"} gap-1.5 ${className}`}
     onClick={() => { void run(action); }}>

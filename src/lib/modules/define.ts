@@ -1,9 +1,10 @@
 import "server-only";
 import type { ComponentType } from "react";
-import { collectionFieldMetadata, type ModelClientConfig } from "./config";
+import { availableCollectionViews, collectionFieldMetadata, collectionViews, type CollectionView, type ModelClientConfig } from "./config";
 import { defineApplication, type ApplicationManifest, type ApplicationMenu, type ApplicationMenuLink } from "../applications/manifest";
 import { defineModel, type Model } from "../orm/model";
 import type { FieldMetadata } from "../orm/fields";
+import { validateCollectionComputed } from "../orm/collection-computed";
 import type { ModelListPolicy } from "../orm/service";
 import type { GenerationProfile } from "../orm/generator/profile";
 import type { ListViewConfig } from "../list/types";
@@ -19,7 +20,7 @@ export type ModuleModelSpec = ModelClass | {
   /** Override of the list policy derived from Field metadata. */
   readonly list?: Partial<ModelListPolicy>;
   readonly kanban?: string | KanbanConfig;
-  readonly view?: "list" | "card";
+  readonly view?: CollectionView;
   readonly defaultSort?: ListViewConfig["defaultSort"];
   /** Custom views (eject). Without them the default list/form are used. */
   readonly views?: ModelViews;
@@ -32,7 +33,9 @@ export type ModelListView = ComponentType<{ config: ModelClientConfig }>;
  */
 export type ModelViews = {
   readonly form?: () => Promise<{ default: ModelFormView }>;
-  readonly list?: () => Promise<{ default: ModelListView }>;
+  readonly list?: true | (() => Promise<{ default: ModelListView }>);
+  readonly card?: true | (() => Promise<{ default: ModelListView }>);
+  readonly kanban?: true | (() => Promise<{ default: ModelListView }>);
 };
 /** Menu entries reference model keys; nested objects create one group level. */
 export type ModuleMenu = Readonly<Record<string, string | Readonly<Record<string, string>>>>;
@@ -64,7 +67,8 @@ export type ModuleModel = {
   readonly list: ModelListPolicy;
   readonly kanban?: string;
   readonly kanbanTransitions?: readonly KanbanTransition[];
-  readonly view: "list" | "card";
+  readonly view: CollectionView;
+  readonly collectionViews: readonly CollectionView[];
   readonly defaultSort?: ListViewConfig["defaultSort"];
   readonly views: ModelViews;
 };
@@ -131,19 +135,25 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
     const clientFields = Object.keys(contract.metadata);
     const collectionMetadata = collectionFieldMetadata({
       fields: contract.metadata,
-      preview: Object.fromEntries(Object.entries(contract.relatedFields).map(([name, field]) => [name, field.metadata])),
+      preview: Object.fromEntries(Object.entries({ ...contract.relatedFields, ...contract.computedFields }).map(([name, field]) => [name, field.metadata])),
       related: Object.keys(contract.relatedFields),
     });
     const list = derivedListPolicy(collectionMetadata, options.list);
+    validateCollectionComputed(contract, list.fields.filter(name => Object.hasOwn(contract.computedFields, name)), list.fields);
     const kanban = compileKanbanConfig(options.kanban, contract.metadata, contract.actions, list.fields);
     const view = options.view ?? "list";
-    if (!["list", "card"].includes(view)) throw new Error(`${id}.${modelKey}: vista de lista inválida.`);
+    if (!collectionViews.includes(view)) throw new Error(`${id}.${modelKey}: vista de lista inválida.`);
+    for (const [kind, loader] of Object.entries(options.views ?? {})) {
+      if (loader === undefined) continue;
+      if (![...collectionViews, "form"].includes(kind) || (typeof loader !== "function" && !(kind !== "form" && loader === true))) throw new Error(`${id}.${modelKey}: registro de vista inválido: ${kind}.`);
+    }
+    const presentations = availableCollectionViews(view, options.views ?? {}, Boolean(kanban));
     return Object.freeze({
       id: `${id}.${modelKey}`, key: modelKey, module: id, route: `/erp/${id}/${modelKey}` as const,
       label: menuLabel(spec.menu, modelKey), delegate: name[0].toLowerCase() + name.slice(1),
       contract, metadata: contract.metadata as Readonly<Record<string, FieldMetadata>>, clientFields, list, kanban: kanban?.field,
       ...(kanban?.transitions !== undefined ? {kanbanTransitions:kanban.transitions} : {}),
-      view, defaultSort: options.defaultSort, views: options.views ?? {},
+      view, collectionViews: presentations, defaultSort: options.defaultSort, views: options.views ?? {},
     });
   });
   const byKey = new Map(models.map(model => [model.key, model]));
@@ -154,7 +164,7 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
   const link = (label: string, target: string): ApplicationMenuLink => {
     const model = byKey.get(target);
     if (!model) throw new Error(`${id}: el menú «${label}» apunta a un modelo inexistente: ${target}.`);
-    return { id: `${target}-list`, label, href: model.route, ...visibility(readGroups(access, model.id)) };
+    return { id: `${target}-list`, label, href: model.route, model: model.id, ...visibility(readGroups(access, model.id)) };
   };
   const menus: ApplicationMenu[] = Object.entries(spec.menu ?? Object.fromEntries(models.map(model => [model.label, model.key])))
     .map(([label, value]) => {
@@ -166,7 +176,7 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
   if (typeof spec.icon !== "string" || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(spec.icon)) throw new Error(`${id}: usa el nombre de un icono Lucide, por ejemplo "flask-conical".`);
   const application = {
     id, name: spec.name, description: spec.description ?? `Aplicación ${spec.name}.`, version: spec.version ?? "0.1.0",
-    ...visibility(access.groups.map(group => group.id)), depends: spec.depends ?? [], models: models.map(model => model.contract.name), menus,
+    ...visibility(access.groups.map(group => group.id)), depends: spec.depends ?? [], models: models.map(model => model.contract.name), accessModels: models.map(model => model.id), menus,
   };
   // Validate ids, menus and dependencies now; the icon component is attached by the registry.
   defineApplication({ ...application, icon: (() => null) as unknown as ApplicationManifest["icon"] });

@@ -6,6 +6,8 @@ import type { ModelActor } from "../orm/context";
 import { prisma } from "../prisma";
 import { createModelService } from "../orm/service";
 import { authorizeModel, userGroups } from "../access/engine";
+import { allowsActionGroups, type CapabilityActor } from "../access/capabilities";
+import { projectModelAccess } from "./access";
 import { createModelImageSigner } from "../uploads/model-image.server";
 import type { Many2OneLoader } from "../many2one/model-lookup";
 import type { FieldMetadata } from "../orm/fields";
@@ -69,7 +71,7 @@ export function modelService(id: string): Service {
       const user = await tx.user.findUnique({ where: { id: actor.id }, select: { isAdmin: true } });
       if (user?.isAdmin) return;
       const groups = await userGroups(tx, actor.id);
-      if (!action.groups?.some(group => groups.has(group.includes(".") ? group : `${module.id}.${group}`))) throw new AccessError("DENIED");
+      if (!allowsActionGroups({ isAdmin: false, groups }, module.id, action.groups)) throw new AccessError("DENIED");
     },
     ...(entry.kanban ? { kanban: { field: entry.kanban, ...(entry.kanbanTransitions !== undefined ? {transitions:entry.kanbanTransitions} : {}) } } : {}),
     ...(Object.keys(relations).length ? { relations } : {}),
@@ -111,12 +113,13 @@ export function imageSigner(id: string) {
   return signer;
 }
 
-export function modelClientConfig(id: string): ModelClientConfig {
+export function modelClientConfig(id: string, access?: CapabilityActor): ModelClientConfig {
   const found = getModuleModel(id);
   if (!found) throw new Error("MODEL_NOT_FOUND");
   const { module, entry } = found;
   const { contract } = entry;
-  return {
+  const published = (entry.contract.actions ?? []) as readonly ModelAction[];
+  const config: ModelClientConfig = {
     id: entry.id, module: module.id, moduleName: module.application.name, key: entry.key, name: contract.name, label: entry.label, route: entry.route,
     fields: Object.fromEntries(entry.clientFields.map(name => [name, entry.metadata[name]])),
     preview: Object.fromEntries(Object.entries((contract.previewFields ?? {}) as Readonly<Record<string, { metadata: FieldMetadata }>>).map(([name, field]) => [name, field.metadata])),
@@ -124,12 +127,14 @@ export function modelClientConfig(id: string): ModelClientConfig {
     reactionRules: contract.reactionRules ?? [],
     lookups: lookupTargets(entry),
     // Names and labels only; the server validates the name and re-checks permissions on every call.
-    actions: ((entry.contract.actions ?? []) as readonly ModelAction[]).map(({ name, label }) => ({ name, label })),
+    actions: published.map(({ name, label }) => ({ name, label })),
     list: { fields: entry.list.fields, searchFields: entry.list.searchFields, sortable: entry.list.sortable ?? [], groupable: entry.list.groupable ?? [], filterable: entry.list.filterable ?? [] },
     view: entry.view,
+    collectionViews: entry.collectionViews,
     // Plain JSON: omit absent options instead of sending undefined.
     ...(entry.kanban ? { kanban: entry.kanban } : {}),
     ...(entry.kanbanTransitions !== undefined ? {kanbanTransitions:entry.kanbanTransitions.map(({from,to})=>({from,to}))} : {}),
     ...(entry.defaultSort ? { defaultSort: entry.defaultSort } : {}),
   };
+  return access ? projectModelAccess(config, access, published, entry.kanbanTransitions) : config;
 }

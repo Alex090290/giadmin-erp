@@ -13,7 +13,7 @@ import type { KanbanViewProps } from "./KanbanView";
 import { canMoveKanban } from "@/lib/kanban/types";
 
 export default function KanbanViewClient(props: KanbanViewProps) {
-  const config = { model: props.model, columns: props.columns, searchFields: props.searchFields ?? [], defaultSort: props.defaultSort };
+  const config = { model: props.model, columns: props.queryColumns ?? props.columns, searchFields: props.searchFields ?? [], defaultSort: props.defaultSort };
   const query = useCollectionState(config, props.pageSize ?? 10, props.paramPrefix ?? "");
   const [attempt, setAttempt] = useState(0), [pending, setPending] = useState<string | null>(null), [dragging, setDragging] = useState<ListRecord | null>(null), [announcement, setAnnouncement] = useState("");
   const mutex = useRef(false), focus = useRef<string | null>(null);
@@ -50,7 +50,7 @@ export default function KanbanViewClient(props: KanbanViewProps) {
     finally { focus.current = record.id; setAttempt(value => value + 1); setPending(null); mutex.current = false; }
   }
   return <CollectionShell {...props} icon={props.icon ?? <Columns3 size={23} aria-hidden="true" />} busy={Boolean(pending)} refresh={() => setAttempt(value => value + 1)}
-    toolbar={slots => <CollectionToolbar {...slots} columns={props.columns} state={query.state} update={query.update} setFilter={query.setFilter} clear={query.clearFilters} disabled={Boolean(pending)} />}
+    toolbar={slots => <CollectionToolbar {...slots} filterLookups={props.filterLookups} columns={props.queryColumns ?? props.columns} state={query.state} update={query.update} setFilter={query.setFilter} clear={query.clearFilters} disabled={Boolean(pending)} />}
     footer={<div className="flex flex-wrap items-center justify-between gap-2"><p>{props.onMove ? "Arrastra desde el asa o usa el selector de estado. Los cambios se guardan al confirmar el servidor." : "Vista de consulta. Cada columna carga sus tarjetas por páginas."}</p>{props.footer}<span role="status" className="sr-only">{announcement}</span></div>}>
     <DndContext id={id} sensors={sensors} collisionDetection={args => args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args)}
       accessibility={{ screenReaderInstructions: { draggable: "Pulsa espacio o Enter para tomar la tarjeta, flechas izquierda y derecha para cambiar de columna, espacio o Enter para soltar, Escape para cancelar. También puedes usar el selector de estado." }, announcements: { onDragStart: () => "Tarjeta tomada.", onDragOver: ({ over }) => over ? `Columna ${props.groups.find(group => group.value === over.id)?.label ?? ""}.` : "Fuera de las columnas.", onDragEnd: () => "Tarjeta soltada. Espera la confirmación del servidor.", onDragCancel: () => "Movimiento cancelado." } }}

@@ -1,6 +1,8 @@
 import { listDeleteSelectionSchema, type ListDeleteResult, type ListDeleteTarget } from "@/lib/list/selection";
 
 export type FormDeletion = {
+  /** A separate unlink permission can allow deletion while field editing remains read-only. */
+  allowReadOnly?: boolean;
   action: (selection: readonly ListDeleteTarget[]) => Promise<ListDeleteResult>;
   /** Safe fallback when the record was opened directly. */
   returnHref: string;

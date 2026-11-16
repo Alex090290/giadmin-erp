@@ -8,6 +8,11 @@ export const filterOperators: Record<ListDataType, readonly ListFilterOperator[]
   datetime: ["eq", "gt", "gte", "lt", "lte", "between", "empty", "notEmpty"],
   boolean: ["eq"],
 };
+/** Relation IDs and selections support identity/emptiness, never textual label predicates. */
+export function columnFilterOperators(type: ListDataType, selection = false): readonly ListFilterOperator[] {
+  return selection ? ["eq", "neq", "empty", "notEmpty"] : filterOperators[type];
+}
+
 export const filterOperatorLabels: Record<ListFilterOperator, string> = {
   contains: "Contiene", eq: "Es igual a", neq: "Es distinto de", startsWith: "Comienza con", endsWith: "Termina con",
   gt: "Mayor que / después de", gte: "Mayor o igual / desde", lt: "Menor que / antes de", lte: "Menor o igual / hasta",

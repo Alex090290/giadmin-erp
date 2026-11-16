@@ -1,8 +1,9 @@
 # Menús según permisos efectivos
 
-Pendiente solicitado el 2026-11-14, sin implementación autorizada por esta nota.
+Implementado el 2026-11-14 dentro de [Capacidades efectivas](../capacidades-modelos.md).
+El problema y los criterios siguientes documentan el alcance original.
 
-## Problema comprobado en código
+## Problema original
 
 Los menús ya filtran por pertenencia a grupos y acceso admin/authenticated.
 En módulos declarativos, los grupos de lectura se derivan del manifest; la
@@ -28,9 +29,8 @@ por el usuario muestra los enlaces de Configuración; no se repitió en navegado
 - Probar overrides que quitan/restauran lectura, varios grupos, herencia, menú
   vacío, superusuario y acceso directo denegado, con fixtures propios.
 
-Siguiente paso al retomarlo: diseñar la proyección de capacidades efectivas para
-la navegación y su actualización, reutilizando el motor de acceso sin duplicar
-sus reglas. No concede permisos a modelos relacionados ni implementa permisos
+La proyección efectiva ya se comparte por petición entre navegación y vistas,
+reutilizando el motor de acceso sin consultas por enlace. No concede permisos a modelos relacionados ni implementa permisos
 por campo; esos problemas tienen alcances independientes.
 
 Referencias: src/lib/applications/navigation.ts, src/lib/modules/define.ts,

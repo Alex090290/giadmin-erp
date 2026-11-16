@@ -12,13 +12,15 @@ export default function VehicleList({ config }: { config: ModelClientConfig }) {
       columns={[
         { field: "fabricanteLogo", widget: "image" },
         { field: "name" },
+        { field: "plate" },
+        { field: "kilometraje" },
+        { field: "kilometrosRestantes" },
+        { field: "modeloId" },
         {
           field: "estado",
           widget: "badge",
           colors: { disponible: "success", mantenimiento: "warning" },
         },
-        { field: "plate" },
-        { field: "modeloId" },
         { field: "active" },
       ]}
     />

@@ -9,12 +9,13 @@ export default defineModule({
   name: "Flota",
   icon: "car",
   models: {
-    fabricante: Fabricante,
+    fabricante: { model: Fabricante, views: { card: () => import("./views/FabricanteList") } },
 
-    modelo: Modelo,
+    modelo: { model: Modelo, view: "card", views: { form: () => import("./views/ModeloForm"), list: true, card: () => import("./views/ModeloList") } },
 
     vehicle: {
       model: Vehicle,
+      view: "kanban",
       kanban: {
         field: "estado",
         transitions: [
@@ -24,7 +25,9 @@ export default defineModule({
       },
       views: {
         form: () => import("./views/VehicleForm"),
-        list: () => import("./views/VehicleKanban"),
+        list: () => import("./views/VehicleList"),
+        kanban: () => import("./views/VehicleKanban"),
+        card: () => import("./views/VehicleCard"),
       },
     },
   },

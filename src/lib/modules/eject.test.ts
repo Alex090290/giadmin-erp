@@ -37,6 +37,24 @@ test("registerView añade views a un objeto de una línea y luego otra vista", (
   assert.throws(() => registerView(twice, "tarea", "form"), /ya registra una vista form/);
 });
 
+test("card/kanban eject register independently, replace only defaults and keep custom list/form", () => {
+  const before = manifest('    tarea: { model: Tarea, views: { list: () => import("./views/TareaList"), card: true, form: () => import("./views/TareaForm") } },');
+  const card = parses(registerView(before, "tarea", "card"));
+  const board = parses(registerView(card, "tarea", "kanban"));
+  assert.match(board, /list: \(\) => import\("\.\/views\/TareaList"\)/);
+  assert.match(board, /form: \(\) => import\("\.\/views\/TareaForm"\)/);
+  assert.match(board, /card: \(\) => import\("\.\/views\/TareaCard"\)/);
+  assert.match(board, /kanban: \(\) => import\("\.\/views\/TareaKanban"\)/);
+  assert.throws(() => registerView(board, "tarea", "kanban"), /no se sobrescribe/);
+  const [task] = demo.models;
+  for (const kind of ["card", "kanban"] as const) {
+    const source = listViewSource({ key: "tarea", className: "Tarea", classImport: "./models/tarea", fields: task.metadata, preview: {}, listFields: task.list.fields, lookups: [] }, kind);
+    sourceFile(source, "view.tsx");
+    assert.match(source, new RegExp(`view="${kind}"`));
+    assert.doesNotMatch(source, /modelKanban|modelMove|collectionFieldMetadata/);
+  }
+});
+
 test("registerView respeta objetos multilínea", () => {
   const before = manifest(`    tarea: {\n      model: Tarea,\n      kanban: "estado",\n    },\n    categoria: Categoria,`);
   const after = parses(registerView(before, "tarea", "form"));

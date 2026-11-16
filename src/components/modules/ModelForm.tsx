@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { formDeleteReturnHref } from "@/components/ui/form/formDeletion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { RefreshCw } from "lucide-react";
@@ -20,6 +21,7 @@ import { useAlerts } from "@/components/ui/alerts/AlertProvider";
 import { buildModelUI, type ModelUI } from "@/lib/modules/client";
 import type { ModelClientConfig } from "@/lib/modules/config";
 import { modelAction, modelActivity, modelDelete, modelNote, modelRead, modelSave } from "@/lib/modules/actions";
+import { modelUiCapabilities } from "@/lib/access/capabilities";
 
 type Values = Record<string, unknown>;
 
@@ -45,28 +47,33 @@ export function ModelFields({ ui }: { ui: ModelUI }) {
 
 function Editor({ ui, record, displayName, onReload, children }: { ui: ModelUI; record: Values; displayName?: string; onReload?: () => void; children?: ReactNode }) {
   const router = useRouter();
+  const params = useSearchParams();
   const { config } = ui;
+  const capabilities = modelUiCapabilities(config.capabilities);
+  const returnHref = formDeleteReturnHref(params.get("returnTo"), config.route);
+  const returnQuery = `?returnTo=${encodeURIComponent(returnHref)}`;
   const [savedId, setSavedId] = useState(record.id as string | undefined);
   const [savedName, setSavedName] = useState(displayName);
   const methods = useForm<Values>({ resolver: zodResolver(ui.schema as never), defaultValues: record });
   return <FormView
     layout="page"
-    breadcrumbs={[{ label: "Aplicaciones", href: "/erp" }, { label: config.label, href: config.route }, { label: savedId ? savedName || "Registro" : "Nuevo registro" }]}
+    breadcrumbs={[{ label: "Aplicaciones", href: "/erp" }, { label: config.label, href: returnHref }, { label: savedId ? savedName || "Registro" : "Nuevo registro" }]}
     title={savedId ? "Editar registro" : "Nuevo registro"}
     methods={methods}
     model={ui.recordUI as never}
     activity={{ recordId: savedId, load: request => modelActivity(config.id, request), addNote: request => modelNote(config.id, request) }}
     mode={savedId ? "edit" : "create"}
+    readOnly={savedId ? !capabilities.write : !capabilities.create}
     onSubmit={values => modelSave(config.id, values)}
-    deletion={{ action: selection => modelDelete(config.id, selection), returnHref: config.route }}
+    deletion={capabilities.unlink ? { action: selection => modelDelete(config.id, selection), returnHref: config.route, allowReadOnly: true } : undefined}
     // FormButton: published @action names only; the server validates them and re-authorizes.
     runAction={(action, target) => modelAction(config.id, { action, ...target })}
     actions={config.actions}
-    onNew={savedId ? () => router.push(`${config.route}/nuevo`) : undefined}
+    onNew={savedId && capabilities.create ? () => router.push(`${config.route}/nuevo${returnQuery}`) : undefined}
     onSaved={(values, _audit, name) => {
       setSavedId(values.id as string);
       setSavedName(name);
-      if (!record.id && values.id) router.replace(`${config.route}/${encodeURIComponent(values.id as string)}`);
+      if (!record.id && values.id) router.replace(`${config.route}/${encodeURIComponent(values.id as string)}${returnQuery}`);
       router.refresh();
     }}
     menuActions={onReload ? [{ id: "reload", label: "Recargar registro", icon: <RefreshCw size={16} />, onSelect: onReload }] : undefined}
@@ -92,6 +99,8 @@ export default function ModelForm({ config, id, children }: { config: ModelClien
       void alerts.error({ title: "No se pudo recargar el registro", message: "Intenta nuevamente. Tus cambios siguen en el formulario." });
     });
   };
+  const capabilities = modelUiCapabilities(config.capabilities);
+  if (!capabilities.read || (!id && !capabilities.create)) return <p role="alert" className="p-6">No tienes permiso para abrir este formulario.</p>;
   if (!id) return <Editor key={router.bfcacheId} ui={ui} record={ui.createDefaults()}>{children}</Editor>;
   return <FormViewLoader key={`${router.bfcacheId}:${id}:${attempt}`} recordKey={id} load={load}>
     {(record, _audit, displayName) => <Editor ui={ui} record={record} displayName={displayName} onReload={reload}>{children}</Editor>}

@@ -1,22 +1,24 @@
 # Multivistas de colecciones: Lista, Kanban y Tarjetas
 
-Pendiente solicitado el 2026-11-14. Propuesta por diseñar; esta anotación no
-autoriza implementación ni cambios anticipados en Flota.
+Solicitado y posteriormente autorizado e implementado el 2026-11-14 como núcleo de
+colecciones compartido. Contrato vigente en [Colecciones de modelos](../colecciones-modelos.md).
+Las secciones siguientes conservan el diseño original; ya no son el siguiente paso.
 
 ## Objetivo
 
 Permitir varias vistas de una misma colección y alternar entre Lista, Kanban y
 Tarjetas mediante un selector, sin sustituir una vista para activar otra.
 
-Hoy ModuleViews sólo publica list/form y ModelCollection ofrece list/card.
-VehicleKanban se carga mediante views.list. KanbanView y CardView ya existen;
-el pendiente es su registro y coordinación como alternativas de una colección.
+Antes ModuleViews sólo publicaba list/form y ModelCollection ofrecía list/card;
+VehicleKanban sustituía views.list. Ahora list/card/kanban tienen registro independiente,
+selector y una fuente compartida. Flota registra las tres sin borrar VehicleList.
 
-## API orientativa, no implementada
+## API del registro (implementada)
 
 ```ts
 vehicle: {
   model: Vehicle,
+  view: "kanban",
   views: {
     list: () => import("./views/VehicleList"),
     kanban: () => import("./views/VehicleKanban"),
@@ -26,8 +28,8 @@ vehicle: {
 },
 ```
 
-La sintaxis final, las vistas por convención, el valor predeterminado y el modo
-de selección/persistencia se decidirán al diseñarlo.
+Las entradas también admiten true para usar la presentación por convención. La
+configuración Kanban del modelo se mantiene; selección en URL con ?view=tipo.
 
 ## Alcance y criterios de aceptación
 
@@ -50,10 +52,10 @@ de selección/persistencia se decidirán al diseñarlo.
   errores y personalizaciones con fixtures/demos propios. Actualizar guías y
   continuidad; no presupone SQL ni una aplicación nueva.
 
-Motivo: evitar reemplazos manuales de imports y coordinación repetida para
-presentar los mismos registros de varias maneras. Siguiente paso: diseñar el
-contrato de registro/selección y un ejemplo antes/después, conservando el flujo
-actual durante la transición.
+Motivo: evitar reemplazos manuales y coordinación repetida para presentar los mismos
+registros. Implementación: ModelCollection + modelCollection(config), queryColumns
+compartidas y extensión Kanban por columna, con los proveedores autorizados existentes.
+Demo /sample#collection-core. Evidencia y límites actuales en el estado del proyecto.
 
 Referencias: [Módulos declarativos](../modulos-declarativos.md) y
 [Colecciones](../vistas-colecciones.md).

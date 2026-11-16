@@ -1,13 +1,5 @@
 import "server-only";
-import {
-  Fields,
-  Model,
-  ModelValidationError as Err,
-  action,
-  type DisplayRecord,
-  type ModelContext,
-  ActionRecord,
-} from "@/lib/orm";
+import { Fields, Model, ModelValidationError as Err, action, type DisplayRecord, type ModelContext, ActionRecord, constraint, depends, ReactionValues } from "@/lib/orm";
 
 export class Vehicle extends Model {
   name = Fields.Text({
@@ -53,6 +45,35 @@ export class Vehicle extends Model {
     },
   );
 
+  kilometraje = Fields.Integer({
+    label: "Kilometraje",
+    required: true,
+    default: 0,
+    min: 0,
+    tracking: true,
+  });
+
+  proximoServicioKm = Fields.Integer({
+    label: "Próximo servicio (km)",
+    required: true,
+    default: 20000,
+    min: 0,
+    tracking: true,
+  });
+
+  kilometrosRestantes = Fields.Integer({
+    label: "Para servicio",
+    compute: "calcularKilometrosRestantes",
+  });
+
+  @depends("proximoServicioKm", "kilometraje")
+  calcularKilometrosRestantes(values: ReactionValues) {
+    const objetivo = values.proximoServicioKm;
+    const actual = values.kilometraje;
+
+    return typeof objetivo === "number" && typeof actual === "number" ? objetivo - actual : null;
+  }
+
   @action({ label: "Testing" })
   testing(record: ActionRecord<Vehicle>) {
     return {
@@ -75,21 +96,37 @@ export class Vehicle extends Model {
       throw new Err("El vehículo no está en mantenimiento");
     }
 
-    return { estado: "disponible" as const };
+    return { estado: "disponible" as const, proximoServicioKm: record.kilometraje + 10000 };
   }
 
   normalize(values: Readonly<Record<string, unknown>>) {
     return {
       ...values,
-      plate:
-        typeof values.plate === "string"
-          ? values.plate.trim().toUpperCase()
-          : values.plate,
+      plate: typeof values.plate === "string" ? values.plate.trim().toUpperCase() : values.plate,
     };
+  }
+
+  @constraint("active", "estado")
+  validarDesactivacion(values: Readonly<Record<string, unknown>>) {
+    if (values.active === false && values.estado === "mantenimiento") {
+      throw new Err("Finaliza el mantenimiento antes de desactivar el vehículo.", {
+        active: "El vehículo sigue en mantenimiento",
+      });
+    }
   }
 
   async beforeSave(values: Record<string, unknown>, context: ModelContext) {
     const modeloId = values.modeloId;
+
+    // VALIDA QUE KILOMETRAJE NO DISMINUYA
+    const anterior = context.previous?.kilometraje;
+    const nuevo = values.kilometraje;
+
+    if (typeof anterior === "number" && typeof nuevo === "number" && nuevo < anterior) {
+      throw new Err("El kilometraje no puede disminuir.", {
+        kilometraje: `Debe ser mayor o igual a ${anterior}`,
+      });
+    }
 
     // SE VALIDA QUE ESTÉ SELECCIONADO UN MODELO
     if (typeof modeloId !== "string" || !modeloId) {

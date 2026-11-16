@@ -2,9 +2,34 @@ import type { FieldMetadata } from "../orm/fields";
 import type { ReactionRule } from "../orm/reactions.types";
 import type { ListViewConfig } from "../list/types";
 import type { KanbanRoute } from "../kanban/types";
+import type { ModelCapabilities } from "../access/capabilities";
+
+export const collectionViews = ["list", "card", "kanban"] as const;
+export type CollectionView = typeof collectionViews[number];
+
+export function availableCollectionViews(view: CollectionView, registered: object, hasKanban: boolean): readonly CollectionView[] {
+  const available = collectionViews.filter(kind => kind === view || (Object.hasOwn(registered, kind) && (registered as Record<string, unknown>)[kind] !== undefined));
+  if (available.includes("kanban") && !hasKanban) throw new Error("La presentación kanban necesita configuración kanban en el modelo.");
+  return Object.freeze(available);
+}
+
+export function selectedCollectionView(value: unknown, available: readonly CollectionView[], fallback: CollectionView): CollectionView {
+  return typeof value === "string" && available.includes(value as CollectionView) ? value as CollectionView : fallback;
+}
+
+/** Keep compatible query state, reset pagination/grouping/selection by remounting the presentation. */
+export function collectionViewHref(pathname: string, current: string, view: CollectionView, prefix = "") {
+  const params = new URLSearchParams(current);
+  params.set(prefix ? `${prefix}_view` : "view", view);
+  params.delete(prefix ? `${prefix}_page` : "page");
+  params.delete(prefix ? `${prefix}_group` : "group");
+  return `${pathname}?${params}`;
+}
 
 /** Serializable, browser-safe description of a module model. Never contains functions or server classes. */
 export type ModelClientConfig = {
+  /** Actor-specific snapshot supplied by the server route, never cached in the model registry. */
+  readonly capabilities?: ModelCapabilities;
   readonly id: string;
   readonly module: string;
   readonly moduleName: string;
@@ -27,7 +52,8 @@ export type ModelClientConfig = {
     readonly groupable: readonly string[];
     readonly filterable: readonly string[];
   };
-  readonly view: "list" | "card";
+  readonly view: CollectionView;
+  readonly collectionViews?: readonly CollectionView[];
   readonly kanban?: string;
   /** UI routes only; action dispatch remains fixed in the server registry. */
   readonly kanbanTransitions?: readonly KanbanRoute[];
@@ -36,10 +62,10 @@ export type ModelClientConfig = {
 
 export const modelIdPattern = /^[a-z][a-z0-9]*\.[a-z][a-z0-9]*$/;
 
-/** Collection descriptors include only declared related previews, never arbitrary compute outputs. */
+/** Only declared related/compute Fields are collection outputs; arbitrary previews stay private. */
 export function collectionFieldMetadata(config: Pick<ModelClientConfig, "fields" | "preview" | "related">): Readonly<Record<string, FieldMetadata>> {
   return {
     ...config.fields,
-    ...Object.fromEntries(config.related.filter(name => Object.hasOwn(config.preview, name)).map(name => [name, { ...config.preview[name], readOnly: true }])),
+    ...Object.fromEntries(Object.entries(config.preview).filter(([name, field]) => config.related.includes(name) || Boolean(field.compute)).map(([name, field]) => [name, { ...field, readOnly: true }])),
   };
 }

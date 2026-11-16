@@ -82,9 +82,14 @@ try {
   await mkdir(join(root, "src/modules/disponible"));
   await writeFile(join(root, "src/modules/disponible/manifest.ts"), `import "server-only";\nimport { Fields, Model } from "@/lib/orm";\nimport { defineModule } from "@/lib/modules/define";\nclass Item extends Model { name = Fields.Text({required:true}); }\nexport default defineModule({id:"disponible",name:"Disponible",icon:"boxes",models:{item:Item}});\n`);
   tsx(join(root, "modules-check.ts"), [], "modules check");
+  await cp(join(project, "scripts/fixtures/capabilities-check.fixture"), join(root, "capabilities-check.ts"));
+  tsx(join(root, "capabilities-check.ts"), [], "capabilities check");
+  console.log("✓ Capacidades por actor: overrides/herencia, menús, acciones/grafo, sesión y rechazos de escrituras falsificadas.");
+  if (!process.argv.includes("--capabilities-only")) {
   await cp(join(project, "scripts/fixtures/module-operations-check.fixture"), join(root, "module-operations-check.ts"));
   tsx(join(root, "module-operations-check.ts"), process.argv.includes("--legacy-only") ? ["--legacy-only"] : [], "module lifecycle operations");
   console.log(process.argv.includes("--legacy-only") ? "✓ Adaptador de scaffold: instalar, retirar y reactivar conservando registros." : "✓ Ciclo de módulos: instalar, actualizar, conservar/restaurar datos, purgar con respaldo restaurado, planes obsoletos, recuperación previa a cambios y scaffold anterior.");
+  } else console.log("✓ Alcance focalizado: servicios/capacidades; no ejecuta ciclo de instalación/retirada con respaldos.");
   console.log("✓ Gestor de módulos: instalado, disponible sin registrar, fuera de catálogo, permisos admin y sesión revocada; lecturas del esquema temporal.");
   console.log("✓ Repositorio genérico y servicio: crear, normalize, beforeSave, revisión, listas, búsqueda, filtros, agrupación con etiquetas, lookup, kanban, historial, notas y borrado.");
   console.log("✓ Control de accesos: grupos implicados, CRUD por modelo, reglas de registro (AND/OR), overrides y reglas desactivadas en BD, superusuario y administración.");

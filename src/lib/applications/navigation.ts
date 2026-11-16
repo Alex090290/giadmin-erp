@@ -5,14 +5,15 @@ export type ApplicationNavigation = { id: string; name: string; href: string; me
 
 export function applicationNavigation(application: ApplicationManifest, actor: ApplicationUser): ApplicationNavigation | null {
   if (!canOpenApplication(application, actor)) return null;
-  const visible = (item: { access?: "authenticated" | "admin"; groups?: readonly string[] }) => (item.access !== "admin" || Boolean(actor?.isAdmin)) && memberOf(actor, item.groups);
+  const visible = (item: { access?: "authenticated" | "admin"; groups?: readonly string[]; model?: string }) =>
+    item.model && actor?.modelAccess ? actor.modelAccess[item.model]?.read === true : (item.access !== "admin" || Boolean(actor?.isAdmin)) && memberOf(actor, item.groups);
   const menus: ApplicationMenu[] = [];
   for (const item of application.menus ?? []) {
-    if (!visible(item)) continue;
     if ("items" in item) {
+      if (!(actor?.modelAccess && item.items.some(child => child.model)) && !visible(item)) continue;
       const items = item.items.filter(visible);
       if (items.length) menus.push({ ...item, items });
-    } else menus.push(item);
+    } else if (visible(item)) menus.push(item);
   }
   return { id: application.id, name: application.name, href: applicationHref(application), menus };
 }

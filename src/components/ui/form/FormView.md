@@ -24,6 +24,10 @@ sustituye esas comprobaciones. Se oculta en creación, consulta o sin identidad 
 revisión válidas. El scaffold conecta la acción `deleteRecords` existente; Flota
 también está conectada. Otros formularios deben proporcionar su acción autorizada.
 
+`deletion.allowReadOnly: true` permite eliminar un registro en consulta cuando
+existe permiso independiente de eliminación. ModelForm lo conecta sólo con unlink.
+Por defecto FormView manual mantiene oculta la eliminación en consulta.
+
 Siempre pide una confirmación destructiva, que incluye descartar cambios y notas
 pendientes de la página. Cancelar o fallar conserva los borradores y permanece en
 el formulario. Sólo `ok: true, deleted: 1` confirma la eliminación. Ante un fallo de
@@ -54,7 +58,10 @@ Demo RHF/Zod reversible, con cancelación/rechazo/consulta, en `/sample#form-del
 `runAction(name, {id, revision})` y `actions` (nombres y labels publicados) habilitan
 `FormHeader` y `FormButton`. FormHeader se monta en la cabecera mediante portal,
 dentro del contexto RHF. FormButton (`type="button"`) se oculta en consulta y comparte
-un único bloqueo síncrono con Guardar y los demás botones:
+un único bloqueo síncrono con Guardar y los demás botones. Si se proporciona
+`actions`, sólo muestra/ejecuta nombres publicados; una lista vacía no habilita
+acciones. FormHeader deshabilita sus controles en consulta, incluido statebar:
+
 
 1. Registro nuevo o con cambios: envía el formulario y espera el ciclo normal
    (reacciones, validación, guardado). Si falla, la acción no se ejecuta.
@@ -202,8 +209,8 @@ Usuarios usa `router.bfcacheId` como key del editor para que una navegación nue
 queda en modo creación y usa `newUserDefaults`, sin copiar los permisos del usuario
 abierto.
 
-FormView protege automáticamente la navegación cuando RHF indica `isDirty`, salvo
-en modo `readOnly`. Requiere `FormNavigationProvider` dentro de AlertProvider en el
+FormView protege automáticamente la navegación cuando RHF indica `isDirty`,
+también si cambia a `readOnly` con un borrador pendiente. Requiere `FormNavigationProvider` dentro de AlertProvider en el
 layout raíz, montado antes de layouts asíncronos. Los enlaces internos, cambios por
 router y Atrás/Adelante muestran «Cambios sin guardar»: «Seguir editando» conserva
 los valores; «Salir sin guardar» restaura el último punto guardado antes de continuar,
@@ -265,3 +272,24 @@ Para cargar registros antes de mostrarlos, usa FormViewLoader. Consulta [alertas
 
 El contrato enlazado y las nuevas APIs de presentación se documentan en
 [Contratos de vistas](../../../../docs/contratos-vistas.md).
+
+## Carga y guardado discretos (2026-11-15)
+
+FormViewLoader ya no abre alerts.loading. Antes de recibir el registro muestra
+un marco del formulario con placeholders estáticos e indicador «Cargando registro…»
+en la cabecera, sin modal ni backdrop. No monta Fields editables con datos vacíos
+o del registro anterior. Cargas posteriores/reintentos usan el mismo estado;
+conserva timeout, descarte de respuestas antiguas, errores autorizados y Reintentar.
+No se cancela en servidor una Server Action que ya fue enviada.
+
+FormView conserva visible el formulario al guardar, con Fields, statebar y acciones
+bloqueados mediante los fieldsets existentes y aria-busy. La cabecera indica
+«Guardando cambios…» con spinner discreto, junto al botón Guardando y el estado
+del footer. El texto añadido es visual; el footer conserva el anuncio accesible
+para evitar duplicarlo. Otros estados busy muestran su indicación correspondiente.
+No se modifica el ciclo de validación/guardado, locks, borrador, revisión ni dirty
+guard. Los errores y confirmaciones mantienen sus diálogos; alerts.loading sigue
+disponible para otros flujos explícitos. No cambia la confirmación de eliminación.
+
+Ejemplos existentes /sample#alerts y /sample#form-view; carga/guardado de ejemplo
+incluyen 600 ms de latencia ficticia para observar el bloqueo, sin escrituras de BD.

@@ -1,15 +1,245 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-14.
+Última actualización: 2026-11-15.
 
 Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../AGENTS.md)
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
+## Pendiente acordado: compute con store:true (2026-11-15)
+
+Usuario pidió anotarlo para cuando lleguemos a un ejemplo real; no implementarlo
+ahora. Se propone persistir el resultado de compute/@depends con recomputación de
+servidor, contratos no editables y diseño explícito de invalidación/migración de
+registros existentes. No hay API disponible ni cambios de código/SQL por esta nota.
+[Alcance y criterios](ideas/compute-persistido.md). Documentación comprobada con
+git diff --check; no se repitieron pruebas de código por esta anotación.
+
+## Compute en colecciones (2026-11-15, continuación vigente)
+
+Ampliación solicitada e implementada: Fields compute se publican como lectura en
+las colecciones modulares (list:false excluye); las vistas TSX declaran la columna
+sin repetir fórmula. Lista/Card/Kanban y hojas de agrupación reutilizan @depends
+para la página autorizada dentro de RepeatableRead/READ ONLY. Sin consultas extra
+de dependencias por registro añadidas por el framework; métodos de cálculo del
+usuario deben evitar sus propios N+1/efectos externos. No ejecuta onchange ni hooks.
+Dependencias publicadas obligatorias y salida validada completa; sólo list.fields
+llega al cliente. CollectionFields generado incluye compute readOnly. Sin store,
+SQL nuevo, filtros/orden/búsqueda/grupos virtuales ni cambios de Flota adelantados.
+[Contrato](campos-calculados.md#lista-card-y-kanban-2026-11-15).
+
+Verificación actual: 85 pruebas ORM y 28 de módulos (113), TypeScript, ESLint de
+afectados y build aprobados; tres avisos de trazado filesystem previos. Integración
+test:capabilities:integration aprobada en proyecto/schema/cuentas desechables,
+incluido compute real y rechazo SQL de un intento de escritura desde el cálculo;
+recursos eliminados. Dos intentos previos se detuvieron por tipado de pruebas nuevas,
+corregido antes de la ejecución final. No incluye ciclo de retirada/purga/respaldos.
+En /sample#computed-collections se verificaron Lista/Card/Kanban con mismos valores,
+cero y negativos, sin filtro del virtual. Fuentes ficticias públicas, sin BD.
+No se ejecutaron operaciones sobre registros reales del ERP ni migraciones propias.
+
+Flota: clase compute ya declarada por el usuario, y controles proximoServicioKm/
+kilometrosRestantes ya presentes y verificados en VehicleForm. No se modificaron
+sus archivos por esta ampliación. El usuario ya añadió
+{field:"kilometrosRestantes"} a VehicleList y se verificó en fuentes. El usuario confirmó cálculo positivo/cero/negativo en formulario y lista tras
+guardar. Siguiente ejercicio propuesto: finalizarMantenimiento actualiza estado
+y proximoServicioKm al kilometraje actual + 10000, con intervalo fijo de práctica,
+sin nuevos campos ni SQL; usuario ya modificó el return y se verificó en fuentes.
+El usuario confirmó «listo, funcionó» para la prueba del botón sobre borrador con
+kilometraje aumentado: guardado previo, objetivo +10000, compute 10000 y reapertura/
+historial. Confirmación del usuario, sin repetición con datos reales del agente; no requiere orm:sync en este módulo por el soporte.
+Exportar a Excel sigue como idea futura, sin implementación en este alcance:
+[pendiente](ideas/exportar-excel.md).
+
+## Próximo ejercicio de Flota (2026-11-15)
+
+Tras la práctica de kilometraje/context.previous el usuario expresó conformidad
+y pidió continuar. Propuesto un compute virtual: kilómetros restantes para el
+próximo servicio. Primer paso guiado: declarar proximoServicioKm Integer
+(required/default 20000/min 0/tracking). Campo añadido por el usuario y verificado: required/min 0/tracking correctos,
+default corregido a 20000. SQL 20261116001156_sync_flota revisado (sólo añade
+proximo_servicio_km INTEGER NOT NULL DEFAULT 20000) y usuario confirmó orm:sync
+terminado. Fuentes/archivo SQL verificados, sin consulta a BD. El usuario declaró kilometrosRestantes compute y calcularKilometrosRestantes
+con @depends(proximoServicioKm,kilometraje), resta o null; verificado en fuentes.
+Siguiente: controles editable proximoServicioKm y display kilometrosRestantes en
+VehicleForm, luego prueba de reacción. ModelClientConfig proyecta reglas/preview
+desde la clase en runtime; sin SQL por el virtual. Sin fuentes adelantadas.
+El compute sigue sin store; la ampliación vigente de colecciones está documentada arriba.
+Llamadas entre clases quedan para pulir ante un caso real, según acuerdo del usuario.
+
+## Tutoría: perfiles comprobados (2026-11-15)
+
+El usuario dio por completadas las pruebas de Consulta, Operador y Responsable:
+consulta bloqueada, edición/mantenimiento de vehículos propios y gestión de todos
+con Responsable; Fabricantes/Modelos en consulta. Confirmaciones del usuario;
+no se repitieron en navegador con cuentas reales desde el agente.
+El usuario añadió @constraint("active", "estado") y validarDesactivacion en Vehicle;
+import, condición y Err asociado a active verificados en fuentes. El usuario confirmó la prueba
+funcional del rechazo conservando borrador, Revertir y posterior desactivación tras
+finalizar mantenimiento. Siguiente ejercicio: kilometraje Integer (default 0,
+min 0, tracking), luego sincronización/formulario y regla con context.previous
+para impedir disminuciones. El usuario ya declaró kilometraje con required/default 0/min 0/tracking; verificado
+en fuentes. El usuario compartió y aprobó tras revisión la migración 20261115232209_sync_flota
+(sólo kilometraje INTEGER NOT NULL DEFAULT 0) y confirmó finalización de orm:sync.
+SQL y campo Prisma verificados en archivos, sin consulta independiente de BD.
+El usuario añadió FieldNumber name=kilometraje type=integer en Stack de
+VehicleForm, con import verificado. El usuario confirmó guardado/reapertura de 15000, rechazo de negativos y Revertir.
+Siguiente paso: comparar kilometraje con context.previous dentro del beforeSave
+existente y rechazar disminuciones mediante Err. Comparación añadida por el usuario y verificada dentro del beforeSave existente:
+guardas number, Err asociado a kilometraje, consulta de Modelo y return conservados.
+Pendiente prueba funcional de disminución rechazada/valor igual o mayor permitido
+y reapertura; no requiere orm:sync por esta lógica. Sin fuentes adelantadas. No cambian campos/esquema ni requiere orm:sync por esta lógica.
+El agente no modificó las fuentes de Flota ni ejecutó migraciones/SQL.
+
+## FormView sin modal de carga (2026-11-15)
+
+Petición implementada: FormViewLoader muestra marco estático y «Cargando registro…»
+en cabecera, sin alerts.loading, backdrop ni transferencia de foco. No monta Fields
+editables antes de cargar datos. FormView mantiene el formulario al guardar,
+bloquea controles con el mecanismo existente y añade indicador discreto en cabecera;
+conserva botón Guardando y anuncio accesible del footer. No se altera guardado,
+validación, permisos, revisión, dirty guard, errores/reintentos ni timeout.
+Errores y confirmaciones conservan sus diálogos. Sin cambios de Flota ni SQL.
+
+Verificación de esta tarea: 21 pruebas existentes de formulario/navegación,
+TypeScript y ESLint de afectados aprobados. En navegador /sample#alerts se observó
+carga integrada con cero diálogos Cargando; en /sample#form-view el campo Referencia
+quedó bloqueado mientras guardaba y volvió habilitado con el valor guardado.
+Las acciones de ejemplo tienen 600 ms de latencia para observar el ciclo, sin BD.
+No se repitió build en esta modificación de presentación; los builds anteriores
+corresponden a las tareas previas. [Contrato](../src/components/ui/form/FormView.md).
+
+## Filtros Many2one corregidos (2026-11-15)
+
+Diagnóstico confirmado: Modelo en Vehículos mostraba $labels pero Contiene buscaba
+texto en modeloId. Fix autorizado e implementado en componentes compartidos:
+ColumnFilter usa búsqueda autorizada/paginada y selección; igualdad/desigualdad
+aplican el ID guardado, vacío/tiene valor conservan semántica previa. ModelCollection
+conecta config.lookups a modelLookup; Lista/Card/Kanban consumen filterLookups.
+Sin cambios en Flota, modelos, SQL, permisos, búsqueda general ni orden.
+[Contrato](vistas-colecciones.md#filtros-many2one-por-selección-2026-11-15).
+
+Pruebas de esta tarea: filtro 1, carga 4, módulos 27 y Kanban 4; ESLint de afectados
+y TypeScript/build aprobados (tres avisos previos de trazado filesystem).
+Demo /sample#relation-filter comprobada en navegador:
+buscar Corolla, seleccionar Toyota / Corolla, URL con ID model-1, un vehículo
+coincidente, reapertura conservando nombre/selección, desigualdad y vacío. Sólo datos ficticios;
+no se accedió a registros reales. Los filtros antiguos Contiene deben quitarse y
+reaplicarse por selección. Las vistas manuales pueden conectar filterLookups;
+sin él mantienen compatibilidad. No exige orm:sync.
+
+## Carga y recuperación compartida (2026-11-15, continuación vigente)
+
+Implementada la opción 2 autorizada por el usuario: useCollectionLoad comparte
+invalidación de respuestas antiguas, excepciones de conexión y reintentos entre
+Lista/Card, ramas agrupadas y columnas Kanban. La cancelación es lógica; las
+Server Actions enviadas pueden terminar sin publicar su respuesta si ya caducó.
+Cada columna/rama conserva independencia; Kanban conserva páginas al reintentar,
+deduplica y vuelve a página uno al cambiar proveedor. Sin reintentos automáticos
+de escritura ni cambios de permisos, clases/datos de Flota o SQL.
+[Contrato y demo](colecciones-modelos.md#carga-respuestas-antiguas-y-recuperación-2026-11-15).
+
+Verificación de esta tarea: 43 pruebas aprobadas (carga 4, Kanban 4, módulos 27,
+selección/eliminación 8), ESLint de afectados, TypeScript y build de producción.
+El build conserva los tres avisos previos de trazado filesystem del gestor. En navegador se
+comprobaron error/reintento en Lista y Tarjetas, fallo aislado de Por hacer con
+las demás columnas disponibles y carga incremental hasta 8/8. La simulación es
+ficticia en /sample#collection-core; no se tocaron registros reales.
+
+Siguiente paso: retomar guía de Flota con un ejercicio por vez. Primero recargar
+y comprobar navegación/presentaciones/capacidades con las cuentas ya configuradas.
+Acciones disponibles automáticamente por estado (opción 1) siguen como propuesta,
+sin implementación autorizada en este bloque. No adelantar archivos de aplicación.
+
+## Capacidades efectivas (2026-11-14, continuación vigente)
+
+Implementadas tras autorización del usuario: proyección por actor compartida en
+ruta, menús/cajón, ModelForm y ModelCollection. Consulta bloquea campos/statebar
+y oculta guardar/revertir/acciones; Nuevo, Eliminar y movimientos Kanban respetan
+sus permisos independientes y grupos de acciones. Herencia y overrides se cargan
+en lote por petición, sin caché privada global. Grupos vacíos desaparecen y la
+entrada raíz elige el primer modelo legible. El servidor conserva autorización
+transaccional y reglas por registro. [Contrato](capacidades-modelos.md).
+
+Flota recibe el comportamiento por los componentes/rutas compartidos, sin nuevas
+ediciones de sus clases, datos, usuarios ni asignaciones. No requiere orm:sync.
+Permisos por campo/presentación desde Accesos y fallback de lookups siguen pendientes.
+
+Verificación: 144 pruebas unitarias/contrato aprobadas, ESLint de afectados,
+TypeScript y build; tres avisos previos de trazado filesystem. La integración
+focalizada test:capabilities:integration pasó con proyecto/schema/cuentas propios,
+incluyendo rechazos del servidor y limpieza. No incluye retirada/purga/respaldos
+ni reemplaza la suite completa de lifecycle limitada antes por pg_dump ausente.
+En /sample#model-capabilities se comprobaron consulta, acciones por perfil,
+eliminación sin edición y conservación del borrador; sin datos reales.
+
+Siguiente ejercicio: recargar Flota y contrastar Consulta/Operador/Responsable con
+sus permisos reales; revisar Nuevo, guardar, acciones, movimientos y menús. No
+conceder permisos a cuentas reales como parte de una comprobación automática.
+
+## Núcleo de colecciones y multivistas (2026-11-14, continuación vigente)
+
+Implementado por petición expresa del usuario: una colección compartida y sus
+presentaciones Lista/Card/Kanban. ModelCollection conecta proyección/capacidades,
+proveedores autorizados, enlaces, consulta y extensiones Kanban. Las vistas TSX
+declaran columnas/widgets/renderers; ya no repiten selección de campos, loaders,
+grupos ni modelMove. Los componentes base siguen disponibles y los servicios
+de negocio/permisos no se modificaron. [Contrato](colecciones-modelos.md).
+
+Manifest view elige inicial; views.list/card/kanban permite true o loader diferido.
+La ruta compartida resuelve sólo vistas registradas y muestra selector con varias
+alternativas. URL conserva búsqueda/filtros/orden/tamaño y reinicia página, grupos
+y selección; queryColumns conserva capacidades de campos no dibujados. Lista/Card
+paginan la misma consulta; Kanban conserva carga por columna, conteos y @action.
+Nuevo/apertura/breadcrumb/guardado de ModelForm conservan returnTo validado para
+volver a la presentación y consulta originales. Los namespaces propios se soportan
+cuando CollectionViews y ModelCollection usan el mismo paramPrefix.
+
+eject:view admite form/list/card/kanban, preflight y dry-run; registra cada clave
+por separado y permite expulsar un true. No sobrescribe archivos/loaders, ni exige
+SQL. Kanban requiere configuración válida antes de escribir. Pruebas de registro,
+plantillas y conservación de personalizaciones con fixtures independientes.
+
+Flota adaptada dentro del alcance autorizado: VehicleList conservado, VehicleKanban
+simplificado y VehicleCard añadido con logo/matrícula/estado; tres vistas registradas,
+Kanban inicial. Modelo conserva su Card personalizada inicial y añade Lista por
+convención. Formularios/diseños del usuario preservados salvo retorno compartido;
+sin cambiar estados, métodos, reglas de acceso ni datos de Flota. orm:sync --plan
+confirmó migración vacía, sin BD/escrituras. Los cambios siguen locales sin commit.
+
+Verificación: módulos (26), ORM (82), vistas Kanban (4), navegación (12), TypeScript,
+ESLint de afectados y build de producción aprobados. Se corrigió un fixture de
+lifecycle que no publicaba el Selection del Kanban según el contrato vigente; no
+se relajó la validación del servicio. Build conserva tres avisos existentes de
+trazado filesystem del gestor de módulos. En navegador /sample#collection-core
+se comprobaron las tres presentaciones, búsqueda conservada y atrás del navegador
+con fuente ficticia; sin pruebas autenticadas nuevas sobre registros reales.
+
+La integración completa de módulos se intentó con proyecto/schema propios: pasó
+instalación/sync de fixture, pero se detuvo en respaldo/purga por ausencia de
+pg_dump/pg_restore en este entorno. No presentarla como aprobada; el fixture ejecuta
+su limpieza finally. No se instalaron herramientas ni se omitió el gate de respaldo.
+
+Siguiente ejercicio: recargar Flota, comprobar selector de Vehículos y Lista/Card
+de Modelos, aplicar una búsqueda/filtro/orden y abrir/crear/volver conservando la
+vista. Las capacidades y menús efectivos ya están implementados arriba; permisos
+por campo continúan pendientes.
+Guía de uso: [Colecciones](colecciones-modelos.md), demo /sample#collection-core.
+
+Pendiente reafirmado después: gestionar desde Accesos las presentaciones disponibles
+y los Fields/columnas visibles o de sólo lectura por grupo, sobre capacidades del
+motor actual. Distinguirlo de lectura/escritura de datos: no enviar campos sin
+lectura y no permitir que un override de UI conceda permisos. El usuario pidió
+mantenerlo para diseñar después, sin implementación ni cambios de Flota ahora.
+Detalle ampliado en [Permisos por campo](ideas/permisos-campos.md). Esta anotación
+sólo actualiza documentación; comprobación con git diff --check.
+
 ## Cierre del 2026-11-14
 
 Estado contrastado hoy con fuentes y Git. Rama `codex/flota`; último commit
-`fdd4d5b` («Acciones del modelo»). Las ampliaciones de esta sesión permanecen
+`fdd4d5b` («Acciones del modelo», referencia de ese cierre). Después se versionaron
+en 4fb1bb1/89513f6; la continuación de colecciones parte de 89513f6. Las ampliaciones
+de esta continuación permanecen
 sin commit, incluidos nuevos archivos, esquema/propiedad y migración de estado.
 No se hicieron commit, push ni pull. Al cambiar de máquina, compartir también
 los archivos nuevos; dependencias, configuración privada, datos y procesos no
@@ -55,11 +285,25 @@ hooks/destino incorrecto. No se ejecutó build nuevo ni se repitió una prueba
 autenticada de arrastre en Flota. El cierre actual sólo actualiza documentación
 y verifica git diff --check; no vuelve a ejecutar esas suites.
 
-Siguiente paso: comprobar con el usuario el arrastre/selector de Flota en ambos
-sentidos, revisión de historial/reapertura y rechazo sin escritura. Antes de otro
-ejercicio, tener presente que finalizarMantenimiento sigue fuera del div que
-agrupa botones en VehicleForm; es un ajuste de maquetación aún no aplicado.
-Después acordar qué pendiente abordar; registrar una idea no autoriza ejecutarla:
+Continuación del 2026-11-14: el usuario dio por completadas las pruebas de movimientos
+en ambos sentidos con reapertura/historial y el ejercicio de rechazo con cuenta de
+Consulta. Son confirmaciones del usuario, sin repetición autenticada del asistente;
+no se precisó si la UI de Consulta impedía intentar mover o rechazaba al ejecutar.
+Verificados ambos botones dentro del mismo div de VehicleForm y createHref en
+VehicleKanban. El usuario confirmó que Nuevo abre el formulario de creación.
+También hay nuevas vistas personalizadas de Fabricante/Modelo registradas por el
+usuario y cambios locales sin commit; no sobrescribirlas ni asumirlas revisadas.
+Esta continuación sólo verifica fuentes y actualiza documentación, sin tests ni BD.
+
+Después, por petición expresa del usuario, ModeloList se configuró con
+ModelCollection view="card", conservando name/fabricanteId/active y el registro
+existente del manifest. Configuración → Modelos usa tarjetas con búsqueda, filtros,
+paginación, Nuevo y enlace al formulario del proveedor compartido. Sólo presentación;
+sin cambios de modelo ni SQL. Pendiente confirmación visual del usuario.
+TypeScript, ESLint de ModeloList y diff documental aprobados para este ajuste.
+
+Siguiente paso: acordar qué pendiente abordar, con multivistas como propuesta
+para continuar. Registrar una idea no autoriza ejecutarla:
 
 - [Multivistas Lista/Kanban/Tarjetas](ideas/multivistas-colecciones.md), coordinadas
   con [eject:view Kanban](ideas/eject-kanban.md).
@@ -1312,43 +1556,12 @@ Comprobaciones anteriores a la actividad (históricas para esos alcances):
 
 ## Oportunidades de mejora pendientes
 
-- **Formularios según capacidades efectivas**: durante la prueba de consulta el
-  servidor rechazó guardar, pero el formulario dejó editar y mostró Guardar/Nuevo.
-  Aceptación: publicar capacidades autorizadas, abrir sin escritura en modo consulta
-  y ajustar crear/eliminar/acciones por su permiso, manteniendo la comprobación
-  transaccional de cada operación. No sustituye permisos por campo ni autoriza
-  ampliar accesos. Hallazgo registrado, sin implementación por esta nota.
 - **Lista cuando falla el lookup de una relación**: con lectura de Vehicle pero
   sin lectura de Modelo, resolveListLabels rechaza toda la lista. Aceptación:
   diseñar un fallback seguro para relación no disponible sin publicar etiquetas
   restringidas ni ocultar errores de red/configuración; conservar autorización
   de la lista y del destino. No conceder lectura automáticamente. Hallazgo
   diagnosticado mediante lectura de permisos y código, sin corrección implementada.
-
-- **Multivistas Lista/Kanban/Tarjetas**, solicitado el 2026-11-14: selector de
-  vistas disponibles para una colección y registro por tipo, evitando usar
-  views.list para sustituir la tabla por Kanban. Conservar personalizaciones,
-  permisos y consultas; diseñar URL/navegación y estado compatible entre vistas.
-  Coordinar eject:view kanban. [Alcance y aceptación](ideas/multivistas-colecciones.md).
-  Propuesta sin implementación ni API definitiva; sólo documentación comprobada
-  con git diff --check, sin cambios de aplicación ni SQL.
-
-- **Planificar eject:view Kanban**, solicitado el 2026-11-14:
-  `npm run eject:view -- <modulo> <modelo> kanban`. Reducir la creación manual del
-  tablero preservando TSX editable, lista existente, permisos, transiciones y
-  protecciones del generador. Definir primero salida y registro de vistas.
-  La propuesta adicional de render/children se retiró por decisión del usuario
-  el 2026-11-14: renderCard(record) ya cubre su necesidad de personalizar tarjetas.
-  [Alcance y aceptación](ideas/eject-kanban.md). Sólo documentación, sin código
-  ni SQL; verificada con git diff --check.
-
-- **Ocultar menús por permisos efectivos**, solicitado el 2026-11-14. El filtro
-  actual usa grupos de lectura declarados, sin incorporar overrides del motor
-  de permisos. Incorporarlos y ocultar grupos vacíos, manteniendo autorización
-  por URL directa, superusuario y cargas por lote. Evidencia: revisión de código
-  y captura del usuario, sin nueva prueba visual independiente. Alcance en
-  [el pendiente](ideas/menus-permisos-efectivos.md). Sólo documentación;
-  git diff --check, sin cambios de permisos, aplicación ni SQL.
 
 - **Permisos por campo y presentación por grupo**, solicitado el 2026-11-14:
   lectura/escritura de campos en servidor y condiciones invisible/readOnly/required

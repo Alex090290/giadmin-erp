@@ -48,7 +48,7 @@ export default function AlertsSample() {
       </div>
       {answer && <p role="status" className="rounded-xl bg-base-200 p-3 text-sm text-base-content/65">{answer}</p>}
       <div className="space-y-3 border-t border-base-300 pt-4">
-        <p className="text-sm text-base-content/65">FormViewLoader muestra «Cargando…» hasta recibir el registro. Si falla, informa el error y permite reintentar.</p>
+        <p className="text-sm text-base-content/65">FormViewLoader muestra «Cargando registro…» dentro de la vista, sin modal, hasta recibir los datos. Si falla, informa el error y permite reintentar.</p>
         <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-primary btn-sm" onClick={() => openRecord("example")}>Abrir registro de prueba</button><button type="button" className="btn btn-soft btn-sm" onClick={() => openRecord("missing")}>Simular fallo de carga</button>{record && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRecord(null)}>Cerrar registro de prueba</button>}</div>
         {record && <FormViewLoader recordKey={`${record}:${version}`} load={load}>{data => <RecordPreview record={data} />}</FormViewLoader>}
       </div>

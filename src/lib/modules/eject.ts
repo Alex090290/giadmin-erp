@@ -2,7 +2,7 @@ import ts from "typescript";
 import type { FieldMetadata } from "../orm/fields";
 import { object, sourceFile, unwrap } from "../scaffold/source-edit";
 
-export type EjectKind = "form" | "list";
+export type EjectKind = "form" | "list" | "card" | "kanban";
 export type EjectModel = {
   readonly key: string;
   /** Declaration class name as imported in the manifest. */
@@ -17,7 +17,7 @@ export type EjectModel = {
 };
 
 const pascal = (value: string) => value[0].toUpperCase() + value.slice(1);
-export const viewName = (key: string, kind: EjectKind) => `${pascal(key)}${kind === "form" ? "Form" : "List"}`;
+export const viewName = (key: string, kind: EjectKind) => `${pascal(key)}${pascal(kind)}`;
 
 function control(name: string, field: FieldMetadata, lookups: readonly string[]): [string, string] | null {
   const attr = `<Values> name=${JSON.stringify(name)}`;
@@ -76,8 +76,8 @@ export default function ${name}({ config, id }: { config: ModelClientConfig; id?
 }
 
 /** Editable column list. Columns only present; the server list policy still decides what is allowed. */
-export function listViewSource(model: EjectModel): string {
-  const name = viewName(model.key, "list");
+export function listViewSource(model: EjectModel, kind: Exclude<EjectKind, "form"> = "list"): string {
+  const name = viewName(model.key, kind);
   return `import ModelCollection from "@/components/modules/ModelCollection";
 import type { ModelClientConfig } from "@/lib/modules/config";
 
@@ -89,6 +89,7 @@ export default function ${name}({ config }: { config: ModelClientConfig }) {
   return (
     <ModelCollection
       config={config}
+      view="${kind}"
       columns={[
         ${model.listFields.map(field => `{ field: ${JSON.stringify(field)} },`).join("\n        ")}
       ]}
@@ -146,7 +147,13 @@ export function registerView(text: string, key: string, kind: EjectKind): string
   if (views) {
     if (!ts.isPropertyAssignment(views)) throw new Error(`${key}: views debe ser un objeto literal.`);
     const container = object(views.initializer);
-    if (propertyNamed(container, kind)) throw new Error(`${key} ya registra una vista ${kind}; no se sobrescribe.`);
+    const existing = propertyNamed(container, kind);
+    if (existing) {
+      if (kind !== "form" && ts.isPropertyAssignment(existing) && unwrap(existing.initializer).kind === ts.SyntaxKind.TrueKeyword) {
+        return text.slice(0, existing.getStart(file)) + loader + text.slice(existing.end);
+      }
+      throw new Error(`${key} ya registra una vista ${kind}; no se sobrescribe.`);
+    }
     return insert(text, file, container, loader, indentOf);
   }
   return insert(text, file, value, `views: { ${loader} }`, indentOf);

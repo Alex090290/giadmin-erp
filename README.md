@@ -7,7 +7,8 @@ Los modelos del servidor concentran negocio, métodos y cálculos; React present
 resultados y gestiona interacción. Para imágenes y textos derivados de relaciones,
 declarar `related` sin consultas manuales: [Campos relacionados](docs/campos-relacionados.md).
 Para fórmulas virtuales, declarar compute y un método @depends; los Fields display
-presentan el resultado del servidor: [Campos calculados](docs/campos-calculados.md).
+presentan el resultado del servidor. Lista, Card y Kanban también muestran esos
+cálculos por página autorizada, sin duplicar fórmulas: [Campos calculados](docs/campos-calculados.md).
 
 La presentación comparte una convención: displayName personalizado → name Text
 público → ID. create:app/create:model incluyen el método displayName editable;
@@ -19,6 +20,11 @@ Para el nuevo flujo de módulos declarativos: `npm run create:module -- bibliote
 `npm run orm:sync -- biblioteca`. Manifest y registro del modelo se crean
 automáticamente; lista y formulario se resuelven por convención. No requiere
 `create:views`. [Guía y límites](docs/modulos-declarativos.md).
+
+Las [capacidades efectivas](docs/capacidades-modelos.md) comparten permisos del
+actor entre menús, formularios y colecciones: consulta, crear, eliminar, acciones
+y movimientos. Incluye grupos heredados y ajustes desde Accesos; el servidor
+revalida cada operación. Permisos por campo siguen pendientes.
 
 ## Comandos del scaffold, en orden
 
@@ -60,9 +66,10 @@ declarativos con el ID `flota`, disponible tras retirar la aplicación anterior.
 Continuidad: [avance actual y siguiente paso](docs/estado-proyecto.md).
 Implementado el 2026-11-14:
 [acciones como métodos del modelo y FormHeader/FormButton](docs/ideas/acciones-formulario.md),
-incluidas transiciones Kanban autorizadas. Propuestas por diseñar:
-[multivistas Lista/Kanban/Tarjetas](docs/ideas/multivistas-colecciones.md) y
-[eject:view Kanban](docs/ideas/eject-kanban.md).
+incluidas transiciones Kanban autorizadas. Las
+[colecciones unificadas](docs/colecciones-modelos.md) comparten contrato, proveedores
+y consulta entre Lista/Kanban/Tarjetas; cada TSX define la presentación. Registro
+independiente de vistas, selector en URL y eject:view para form/list/card/kanban.
 
 | Caso | Guía |
 | --- | --- |

@@ -14,6 +14,8 @@ export async function loadFormViewExample(id: unknown = "example"): Promise<Form
 
 /** UI demo only: no database access. Production actions must authenticate and authorize the record. */
 export async function saveFormViewExample(input: unknown): Promise<FormViewResult<FormViewSampleValues>> {
+  // Demo-only latency to observe the inline saving indicator and disabled controls.
+  await new Promise(resolve => setTimeout(resolve, 600));
   const parsed = formViewSchema.safeParse(input);
   if (!parsed.success) {
     const fieldErrors: Partial<Record<FieldPath<FormViewSampleValues>, string>> = {};
