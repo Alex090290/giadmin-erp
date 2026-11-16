@@ -5,6 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "npm run db:generate && next build",
+    "db:check": "node --conditions=react-server --import tsx scripts/database-environment.ts development check",
+    "db:check:production": "node --conditions=react-server --import tsx scripts/database-environment.ts production check",
+    "db:status:production": "node --conditions=react-server --import tsx scripts/database-environment.ts production status",
+    "db:deploy:production": "node --conditions=react-server --import tsx scripts/database-environment.ts production deploy",
+    "build:production": "node --conditions=react-server --import tsx scripts/database-environment.ts production build",
+    "start:production": "node --import tsx scripts/database-environment.ts production start",
+    "test:database-environment": "node --import tsx --test src/lib/database-environment.test.ts",
     "db:deploy": "prisma migrate deploy --config prisma7.config.ts",
     "start": "next start",
     "lint": "eslint",

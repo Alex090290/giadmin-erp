@@ -78,6 +78,21 @@ actualizado, mostrar 10000 restantes y comprobar reapertura/historial. Confirmac
 del usuario, sin prueba independiente del agente sobre BD real. Intervalo fijo de práctica, sin nuevo Field ni SQL. En este módulo no exige orm:sync por el soporte, sin SQL nuevo.
 Exportar a Excel se anotó como futuro, no implementado en este bloque.
 
+## Inicio de cabecera y líneas (2026-11-15)
+
+Usuario aceptó continuar con Mantenimiento relacionado con Vehicle. Primer paso:
+ejecutar npm run create:model -- flota Mantenimiento; aún no existe el modelo en
+fuentes al revisar. El usuario lo genera y personaliza paso a paso; no adelantar
+archivos ni SQL. Modelo hijo previsto: relación obligatoria a FlotaVehicle, fecha,
+kilometraje y trabajo realizado; definir campos concretos en los siguientes pasos.
+
+Distinción vigente: Fields.Many2one y las inversas Prisma están disponibles;
+FieldOne2many ya permite tabla editable inline con RHF/Zod. Todavía no existe
+Fields.One2many declarativo ni guardado anidado automático de líneas en ModelForm/
+createModelService. Para conectar líneas de Flota como parte del guardado padre
+habrá que diseñar/ampliar ese contrato, reutilizando la UI y garantías existentes,
+sin presentar el soporte como ya terminado ni cambiarlo por edición modal.
+
 ## Recorrido previsto
 
 1. Crear el módulo mínimo y entender manifest e índice explícito.

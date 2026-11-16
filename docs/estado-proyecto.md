@@ -6,6 +6,48 @@ Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
+## Tutoría: inicio de Mantenimiento como líneas (2026-11-15)
+
+Usuario confirmó continuar con cabecera/líneas después de validar el flujo de
+finalizar mantenimiento. Primer paso guiado: create:model -- flota Mantenimiento;
+al revisar todavía no existe. No se crearon archivos de Flota por el agente.
+La UI FieldOne2many inline existe, pero Fields.One2many y guardado anidado genérico
+no están implementados. Explicar la diferencia antes de conectar el modelo hijo
+al formulario padre; requiere ampliación explícita del ORM al llegar a ese paso.
+Rama actual staging_v1, desarrollo en liteerp4_dev; no retirar Flota ni desplegar
+producción todavía. La retirada del piloto se hará al final con revisión/respaldo,
+y el usuario hará el merge a main después. Ningún cambio de app/SQL por esta nota.
+
+## Separación de bases y entornos (2026-11-15, continuación vigente)
+
+Usuario pausó tutoría para configurar producción (main) y desarrollo (staging_v1,
+staging_v4, codex/flota u otras). Rama real observada staging_v1. Eligió producción
+vacía. Se creó liteerp4_production con imagen postgres:18.3, volumen nuevo
+liteerp4_production_data y puerto loopback 5434; DB lite_erp4_production y rol propio,
+credenciales nuevas sólo en archivos ignorados. Sin migraciones, seed ni tablas.
+Se preservaron postgres18, postgres_postgres_data y el volumen previo de nombre
+similar lite_erp4_production_data. Desarrollo conserva liteerp4_dev_data y su BD
+liteerp4_dev en 5433; el contenedor estaba desconectado de red, se reinició y se
+reconectó a bridge sin recrearlo ni alterar sus datos.
+
+.env.production.local actualizado a producción nueva; .env.development.local
+conservado, .env.local alineado con desarrollo para scripts legacy y retirada la
+URL ficticia de .env. Copias privadas locales en .environment-backups/ ignorado.
+Compose versionado sólo para producción; no contiene contraseñas. Nuevos comandos
+Prisma de conexión/status/deploy por ambiente y build/start explícitos de producción;
+escrituras/despliegue producción requieren main, sin cambiar el significado de Git
+ni NODE_ENV. No commit/push/merge ni despliegue de esquema de producción.
+[Guía completa](entornos-y-bases.md).
+
+Verificación real de lectura con el constructor Prisma: desarrollo conecta a
+liteerp4_dev con 10 tablas; producción a lite_erp4_production con 0. Dos pruebas
+nuevas de guardas/credenciales, TypeScript y ESLint aprobados. No se ejecutaron
+migraciones/SQL de negocio ni se modificaron registros. Docker estuvo fuera de PATH
+en la sesión del agente; binario encontrado bajo Docker.app y usado explícitamente.
+Falta únicamente integrar estos cambios mediante Git cuando el usuario lo autorice
+para disponer de los nuevos comandos en main; archivos privados se configuran por
+máquina/worktree. Retomar tutoría de Mantenimiento después de esta pausa.
+
 ## Pendiente acordado: compute con store:true (2026-11-15)
 
 Usuario pidió anotarlo para cuando lleguemos a un ejemplo real; no implementarlo

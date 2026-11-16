@@ -91,6 +91,13 @@ Los README detallan dónde intervienen `db:generate`, el enlace y el reinicio de
 Los modelos admiten reacciones de borrador, restricciones, presentación y cálculos
 de lectura con registro explícito o decoradores. [Guía de reacciones](docs/reacciones-modelos.md).
 
+## Bases de datos y ramas
+
+[Entornos y PostgreSQL en Docker](docs/entornos-y-bases.md): desarrollo en
+localhost:5433/liteerp4_dev; producción local en 127.0.0.1:5434/lite_erp4_production.
+`npm run db:check` y `npm run db:check:production` verifican conexiones sin cambiar
+datos. Los comandos explícitos de despliegue de producción requieren main.
+
 ## Desarrollo
 
 Desde la raíz, con las dependencias y la base local configuradas:

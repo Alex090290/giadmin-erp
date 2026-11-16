@@ -1,0 +1,19 @@
+services:
+  postgres-production:
+    image: postgres:18.3
+    container_name: liteerp4_production
+    restart: unless-stopped
+    env_file:
+      - ../.env.docker.production.local
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - production_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  production_data:
+    name: liteerp4_production_data

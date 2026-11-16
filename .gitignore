@@ -49,3 +49,6 @@ next-env.d.ts
 
 # local tutorial source backups
 /.tutorial-backups/
+
+# private copies made when changing database environments
+/.environment-backups/
