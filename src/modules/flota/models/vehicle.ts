@@ -66,6 +66,32 @@ export class Vehicle extends Model {
     compute: "calcularKilometrosRestantes",
   });
 
+  mantenimientos = Fields.One2many("FlotaMantenimiento", {
+    inverse: "vehicleId",
+    label: "Mantenimientos",
+    maxRows: 50,
+  });
+
+  @constraint("kilometraje", "mantenimientos")
+  validarKilometraje(values: Readonly<Record<string, unknown>>) {
+    const kilometraje = values.kilometraje;
+    const mantenimientos = values.mantenimientos as { kilometraje: number }[];
+
+    if (typeof kilometraje !== "number") return;
+
+    const errores: Record<string, string> = {};
+
+    mantenimientos.forEach((linea, index) => {
+      if (linea.kilometraje > kilometraje) {
+        errores[`mantenimientos.${index}.kilometraje`] = `No puede superar los ${kilometraje} km del vehículo.`;
+      }
+    });
+
+    if (Object.keys(errores).length) {
+      throw new Err("Revisa el kilometraje de los mantenimientos", errores);
+    }
+  }
+
   @depends("proximoServicioKm", "kilometraje")
   calcularKilometrosRestantes(values: ReactionValues) {
     const objetivo = values.proximoServicioKm;

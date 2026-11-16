@@ -1,4 +1,4 @@
-export { Fields, type Field, type FieldMetadata, type SelectionOption } from "./fields";
+export { Fields, type Field, type FieldMetadata, type SelectionOption, type One2manyField, type One2manyMetadata, type One2manyRow } from "./fields";
 export { Model, defineModel, type ModelInput, type ModelValues, type ModelOptions, type FormValues, type ActionRecord, type ActionContext, type ActionPatch, type ModelAction } from "./model";
 export { ModelValidationError, type ModelContext, type ModelActor } from "./context";
 export { createQueryActions } from "./query-actions";

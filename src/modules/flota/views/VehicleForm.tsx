@@ -15,6 +15,9 @@ import FormButton from "@/components/ui/form/FormButton";
 import { useWatch } from "react-hook-form";
 import FieldSelect from "@/components/ui/form/FieldSelect";
 import FieldNumber from "@/components/ui/form/FieldNumber";
+import Notebook from "@/components/ui/form/Notebook";
+import NotebookPage from "@/components/ui/form/NotebookPage";
+import FieldOne2many from "@/components/ui/form/FieldOne2many";
 
 type Values = FormValues<typeof Vehicle>;
 
@@ -58,6 +61,15 @@ function FormContent() {
         </Stack>
         <FieldBoolean<Values> name="active" />
       </FormGroup>
+      <Notebook label="Información del vehículo" defaultPage="mantenimientos">
+        <NotebookPage name="mantenimientos" label="Mantenimientos">
+          <FieldOne2many<Values> name="mantenimientos" label="">
+            <FieldOne2many.Column name="name" />
+            <FieldOne2many.Column name="fecha" />
+            <FieldOne2many.Column name="kilometraje" align="right" />
+          </FieldOne2many>
+        </NotebookPage>
+      </Notebook>
     </>
   );
 }

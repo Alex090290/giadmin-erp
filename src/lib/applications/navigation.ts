@@ -1,3 +1,4 @@
+import { menuPolicyKey } from "../access/menus";
 import { applicationHref, canOpenApplication, memberOf, type ApplicationManifest, type ApplicationMenu, type ApplicationMenuLink, type ApplicationUser } from "./manifest";
 
 /** Serializable presentation metadata; no model profiles or icon components. */
@@ -7,11 +8,13 @@ export function applicationNavigation(application: ApplicationManifest, actor: A
   if (!canOpenApplication(application, actor)) return null;
   const visible = (item: { access?: "authenticated" | "admin"; groups?: readonly string[]; model?: string }) =>
     item.model && actor?.modelAccess ? actor.modelAccess[item.model]?.read === true : (item.access !== "admin" || Boolean(actor?.isAdmin)) && memberOf(actor, item.groups);
+  const hidden = (id: string) => !actor?.isAdmin && actor?.hiddenMenus?.has(menuPolicyKey(application.id, id));
   const menus: ApplicationMenu[] = [];
   for (const item of application.menus ?? []) {
+    if (hidden(item.id)) continue;
     if ("items" in item) {
       if (!(actor?.modelAccess && item.items.some(child => child.model)) && !visible(item)) continue;
-      const items = item.items.filter(visible);
+      const items = item.items.filter(child => !hidden(child.id) && visible(child));
       if (items.length) menus.push({ ...item, items });
     } else if (visible(item)) menus.push(item);
   }

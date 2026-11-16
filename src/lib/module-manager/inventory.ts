@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import ts from "typescript";
 import { readSource } from "../scaffold/resource-write";
-import { array, literal, manifestObject, object, property, sourceFile } from "../scaffold/source-edit";
+import { array, literal, manifestObject, object, property, sourceFile, unwrap, variable } from "../scaffold/source-edit";
 import { defineModuleObject } from "../modules/eject";
 import { readInstallationState } from "../orm/generator/installation-state";
 import { prismaBlocks } from "../orm/generator/prisma-source";
@@ -20,10 +20,29 @@ function optional(node: ts.ObjectLiteralExpression, name: string): ts.Expression
   return property(node, name);
 }
 
+/** Bounded native wrapper: one local definition spread plus an icon, never arbitrary imports/overrides. */
+function nativeDefinition(file: ts.SourceFile, text: string): ts.ObjectLiteralExpression {
+  const calls = file.statements.filter(ts.isVariableStatement).flatMap(statement => statement.declarationList.declarations)
+    .flatMap(declaration => declaration.initializer ? [unwrap(declaration.initializer)] : [])
+    .filter((node): node is ts.CallExpression => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "defineApplication");
+  if (calls.length !== 1 || calls[0].arguments.length !== 1 || !ts.isObjectLiteralExpression(calls[0].arguments[0])) throw new Error("Wrapper nativo inválido.");
+  const props = calls[0].arguments[0].properties;
+  const spread = props.filter(ts.isSpreadAssignment);
+  const icon = props.filter(ts.isPropertyAssignment);
+  if (props.length !== 2 || spread.length !== 1 || !ts.isIdentifier(spread[0].expression) || icon.length !== 1 || icon[0].name.getText(file) !== "icon") throw new Error("El wrapper nativo sólo admite definición e icono.");
+  const name = spread[0].expression.text;
+  const imports = file.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./definition");
+  if (imports.length !== 1) throw new Error("La definición debe estar en ./definition.");
+  const binding = imports[0].importClause?.namedBindings;
+  const imported = binding && ts.isNamedImports(binding) ? binding.elements.find(element => element.name.text === name) : undefined;
+  if (!imported) throw new Error("Import de definición ambiguo.");
+  return object(variable(sourceFile(text, "definition.ts"), imported.propertyName?.text ?? imported.name.text));
+}
+
 /** Read literals only; available manifests are never imported or evaluated. */
-export function inspectManifest(text: string, id: string, kind: Exclude<ModuleKind, "unknown">): Declaration {
+export function inspectManifest(text: string, id: string, kind: Exclude<ModuleKind, "unknown">, definitionText?: string): Declaration {
   const file = sourceFile(text, "manifest.ts");
-  const declaration = kind === "declarative" ? defineModuleObject(file) : manifestObject(file);
+  const declaration = kind === "declarative" ? defineModuleObject(file) : definitionText !== undefined ? nativeDefinition(file, definitionText) : manifestObject(file);
   if (literal(property(declaration, "id")) !== id) throw new Error("El ID del manifest no coincide con su directorio.");
   const value = (name: string, fallback: string) => { const node = optional(declaration, name); return node ? literal(node) : fallback; };
   const dependencyNode = optional(declaration, "depends");
@@ -78,7 +97,11 @@ export async function readModuleInventory(root: string): Promise<ModuleInventory
         const manifest = await readSource(join(root, directory, entry.name, "manifest.ts"));
         if (manifest === null) continue;
         if (baseKind === "manual" && await readSource(join(root, directory, entry.name, "orm.config.ts")) !== null) kind = "scaffold";
-        declarations.push(inspectManifest(manifest, entry.name, kind));
+        const file = sourceFile(manifest, "manifest.ts");
+        const hasDefinition = kind === "manual" && file.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./definition");
+        const definition = hasDefinition ? await readSource(join(root, directory, entry.name, "definition.ts")) : null;
+        if (hasDefinition && definition === null) throw new Error("Falta definition.ts.");
+        declarations.push(inspectManifest(manifest, entry.name, kind, definition ?? undefined));
       } catch {
         declarations.push({ id: entry.name, name: entry.name, description: "", version: "", kind, models: [], depends: [], issues: ["No se pudo inspeccionar el manifest. Revisa su declaración y que sus archivos no sean enlaces."] });
       }

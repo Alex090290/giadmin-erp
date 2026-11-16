@@ -63,6 +63,11 @@ export function modelService(id: string): Service {
     };
   }
   const service = createModelService(entry.contract, createRepository(entry, module.profile.module), {
+    lines: Object.fromEntries(Object.entries(entry.contract.one2manyFields).map(([name, field]) => {
+      const child = module.models.find(model => model.contract.name === field.one2many.target)!;
+      return [name, { metadata: field.one2many, child: () => modelService(child.id).transaction }];
+    })),
+    owners: module.models.flatMap(parent => Object.values(parent.contract.one2manyFields).filter(field => field.one2many.target === entry.contract.name).map(field => ({ inverse: field.one2many.inverse, parent: () => modelService(parent.id).transaction }))),
     list: entry.list, audit: true, defaultSort: entry.defaultSort,
     // Group access and record rules, revalidated inside each service transaction.
     authorize: (tx, actor, operation) => authorizeModel(tx, actor, entry.id, operation),
@@ -126,6 +131,15 @@ export function modelClientConfig(id: string, access?: CapabilityActor): ModelCl
     related: Object.keys(contract.relatedFields ?? {}),
     reactionRules: contract.reactionRules ?? [],
     lookups: lookupTargets(entry),
+    lines: Object.fromEntries(Object.entries(contract.one2manyFields).map(([name, field]) => {
+      const child = module.models.find(model => model.contract.name === field.one2many.target)!;
+      return [name, {
+        metadata: field.one2many, model: child.id,
+        fields: Object.fromEntries(Object.entries(child.metadata).filter(([key]) => key !== field.one2many.inverse)),
+        lookups: Object.fromEntries(Object.entries(lookupTargets(child)).filter(([key]) => key !== field.one2many.inverse)),
+        capabilities: access?.modelAccess[child.id] ?? { read: false, create: false, write: false, unlink: false },
+      }];
+    })),
     // Names and labels only; the server validates the name and re-checks permissions on every call.
     actions: published.map(({ name, label }) => ({ name, label })),
     list: { fields: entry.list.fields, searchFields: entry.list.searchFields, sortable: entry.list.sortable ?? [], groupable: entry.list.groupable ?? [], filterable: entry.list.filterable ?? [] },

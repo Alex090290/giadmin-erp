@@ -60,7 +60,7 @@ export type ModuleModel = {
   readonly route: `/erp/${string}`;
   readonly label: string;
   readonly delegate: string;
-  readonly contract: ReturnType<typeof defineModel>;
+  readonly contract: ReturnType<typeof defineModel<ModelClass>>;
   /** Same as contract.metadata, typed for generic code. */
   readonly metadata: Readonly<Record<string, FieldMetadata>>;
   readonly clientFields: readonly string[];
@@ -156,6 +156,23 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
       view, collectionViews: presentations, defaultSort: options.defaultSort, views: options.views ?? {},
     });
   });
+  const inverses = new Set<string>();
+  const children = new Set<string>();
+  for (const parent of models) {
+    const declarations = Object.entries(parent.contract.one2manyFields);
+    if (declarations.length > 4) throw new Error(`${parent.id}: máximo cuatro relaciones One2many.`);
+    for (const [name, field] of declarations) {
+      const { target, inverse } = field.one2many;
+      const child = models.find(model => model.contract.name === target);
+      const foreign = child?.metadata[inverse];
+      if (!child || child === parent || Object.keys(child.contract.one2manyFields).length || foreign?.kind !== "many2one" || foreign.target !== parent.contract.name || !foreign.required || foreign.unique || foreign.onDelete !== "Restrict" || Object.values(child.metadata).some(field => field.sensitive)) throw new Error(`${parent.id}.${name}: One2many requiere un hijo del mismo módulo sin líneas/sensitive y un Many2one inverso obligatorio, no único, con Restrict.`);
+      const key = `${target}.${inverse}`;
+      if (inverses.has(key)) throw new Error(`${key}: una inversa sólo puede pertenecer a una declaración One2many.`);
+      inverses.add(key);
+      if (children.has(target)) throw new Error(`${target}: un hijo sólo puede pertenecer a una relación One2many declarativa.`);
+      children.add(target);
+    }
+  }
   const byKey = new Map(models.map(model => [model.key, model]));
   const access = declareAccess(id, spec, Object.fromEntries(models.map(model => [model.key, model.metadata])));
   // Without groups the module stays admin-only (superuser), as before access control existed.

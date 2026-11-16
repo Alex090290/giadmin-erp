@@ -1,15 +1,25 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useId, useLayoutEffect, useRef, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, lazy, Suspense, useContext, useCallback, useEffect, useId, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useFieldArray, useFormContext, useFormState, useWatch, type FieldArray, type FieldArrayPath, type FieldPath, type FieldValues } from "react-hook-form";
-import { ArrowDown, ArrowUp, ListPlus, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { FieldDirection } from "./field.types";
 import { fieldDirectionClassName, fieldLabelClassName } from "./field.styles";
 import { useFormFieldValidation } from "./formValidation";
 import { rowLimits, sameRowData } from "./one2manyValues";
 import { formErrorPaths } from "./notebookErrors";
 import { useFieldDirection } from "./fieldDirection";
+import { FormModelContext } from "./modelFields";
+import FieldText from "./FieldText";
+import FieldNumber from "./FieldNumber";
+import FieldDate from "./FieldDate";
+import FieldBoolean from "./FieldBoolean";
+import FieldSelect from "./FieldSelect";
+import type { FieldMetadata } from "@/lib/orm/fields";
 import FieldVisibility from "./FieldVisibility";
+
+const FieldMany2One = lazy(() => import("./FieldMany2One"));
+const FieldImage = lazy(() => import("./FieldImage"));
 
 export type One2manyRowContext<TValues extends FieldValues, TName extends FieldArrayPath<TValues>> = {
   index: number;
@@ -25,13 +35,17 @@ export type One2manyColumn<TValues extends FieldValues, TName extends FieldArray
   align?: "left" | "right" | "center";
   render: (context: One2manyRowContext<TValues, TName>) => ReactNode;
 };
-export type FieldOne2manyProps<TValues extends FieldValues, TName extends FieldArrayPath<TValues> = FieldArrayPath<TValues>> = {
+export type FieldOne2manyProps<TValues extends FieldValues = FieldValues, TName extends FieldArrayPath<TValues> = FieldArrayPath<TValues>> = {
   invisible?: boolean;
   name: TName;
   label?: string;
   direction?: FieldDirection;
-  columns: readonly One2manyColumn<TValues, TName>[];
-  createRow: () => FieldArray<TValues, TName>;
+  columns?: readonly One2manyColumn<TValues, TName>[];
+  createRow?: () => FieldArray<TValues, TName>;
+  children?: ReactNode;
+  canCreate?: boolean;
+  canDelete?: (row: FieldArray<TValues, TName>) => boolean;
+  rowReadOnly?: (row: FieldArray<TValues, TName>) => boolean;
   onChange?: (rows: FieldArray<TValues, TName>[]) => void;
   minRows?: number;
   maxRows?: number;
@@ -51,9 +65,9 @@ const alignments = { left: "text-left", right: "text-right", center: "text-cente
 
 function One2manyContent<TValues extends FieldValues, TName extends FieldArrayPath<TValues> = FieldArrayPath<TValues>>({
   name, label, direction: requestedDirection = "block", columns, createRow, onChange, minRows = 0, maxRows = 100, required,
-  disabled = false, readOnly = false, reorderable = false, addLabel = "Agregar línea", emptyText = "Todavía no hay líneas.", footer,
+  canCreate = true, canDelete, rowReadOnly, disabled = false, readOnly = false, reorderable = false, addLabel = "Agregar línea", emptyText = "Todavía no hay líneas.", footer,
   id, className = "", "aria-label": ariaLabel,
-}: FieldOne2manyProps<TValues, TName>) {
+}: FieldOne2manyProps<TValues, TName> & { columns: readonly One2manyColumn<TValues,TName>[]; createRow: () => FieldArray<TValues,TName> }) {
   const direction = useFieldDirection(requestedDirection) ?? "block";
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -114,11 +128,11 @@ function One2manyContent<TValues extends FieldValues, TName extends FieldArrayPa
 
   function canEdit() { return !locked && !root.current?.closest("fieldset:disabled"); }
   function add() {
-    if (!canEdit() || getRows().length >= limits.maximum) return;
+    if (!canEdit() || !canCreate || getRows().length >= limits.maximum) return;
     append(structuredClone(createRow()), { shouldFocus: true });
   }
   function deleteRow(index: number) {
-    if (!canEdit() || getRows().length <= limits.minimum) return;
+    if (!canEdit() || canDelete?.(getRows()[index]) === false || getRows().length <= limits.minimum) return;
     remove(index);
     requestAnimationFrame(() => {
       const target = root.current?.querySelector<HTMLElement>(`[data-one2many-row="${Math.min(index, fields.length - 2)}"] input:not(:disabled), [data-one2many-row="${Math.min(index, fields.length - 2)}"] select:not(:disabled)`);
@@ -132,12 +146,8 @@ function One2manyContent<TValues extends FieldValues, TName extends FieldArrayPa
     <div ref={root} id={inputId} role="group" tabIndex={0} data-one2many-root aria-label={!fieldLabel || ariaLabel ? accessibleLabel : undefined}
       aria-labelledby={fieldLabel && !ariaLabel ? `${inputId}-label` : undefined} aria-disabled={disabled || undefined}
       aria-describedby={errorMessage ? `${inputId}-error` : undefined} className="@container/o2m min-w-0 rounded-xl border border-base-300 bg-base-100 outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary">
-      <header className="flex flex-wrap items-center justify-between gap-2 rounded-t-xl border-b border-base-300 bg-base-200/45 px-3 py-2.5">
-        <span className="flex items-center gap-2 text-xs font-medium text-base-content/60"><ListPlus size={16} aria-hidden="true" />{fields.length} línea{fields.length === 1 ? "" : "s"}</span>
-        {!readOnly && <button type="button" disabled={locked || fields.length >= limits.maximum} className="btn btn-primary btn-soft btn-sm gap-1.5" onClick={add}><Plus size={15} aria-hidden="true" />{addLabel}</button>}
-      </header>
       <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0">
-        <table role="table" aria-label={accessibleLabel} className="table block w-full @3xl/o2m:table @3xl/o2m:table-fixed">
+        <table role="table" aria-label={accessibleLabel} className="table block! w-full @3xl/o2m:table! @3xl/o2m:table-fixed">
           <thead role="rowgroup" className="sr-only @3xl/o2m:not-sr-only @3xl/o2m:table-header-group"><tr role="row" className="text-xs text-base-content/50">
             <th scope="col" role="columnheader" className="w-10 px-2 py-3"><span className="sr-only">Línea</span>#</th>
             {columns.map(column => <th key={column.key} scope="col" role="columnheader" style={{ width: column.width }} className={`px-3 py-3 font-medium ${alignments[column.align ?? "left"]}`}>{column.label}</th>)}
@@ -147,17 +157,17 @@ function One2manyContent<TValues extends FieldValues, TName extends FieldArrayPa
             {fields.map((field, index) => {
               // field.id is only a render key. Business IDs always come from RHF values.
               const row = rows[index] ?? getRows()[index];
-              const context: One2manyRowContext<TValues, TName> = { index, row, fieldName: key => `${name}.${index}.${key}` as FieldPath<TValues>, readOnly, disabled: disabled || formState.disabled };
+              const context: One2manyRowContext<TValues, TName> = { index, row, fieldName: key => `${name}.${index}.${key}` as FieldPath<TValues>, readOnly: readOnly || rowReadOnly?.(row) === true, disabled: disabled || formState.disabled };
               return <tr key={field.id} role="row" data-one2many-row={index} className="block rounded-xl border border-base-300 bg-base-200/15 p-3 @3xl/o2m:table-row @3xl/o2m:rounded-none @3xl/o2m:border-x-0 @3xl/o2m:border-t-0 @3xl/o2m:bg-transparent @3xl/o2m:p-0 @3xl/o2m:hover:bg-primary/3">
                 <td role="cell" className="mb-2 block px-0 py-1 align-middle text-xs font-semibold text-base-content/40 @3xl/o2m:table-cell @3xl/o2m:px-2 @3xl/o2m:py-3 @3xl/o2m:text-center"><span className="@3xl/o2m:hidden">Línea </span>{index + 1}{errorPaths.some(path => path.startsWith(`${name}.${index}.`) || path === `${name}.${index}`) && <span className="ml-1 text-error" aria-label={`Línea ${index + 1} con errores`}>•</span>}</td>
                 {columns.map(column => <td role="cell" key={column.key} className={`block min-w-0 px-0 py-2 align-middle @3xl/o2m:table-cell @3xl/o2m:px-3 @3xl/o2m:py-3 ${alignments[column.align ?? "left"]}`}>
                   <span aria-hidden="true" className="mb-1 block text-left text-xs font-medium text-base-content/55 @3xl/o2m:hidden">{column.label}</span>
-                  {column.render(context)}
+                  <fieldset disabled={context.readOnly} className="m-0 min-w-0 border-0 p-0">{column.render(context)}</fieldset>
                 </td>)}
                 {!readOnly && <td role="cell" className="mt-2 block border-t border-base-300 px-0 pt-2 align-middle @3xl/o2m:table-cell @3xl/o2m:border-t-0 @3xl/o2m:px-2 @3xl/o2m:py-3">
                   <div className="flex items-center justify-end gap-0.5">
                     {reorderable && <><button type="button" disabled={locked || index === 0} className="btn btn-square btn-ghost btn-xs text-base-content/45" aria-label={`Subir línea ${index + 1}`} onClick={() => moveRow(index, index - 1)}><ArrowUp size={14} aria-hidden="true" /></button><button type="button" disabled={locked || index === fields.length - 1} className="btn btn-square btn-ghost btn-xs text-base-content/45" aria-label={`Bajar línea ${index + 1}`} onClick={() => moveRow(index, index + 1)}><ArrowDown size={14} aria-hidden="true" /></button></>}
-                    <button type="button" disabled={locked || fields.length <= limits.minimum} className="btn btn-square btn-ghost btn-xs text-base-content/40 hover:bg-error/10 hover:text-error" aria-label={`Quitar línea ${index + 1}`} onClick={() => deleteRow(index)}><Trash2 size={15} aria-hidden="true" /></button>
+                    <button type="button" disabled={locked || canDelete?.(row) === false || fields.length <= limits.minimum} className="btn btn-square btn-ghost btn-xs text-base-content/40 hover:bg-error/10 hover:text-error" aria-label={`Quitar línea ${index + 1}`} onClick={() => deleteRow(index)}><Trash2 size={15} aria-hidden="true" /></button>
                   </div>
                 </td>}
               </tr>;
@@ -166,7 +176,8 @@ function One2manyContent<TValues extends FieldValues, TName extends FieldArrayPa
           </tbody>
         </table>
       </fieldset>
-      {(errorMessage || footerContent || fields.length >= limits.maximum) && <footer className="space-y-2 rounded-b-xl border-t border-base-300 bg-base-200/25 px-3 py-3">
+      {(!readOnly && canCreate || errorMessage || footerContent || fields.length >= limits.maximum) && <footer className="space-y-2 rounded-b-xl border-t border-base-300 bg-base-200/25 px-3 py-3">
+        {!readOnly && canCreate && <button type="button" disabled={locked || fields.length >= limits.maximum} className="btn btn-primary btn-soft btn-sm gap-1.5" onClick={add}><Plus size={15} aria-hidden="true" />{addLabel}</button>}
         {errorMessage && <p id={`${inputId}-error`} className="text-xs text-error">{errorMessage}</p>}
         {fields.length >= limits.maximum && <p className="text-xs text-base-content/50">Máximo de {limits.maximum} líneas alcanzado.</p>}
         {footerContent}
@@ -175,8 +186,77 @@ function One2manyContent<TValues extends FieldValues, TName extends FieldArrayPa
   </div>;
 }
 
-/** RHF generates random row keys; own the Suspense boundary required by Next's prerender. */
-export default function FieldOne2many<TValues extends FieldValues, TName extends FieldArrayPath<TValues> = FieldArrayPath<TValues>>(props: FieldOne2manyProps<TValues, TName>) {
-  const { invisible, ...controlProps } = props;
-  return <FieldVisibility name={props.name} invisible={invisible}><Suspense fallback={<div role="status" className="col-span-full min-w-0 rounded-xl border border-base-300 bg-base-200/30 p-5 text-sm text-base-content/50">Cargando líneas…</div>}><One2manyContent {...controlProps} /></Suspense></FieldVisibility>;
+
+export type One2manyCellContext = {
+  index: number; row: Record<string, unknown>; fieldName: (field: string) => string; readOnly: boolean; disabled: boolean;
+};
+type ColumnDeclaration = {
+  name: string; label?: string; width?: string; align?: "left" | "center" | "right";
+  widget?: "text" | "long" | "password" | "email" | "phone" | "image" | "avatar" | "statebar";
+  render?: (context: One2manyCellContext) => ReactNode;
+};
+// Stable across Fast Refresh: JSX may briefly retain the previous function identity.
+const columnTag = Symbol.for("lite-erp.form.one2many-column");
+const LineColumn = Object.assign(function LineColumn(props: ColumnDeclaration): null { void props; return null; }, { [columnTag]: true });
+function renderField(field: FieldMetadata, column: ColumnDeclaration, context: One2manyCellContext) {
+  const props = { ...(context.readOnly ? { readOnly: true } : {}), name: context.fieldName(column.name), label: "", "aria-label": `${column.label ?? field.label ?? column.name}, línea ${context.index + 1}` };
+  if (column.render) return column.render(context);
+  switch (field.kind) {
+    case "text": return <FieldText {...props} widget={column.widget as "text" | "long" | "password" | "email" | "phone" | undefined} />;
+    case "integer": return <FieldNumber {...props} type="integer" />;
+    case "datetime": return <FieldDate {...props} type="datetime" />;
+    case "boolean": return <FieldBoolean {...props} />;
+    case "selection": return <FieldSelect {...props} widget={column.widget as "statebar" | undefined} />;
+    case "many2one": return <FieldMany2One {...props} />;
+    case "image": return <FieldImage {...props} widget={column.widget as "image" | "avatar" | undefined} />;
+  }
 }
+
+/** Existing explicit columns/createRow remain supported; declarations use the model contract. */
+function FieldOne2many<TValues extends FieldValues = FieldValues, TName extends FieldArrayPath<TValues> = FieldArrayPath<TValues>>(props: FieldOne2manyProps<TValues, TName>) {
+  const model = useContext(FormModelContext);
+  const line = model?.lines?.[props.name];
+  let columns = props.columns, createRow = props.createRow;
+  if (props.children !== undefined || (!columns && line)) {
+    if (!line || columns || createRow) throw new Error("One2many.Column requiere una relación publicada; usa children o columns/createRow, no ambos.");
+    const declarations: ColumnDeclaration[] = [];
+    const visit = (nodes: ReactNode) => Children.forEach(nodes, node => {
+      if (node == null || typeof node === "boolean") return;
+      if (isValidElement<{ children?: ReactNode }>(node) && node.type === Fragment) { visit(node.props.children); return; }
+      if (!isValidElement<ColumnDeclaration>(node) || typeof node.type !== "function" || Reflect.get(node.type, columnTag) !== true) throw new Error("Sólo se aceptan hijos FieldOne2many.Column.");
+      declarations.push(node.props);
+    });
+    if (props.children === undefined) declarations.push(...Object.keys(line.fields).map(name => ({ name })));
+    else visit(props.children);
+    if (!declarations.length || declarations.length > 12 || new Set(declarations.map(item => item.name)).size !== declarations.length) throw new Error("Declara entre 1 y 12 columnas de líneas, sin duplicados.");
+    columns = declarations.map(column => {
+      const field = line.fields[column.name]?.metadata;
+      if (!field || field.sensitive) throw new Error(`Columna de línea no publicada: ${column.name}.`);
+      const widgets = field.kind === "text" ? ["text", "long", "password", "email", "phone"] : field.kind === "image" ? ["image", "avatar"] : field.kind === "selection" ? ["statebar"] : [];
+      if (column.widget && !widgets.includes(column.widget)) throw new Error(`Widget incompatible en ${column.name}.`);
+      return { key: column.name, label: column.label ?? field.label ?? column.name, width: column.width, align: column.align, render: context => renderField(field, column, { ...context, row: context.row as Record<string, unknown>, fieldName: name => context.fieldName(name as never) }) };
+    });
+    createRow = line.createRow as () => FieldArray<TValues, TName>;
+  }
+  if (!columns || !createRow) throw new Error("One2many requiere columnas y createRow, o una relación declarada en el modelo.");
+  if (line && props.reorderable) throw new Error("One2many declarativo aún no persiste orden manual.");
+  const { invisible, children: _children, ...controlProps } = props;
+  void _children;
+  const capabilities = line?.capabilities;
+  const noWrites = capabilities && !capabilities.create && !capabilities.write && !capabilities.unlink;
+  const persisted = (row: FieldArray<TValues, TName>) => Boolean((row as { id?: string }).id);
+  return <FieldVisibility name={props.name} invisible={invisible ?? line?.invisible}>
+    <Suspense fallback={<div role="status" className="col-span-full min-w-0 rounded-xl border border-base-300 bg-base-200/30 p-5 text-sm text-base-content/50">Cargando líneas…</div>}>
+      <One2manyContent {...controlProps}
+        label={props.label ?? line?.label}
+        minRows={line?.minRows ?? props.minRows} maxRows={line?.maxRows ?? props.maxRows}
+        readOnly={props.readOnly || Boolean(line && !capabilities?.read) || Boolean(noWrites)}
+        canCreate={props.canCreate !== false && (!capabilities || capabilities.read && capabilities.create)}
+        canDelete={row => (!capabilities || !persisted(row) || capabilities.unlink) && props.canDelete?.(row) !== false}
+        rowReadOnly={row => props.rowReadOnly?.(row) === true || Boolean(capabilities && (!capabilities.read || (persisted(row) ? !capabilities.write : !capabilities.create)))}
+        columns={columns} createRow={createRow}
+      />
+    </Suspense>
+  </FieldVisibility>;
+}
+export default Object.assign(FieldOne2many, { Column: LineColumn });

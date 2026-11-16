@@ -48,7 +48,7 @@ Cada columna define `key`, `label`, `render` y opcionalmente `width` (ancho CSS 
 - El renderer devuelve contenido; si necesitas hooks propios, devuelve un componente que los use.
 - Usa nombres accesibles por fila cuando omitas los labels. Los Fields conservan `autoComplete="off"` y su estilo habitual.
 
-Puedes usar FieldMany2One para productos cuando exista ese modelo en el registro de búsquedas. El ejemplo usa un catálogo estático porque el proyecto actualmente solo tiene User y Partner. El Field no recibe un nombre Prisma para hacer consultas: `name` identifica el arreglo del formulario, y la acción de guardado del padre decide cómo persistir esa relación.
+Puedes usar FieldMany2One para productos cuando exista ese modelo en el registro de búsquedas. El ejemplo manual usa un catálogo estático; los módulos declarativos heredan el proveedor autorizado del modelo relacionado. El Field no recibe un nombre Prisma para hacer consultas: `name` identifica el arreglo del formulario, y la acción de guardado del padre decide cómo persistir esa relación.
 
 La identidad visual viene de useFieldArray; los IDs persistidos se leen de los valores de RHF, nunca de `fields[].id`. Los IDs originales no se sobrescriben ni se envían claves internas al backend. Las líneas nuevas pueden carecer de ID hasta que el servidor las cree.
 
@@ -94,3 +94,30 @@ La acción real debe seleccionar los campos permitidos, aplicar la política de 
 La demo de `/sample` valida, normaliza y muestra un resumen de operaciones sin escribir en la base de datos. Las nuevas líneas siguen sin ID después de validar, porque aún no existen modelos Pedido/Línea en Prisma. El rechazo BLOQUEADO permite probar el circuito de errores de servidor. El catálogo estático y esa regla son exclusivos del ejemplo.
 
 El componente incluye su propia frontera Suspense: esta versión de Next.js requiere diferir las claves aleatorias que RHF genera para las filas durante el prerender.
+
+## Columnas del modelo declarativo
+
+Cuando `FormView model={ui.recordUI}` publica una relación One2many, puede usarse:
+
+```tsx
+<FieldOne2many name="lineas">
+  <FieldOne2many.Column name="name" widget="long" />
+  <FieldOne2many.Column name="cantidad" align="right" />
+</FieldOne2many>
+```
+
+Se heredan los Fields, defaults, validación, límites y capacidades del hijo. La
+inversa la asigna el servidor; no es una columna editable. Sin children se dibujan
+sus campos escalares. No combinar Column con columns/createRow. Las filas se
+editan inline; no hay modal ni orden manual persistido en esta variante. Usar
+FormGroup fullWidth cuando se quiera aprovechar todo el ancho del formulario.
+Contrato de guardado, permisos, restricciones y ejemplo de clases en
+[docs/lineas-one2many.md](../../../../docs/lineas-one2many.md).
+Demo local sin persistencia: `/sample#one2many-model`.
+
+El botón Agregar línea se muestra debajo de las filas; no hay encabezado con
+contador. Las páginas de Notebook no añaden padding al contenido, de modo que la
+tabla puede aprovechar todo el ancho disponible.
+
+Dentro de NotebookPage se omite el borde exterior de la tabla de líneas para
+conservar un solo contorno: el del Notebook. Las divisiones entre filas permanecen.

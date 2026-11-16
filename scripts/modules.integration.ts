@@ -47,6 +47,23 @@ try {
   await writeFile(join(root, "next.config.ts"), next.replace("turbopack: {", `turbopack: {\n    root: ${JSON.stringify(project)},`));
   prisma(["migrate", "deploy"]);
 
+  if (process.argv.includes("--one2many-only")) {
+    const target = join(root, "src/modules/lineas");
+    await mkdir(target, { recursive: true });
+    await cp(join(project, "scripts/fixtures/modules-lineas/manifest.fixture"), join(target, "manifest.ts"));
+    tsx(join(root, "scripts/orm-install.ts"), ["lineas", "--write"], "orm:install lines fixture");
+    const sql = command("prisma", ["migrate", "diff", "--from-config-datasource", "--to-schema", join(root, "prisma/models"), "--script", "--config", join(root, "prisma7.config.ts")], "lines migration diff");
+    assert.match(sql, /CREATE TABLE "lineas_detalle"/);
+    assert.doesNotMatch(sql, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bTRUNCATE\b/i);
+    await mkdir(join(root, "prisma/migrations/20990202000000_lines"));
+    await writeFile(join(root, "prisma/migrations/20990202000000_lines/migration.sql"), sql);
+    prisma(["migrate", "deploy"]); prisma(["generate"]);
+    await writeFile(join(root, "src/modules/index.ts"), `import "server-only";\nimport lineas from "./lineas/manifest";\nexport const modules = [lineas];\n`);
+    await cp(join(project, "scripts/fixtures/one2many-check.fixture"), join(root, "one2many-check.ts"));
+    console.log(tsx(join(root, "one2many-check.ts"), [], "One2many service check").trim());
+    command("next", ["typegen"], "Next route types");
+    command("tsc", ["--noEmit", "--incremental", "false"], "One2many fixture types");
+  } else {
   // Exercise the public creation commands and automatic sync registration on an
   // independent module; no tutorial sources or ERP data are modified.
   const indexBefore = await readFile(join(root, "src/modules/index.ts"), "utf8");
@@ -106,15 +123,34 @@ try {
     await writeFile(join(root, "serve-admin.ts"), `import { config } from "dotenv"; config({ path: ".env.local", quiet: true });\nconst { prisma } = await import("./src/lib/prisma");\nconst { hashPassword } = await import("./src/lib/auth/password");\nawait prisma.user.create({ data: { login: "serve-admin", password: await hashPassword(process.argv[2]), isAdmin: true, partner: { create: { name: "Revisión visual" } } } });\nawait prisma.$disconnect();\n`);
     tsx(join(root, "serve-admin.ts"), [credentials], "serve admin");
     await writeFile(join(root, ".serve-login"), `usuario: serve-admin\ncontraseña: ${credentials}\n`, { mode: 0o600 });
-    const server = spawn(process.execPath, [join(root, "node_modules/next/dist/bin/next"), "dev", "-p", "3032"], { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
+    const launch = () => spawn(process.execPath, [join(root, "node_modules/next/dist/bin/next"), "dev", "-p", "3032", "-H", "127.0.0.1"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+    let server = launch();
     console.log(`Revisión visual: http://127.0.0.1:3032/erp/ensayo (credenciales desechables en ${join(root, ".serve-login")}; se eliminan al detener).`);
     await new Promise<void>((resolve, reject) => {
-      const stop = () => { server.kill("SIGTERM"); };
+      let stopping = false, output = "", retriedReminder = false;
+      const stop = () => { stopping = true; server.kill("SIGTERM"); };
       const watcher = watch(root, (_event, filename) => { if (filename === ".stop") stop(); });
+      const cleanup = () => { watcher.close(); process.off("SIGINT", stop); process.off("SIGTERM", stop); };
       process.once("SIGINT", stop); process.once("SIGTERM", stop);
-      server.once("error", error => { watcher.close(); reject(error); });
-      server.once("exit", () => { watcher.close(); resolve(); });
+      const observe = () => {
+        const capture = (chunk: Buffer) => { output = (output + chunk.toString()).slice(-6000); };
+        server.stdout?.on("data", capture); server.stderr?.on("data", capture);
+        server.once("error", error => { cleanup(); reject(error); });
+        server.once("exit", code => {
+          // Repeat the same command once for Next's one-time reminder. No flags or dependencies change.
+          if (!stopping && code !== 0 && !retriedReminder && output.includes("Your version of Next.js is affected by a known security vulnerability.") && output.includes("Retry the same command")) {
+            retriedReminder = true; output = "";
+            console.log("Aviso de seguridad de Next.js: se recomienda actualizar la versión; se repite el arranque temporal una sola vez sin cambiar dependencias.");
+            server = launch(); observe(); return;
+          }
+          cleanup();
+          if (!stopping && code !== 0) reject(new Error(sanitize(`El servidor de revisión terminó con código ${code}: ${output}`)));
+          else resolve();
+        });
+      };
+      observe();
     });
+  }
   }
 } finally {
   if (created) await database.query(`DROP SCHEMA "${schema}" CASCADE`);

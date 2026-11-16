@@ -9,6 +9,7 @@ import { RefreshCw } from "lucide-react";
 import FormView from "@/components/ui/form/FormView";
 import FormViewLoader from "@/components/ui/form/FormViewLoader";
 import FormGroup from "@/components/ui/form/FormGroup";
+import FieldOne2many from "@/components/ui/form/FieldOne2many";
 import FieldText from "@/components/ui/form/FieldText";
 import FieldBoolean from "@/components/ui/form/FieldBoolean";
 import FieldNumber from "@/components/ui/form/FieldNumber";
@@ -42,7 +43,7 @@ export function ModelFields({ ui }: { ui: ModelUI }) {
     field.kind === "image" ? <FieldImage key={name} mode="display" name={name} direction="inline" />
       : field.kind === "integer" ? <FieldNumber key={name} mode="display" name={name} type="integer" direction="inline" />
       : field.kind === "text" ? <FieldText key={name} mode="display" name={name} direction="inline" /> : null);
-  return <FormGroup legend="Datos generales">{controls}{display}</FormGroup>;
+  return <><FormGroup legend="Datos generales">{controls}{display}</FormGroup>{Object.keys(ui.recordUI.lines).map(name => <FormGroup fullWidth key={name}><FieldOne2many name={name} /></FormGroup>)}</>;
 }
 
 function Editor({ ui, record, displayName, onReload, children }: { ui: ModelUI; record: Values; displayName?: string; onReload?: () => void; children?: ReactNode }) {

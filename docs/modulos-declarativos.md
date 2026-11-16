@@ -345,3 +345,17 @@ npm run test:legacy:integration
 Este wrapper ejecuta las cuatro suites existentes en un proyecto, esquema PostgreSQL,
 servidor y cuentas temporales; el seed de autenticación se aplica sólo ahí. No requiere
 las credenciales del administrador del ERP. Elimina sus recursos al terminar.
+
+## Pendiente: Módulos distribuibles
+
+ZIP de fuentes para incorporar en src/modules, validar/registrar con un comando
+y desplegar mediante el build normal de Next.js. No está implementado ni permite
+instalación dinámica en producción. [Alcance acordado](ideas/modulos-distribuibles.md).
+
+## Documentos con líneas
+
+`Fields.One2many("ModuloDetalle", { inverse: "documentoId" })` declara una colección
+del hijo; ModelForm la incorpora y FieldOne2many.Column personaliza sus columnas.
+El guardado aplica lógica/permisos/revisiones de padre e hijos en una transacción.
+Alcance inicial de un nivel, mismo módulo y colección completa acotada: ver
+[contrato y ejemplos](lineas-one2many.md). No requiere crear Server Actions por relación.

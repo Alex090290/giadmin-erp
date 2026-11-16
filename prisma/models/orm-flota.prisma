@@ -52,4 +52,22 @@ model FlotaVehicle {
   @@index([modeloId])
   @@index([createBy])
   @@map("flota_vehicle")
+  flotaMantenimientoVehicleIdRecords FlotaMantenimiento[] @relation("FlotaMantenimiento_vehicleId")
+}
+
+model FlotaMantenimiento {
+  id String @id @default(cuid())
+  active Boolean @default(true)
+  name String @db.VarChar(300)
+  vehicleId String @map("vehicle_id")
+  vehicle FlotaVehicle @relation("FlotaMantenimiento_vehicleId", fields: [vehicleId], references: [id], onDelete: Restrict)
+  fecha DateTime @db.Timestamptz(3)
+  kilometraje Int
+  createBy String? @map("create_by")
+  createByUser User? @relation("FlotaMantenimiento_createBy", fields: [createBy], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  @@index([vehicleId])
+  @@index([createBy])
+  @@map("flota_mantenimiento")
 }

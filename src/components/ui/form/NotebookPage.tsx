@@ -37,7 +37,7 @@ export default function NotebookPage({ name, disabled = false, children, classNa
 
   return <div ref={panel} id={notebookPageId(id, name)} role="tabpanel" aria-labelledby={notebookTabId(id, name)}
     data-notebook-panel={name} data-notebook-disabled={disabled || undefined} hidden={active !== name} inert={active !== name}
-    tabIndex={0} className={`min-w-0 rounded-b-xl outline-offset-4 focus-visible:outline-2 focus-visible:outline-primary ${active !== name ? "hidden" : ""} ${className}`}>
-    <div className="grid min-w-0 grid-cols-1 items-start gap-4 p-3 @2xl/form:grid-cols-2 sm:p-5">{children}</div>
+    tabIndex={0} className={`min-w-0 rounded-b-xl [&_[data-one2many-root]]:border-0 outline-offset-4 focus-visible:outline-2 focus-visible:outline-primary ${active !== name ? "hidden" : ""} ${className}`}>
+    <div className="grid min-w-0 grid-cols-1 items-start gap-4 @2xl/form:grid-cols-2">{children}</div>
   </div>;
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { modelSnapshot } from "./snapshot";
 import { z } from "zod";
 import type { Field } from "./fields";
 import { isField } from "./fields";
@@ -15,7 +16,7 @@ export type ReactionContext = Pick<ModelContext,"tx"|"actor"|"id"> & {
 type Declarations = { onchange?:readonly ReactionDeclaration[]; constraints?:readonly ConstraintDeclaration[]; preview?:Readonly<Record<string,Field>> };
 const names=(values:readonly string[], allowed:Set<string>)=>Array.isArray(values)&&values.length<=12&&new Set(values).size===values.length&&values.every(name=>allowed.has(name));
 const forbidden=new Set(["id","revision","createdAt","updatedAt","createBy","createByUser","constructor","prototype","__proto__"]);
-export function compileModelMethods(instance:object & Declarations, fields:Readonly<Record<string,Field>>, relatedFields:Readonly<Record<string,Field>> = {}, computedFields:Readonly<Record<string,Field>> = {}) {
+export function compileModelMethods(instance:object & Declarations, fields:Readonly<Record<string,Field>>, relatedFields:Readonly<Record<string,Field>> = {}, computedFields:Readonly<Record<string,Field>> = {}, collectionNames: readonly string[] = []) {
   const decorated=decoratedMethods(instance);
   const declarations=[...(instance.onchange??[]),...decorated.reactions];
   const constraints=[...(instance.constraints??[]),...decorated.constraints];
@@ -78,7 +79,7 @@ export function compileModelMethods(instance:object & Declarations, fields:Reado
   }
   const constrained=new Set<string>();
   for(const rule of constraints) {
-    if(constrained.has(rule.method)||!rule.fields.length||!names(rule.fields,new Set(Object.keys(fields)))) throw new Error(`Restricción inválida/duplicada: ${rule.method}.`);
+    if(constrained.has(rule.method)||!rule.fields.length||!names(rule.fields,new Set([...Object.keys(fields),...collectionNames]))) throw new Error(`Restricción inválida/duplicada: ${rule.method}.`);
     constrained.add(rule.method);method(rule.method);
   }
   if(decorated.displays.length>1) throw new Error("Sólo se admite un método displayName decorado.");
@@ -118,7 +119,7 @@ export function compileModelMethods(instance:object & Declarations, fields:Reado
     format(record:ReactionValues) {return method(display!.method).call(instance,record,{} as ReactionContext);},
     async constrain(values:ReactionValues,context:ModelContext) {
       for(const rule of constraints) {
-        const result=await method(rule.method).call(instance,Object.freeze({...values}),context);
+        const result=await method(rule.method).call(instance,modelSnapshot(values),context);
         if(result!==undefined) throw new Error("Una restricción debe lanzar ModelValidationError o devolver void.");
       }
     },

@@ -1,0 +1,109 @@
+import assert from "node:assert/strict";
+import { config } from "dotenv";
+config({path:".env.local",quiet:true});
+const {prisma}=await import("./src/lib/prisma");
+const {modelService,modelClientConfig,withActor}=await import("./src/lib/modules/registry");
+const {readAccessCapabilities}=await import("./src/lib/access/engine");
+const {hashPassword}=await import("./src/lib/auth/password");
+const password=await hashPassword("lines-test-only");
+const user=await prisma.user.create({data:{login:"lines-root",password,isAdmin:true}});
+const member=await prisma.user.create({data:{login:"lines-editor",password}});
+const partial=await prisma.user.create({data:{login:"lines-partial",password}});
+await prisma.accessUserGroup.createMany({data:[{userId:member.id,groupId:"lineas.editor"},{userId:partial.id,groupId:"lineas.parcial"}]});
+const actor={id:user.id,sessionVersion:user.sessionVersion},editor={id:member.id,sessionVersion:member.sessionVersion},reader={id:partial.id,sessionVersion:partial.sessionVersion};
+const parents=modelService("lineas.documento"),children=modelService("lineas.detalle");
+type Doc=Record<string,unknown>&{id:string;revision:string;lineas:Record<string,unknown>[]};
+const row=(name="normal",cantidad=1)=>({name,cantidad});
+const input=(lineas:Record<string,unknown>[]=[])=>({name:"Documento",limite:100,estado:"draft",lineas});
+const saved=async(values:unknown,who=actor)=>{const result=await parents.save(prisma,who,values);assert.ok(result.ok,JSON.stringify(result));return result.values as Doc;};
+const reopened=async(id:string)=>{const result=await parents.read(prisma,actor,id);assert.ok(result.ok,JSON.stringify(result));return result.values as Doc;};
+const fail=async(values:unknown,who=actor)=>{const before=await prisma.lineasDocumento.findMany({orderBy:{id:"asc"}}),lines=await prisma.lineasDetalle.findMany({orderBy:{id:"asc"}}),activity=await prisma.recordActivity.count();const result=await parents.save(prisma,who,values);assert.equal(result.ok,false,JSON.stringify(result));assert.deepEqual(await prisma.lineasDocumento.findMany({orderBy:{id:"asc"}}),before);assert.deepEqual(await prisma.lineasDetalle.findMany({orderBy:{id:"asc"}}),lines);assert.equal(await prisma.recordActivity.count(),activity);return result;};
+let doc=await saved(input([row("  doble  "),row("segundo")]));
+assert.equal(doc.lineas.length,2);assert.equal(doc.lineas.find(line=>line.name==="DOBLE")?.cantidad,2);
+assert.ok(doc.lineas.every(line=>line.id&&line.revision&&!Object.hasOwn(line,"documentoId")));
+assert.equal((await prisma.lineasDetalle.findFirstOrThrow()).createBy,actor.id);
+assert.equal((await prisma.recordActivity.count()),3);
+const failed=await fail({...doc,lineas:[row("bloqueado")]});
+assert.ok(!failed.ok&&failed.fieldErrors?.["lineas.0.name"]);
+await fail({...doc,lineas:[row("fallar")]});
+await fail({...input([row("doble")]),limite:1}); // aggregate sees child beforeSave's canonical value
+for(const lineas of [[...doc.lineas,doc.lineas[0]],[{...doc.lineas[0],id:"foreign"}],[{...doc.lineas[0],revision:"2000-01-01T00:00:00.000Z"}],[row(),row(),row(),row()],[{...row(),documentoId:doc.id}],[{...row(),unknown:true}]]) await fail({...doc,lineas});
+const {lineas:omitted,...incomplete}=doc;void omitted;await fail(incomplete);
+const old=doc;doc=await saved({...doc,lineas:[{...doc.lineas[0],cantidad:3},row("nuevo")]});
+assert.equal(await prisma.lineasDetalle.count({where:{documentoId:doc.id}}),2);
+assert.notEqual(doc.revision,old.revision);await fail(old);
+const independent=await children.save(prisma,actor,{...doc.lineas[0],documentoId:doc.id,cantidad:4});assert.ok(independent.ok,JSON.stringify(independent));
+let latest=await reopened(doc.id);assert.notEqual(latest.revision,doc.revision);await fail(doc);doc=latest;
+const other=await saved(input());
+assert.equal((await children.save(prisma,actor,{...independent.values,documentoId:other.id})).ok,false);
+const small=await saved({...input([row()]),limite:1});
+const constrained=await children.save(prisma,actor,{...small.lineas[0],documentoId:small.id,cantidad:2});assert.equal(constrained.ok,false);assert.deepEqual(await reopened(small.id),small);
+// Unlink refreshes the aggregate; FK Restrict prevents deleting a parent with lines.
+assert.equal((await parents.remove(prisma,actor,[{id:doc.id,revision:doc.revision}])).ok,false);
+assert.ok((await children.remove(prisma,actor,[{id:String(doc.lineas[0].id),revision:String(doc.lineas[0].revision)}])).ok);
+latest=await reopened(doc.id);assert.equal(latest.lineas.length,1);assert.notEqual(latest.revision,doc.revision);doc=latest;
+const action=await parents.action(prisma,actor,{action:"confirmar",id:doc.id,revision:doc.revision});assert.ok(action.ok,JSON.stringify(action));assert.equal((action.values as Doc).lineas.length,1);
+doc=action.values as Doc;
+assert.equal((await children.remove(prisma,actor,[{id:String(doc.lineas[0].id),revision:String(doc.lineas[0].revision)}])).ok,false);
+assert.deepEqual(await reopened(doc.id),doc);
+const move=await parents.move(prisma,actor,{id:doc.id,revision:doc.revision,from:"done",to:"draft"});assert.ok(move.ok,JSON.stringify(move));doc=await reopened(doc.id);assert.equal(doc.lineas.length,1);
+// Each child operation requires its own permission; unchanged lines remain valid.
+const override=await prisma.accessModelOverride.create({data:{groupId:"lineas.editor",model:"lineas.detalle",read:true,create:false,write:false,unlink:false}});
+doc=await saved({...doc,name:"Sólo el padre"},editor);
+await fail({...doc,lineas:[...doc.lineas,row()]},editor);
+await fail({...doc,lineas:doc.lineas.map(line=>({...line,cantidad:7}))},editor);
+await fail({...doc,lineas:[]},editor);
+await prisma.accessModelOverride.update({where:{groupId_model:{groupId:override.groupId,model:override.model}},data:{read:false}});
+assert.equal((await parents.read(prisma,editor,doc.id)).ok,false);
+await prisma.accessModelOverride.delete({where:{groupId_model:{groupId:override.groupId,model:override.model}}});
+// Incomplete visibility must never turn hidden lines into deletions.
+assert.equal((await parents.read(prisma,reader,small.id)).ok,true);
+assert.equal((await parents.read(prisma,reader,doc.id)).ok,true);
+const hidden=await saved(input([row("oculta",2)]));
+assert.equal((await parents.read(prisma,reader,hidden.id)).ok,false);
+await fail({...hidden,lineas:[]},reader);
+// Child create checks owner write access before writing or leaking an existing document.
+const parentOverride=await prisma.accessModelOverride.create({data:{groupId:"lineas.editor",model:"lineas.documento",read:true,create:true,write:false,unlink:false}});
+const before=await prisma.lineasDetalle.count();assert.equal((await children.save(prisma,editor,{...row(),documentoId:other.id})).ok,false);assert.equal(await prisma.lineasDetalle.count(),before);
+await prisma.accessModelOverride.delete({where:{groupId_model:{groupId:parentOverride.groupId,model:parentOverride.model}}});
+const access=await prisma.$transaction(tx=>readAccessCapabilities(tx,editor));
+const ui=modelClientConfig("lineas.documento",access);assert.equal(ui.lines?.lineas.fields.documentoId,undefined);assert.equal(ui.lines?.lineas.capabilities.create,true);
+const full=await saved(input([row("one"),row("two"),row("three")]));
+assert.equal((await children.save(prisma,actor,{...row("four"),documentoId:full.id})).ok,false);
+assert.deepEqual(await reopened(full.id),full);
+// A parent hook can canonicalize the independently saved child a second time.
+const canonicalParent=await saved({...input([row()]),name:"CANONICO"});
+const canonicalChild=await children.save(prisma,actor,{...canonicalParent.lineas[0],documentoId:canonicalParent.id,name:"cambiar"});assert.ok(canonicalChild.ok,JSON.stringify(canonicalChild));
+assert.equal(canonicalChild.values.name,"CANONICO");
+assert.equal(canonicalChild.values.revision,(await prisma.lineasDetalle.findUniqueOrThrow({where:{id:canonicalChild.values.id}})).updatedAt.toISOString());
+// Concurrent saves: one complete aggregate wins and stale revisions cannot remove its rows.
+const race=await saved(input());const results=await Promise.all([parents.save(prisma,actor,{...race,lineas:[row("A")]}),parents.save(prisma,actor,{...race,lineas:[row("B")]})]);assert.equal(results.filter(result=>result.ok).length,1);assert.equal((await reopened(race.id)).lineas.length,1);
+// Lines inherit the parent's CURRENT read scope for every server entry point.
+const ownerUser=await prisma.user.create({data:{login:"lines-owner",password}});
+const ownerActor={id:ownerUser.id,sessionVersion:ownerUser.sessionVersion};
+await prisma.accessUserGroup.create({data:{userId:ownerActor.id,groupId:"lineas.propio"}});
+const mine=await saved(input([row("Visible")]),ownerActor);
+const myLine=mine.lineas[0],foreignLine=hidden.lineas[0];
+assert.equal((await children.read(prisma,ownerActor,String(myLine.id))).ok,true);
+assert.equal((await children.read(prisma,ownerActor,String(foreignLine.id))).ok,false);
+const state={query:"",sort:"name",direction:"asc" as const,page:1,pageSize:25,filters:[]};
+const listing=await withActor(ownerActor,()=>children.list(prisma,ownerActor,state));assert.ok(listing.ok,JSON.stringify(listing));assert.equal(listing.data.total,1);assert.equal(listing.data.rows[0].id,myLine.id);
+const lookup=await children.lookup(prisma,ownerActor,{query:"",page:1,pageSize:10});assert.ok(lookup.ok,JSON.stringify(lookup));assert.ok(lookup.items.length===1 && lookup.items.every(option=>option.value===myLine.id));
+assert.equal((await children.save(prisma,ownerActor,{...foreignLine,documentoId:hidden.id,name:"Forbidden"})).ok,false);
+assert.equal((await children.remove(prisma,ownerActor,[{id:String(foreignLine.id),revision:String(foreignLine.revision)}])).ok,false);
+assert.equal((await children.save(prisma,ownerActor,{...row(),documentoId:hidden.id})).ok,false);
+// Parent rules remain live: a rule state change is reflected without restarting the process.
+await prisma.accessRuleState.create({data:{ruleId:"lineas.propios",active:false}});
+assert.equal((await children.read(prisma,ownerActor,String(foreignLine.id))).ok,true);
+await prisma.accessRuleState.delete({where:{ruleId:"lineas.propios"}});
+assert.equal((await children.read(prisma,ownerActor,String(foreignLine.id))).ok,false);
+// Own grants never give access to a parent's denied model, including lookup and UI hints.
+await prisma.accessModelOverride.create({data:{groupId:"lineas.propio",model:"lineas.documento",read:false,create:true,write:true,unlink:true}});
+assert.equal((await children.read(prisma,ownerActor,String(myLine.id))).ok,false);
+const deniedLookup=await children.lookup(prisma,ownerActor,{query:"",page:1,pageSize:10});assert.equal(deniedLookup.ok,false);
+const deniedAccess=await prisma.$transaction(tx=>readAccessCapabilities(tx,ownerActor));assert.deepEqual(deniedAccess.modelAccess["lineas.detalle"],{read:false,create:false,write:false,unlink:false});
+assert.equal((await children.read(prisma,actor,String(foreignLine.id))).ok,true);
+console.log("✓ Acceso heredado: lectura/lista/lookup y escrituras del hijo restringidos a padres accesibles, reglas vigentes, permiso de lectura del padre y superusuario.");
+await prisma.user.update({where:{id:member.id},data:{sessionVersion:{increment:1}}});await fail({...doc,name:"Sesión vieja"},editor);
+console.log("✓ One2many PostgreSQL: altas/cambios/bajas, lógica hija y agregada, auditoría, permisos/reglas, IDs/revisiones, acciones/kanban, concurrencia y rollback completo.");
+await prisma.$disconnect();

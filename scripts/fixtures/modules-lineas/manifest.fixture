@@ -1,0 +1,41 @@
+import "server-only";
+import { Fields, Model, ModelValidationError, constraint, action, type ModelContext } from "@/lib/orm";
+import { defineModule } from "@/lib/modules/define";
+class Documento extends Model {
+  name = Fields.Text({required:true,tracking:true});
+  limite = Fields.Integer({required:true,default:100,min:0});
+  estado = Fields.Selection([{value:"draft",label:"Borrador"},{value:"done",label:"Confirmado"}],{required:true,default:"draft"});
+  lineas = Fields.One2many("LineasDetalle",{inverse:"documentoId",label:"Detalles",maxRows:3});
+  beforeSave(values:Record<string,unknown>,context:ModelContext) {
+    const previous=context.previous as {lineas?:unknown[]}|null;
+    if(previous?.lineas && (!Object.isFrozen(previous.lineas)||previous.lineas.some(row=>!Object.isFrozen(row)))) throw new Error("Mutable previous lines");
+    return values.name==="CANONICO" ? {...values,lineas:(values.lineas as Record<string,unknown>[]).map(row=>row.name==="CAMBIAR"?{...row,name:"CANONICO"}:row)} : values;
+  }
+  @constraint("limite","lineas")
+  total(values: Readonly<Record<string,unknown>>) {
+    const rows=values.lineas as {cantidad:number}[];
+    if (!Object.isFrozen(rows) || rows.some(row=>!Object.isFrozen(row))) throw new Error("Mutable constraint lines");
+    if(values.estado==="done"&&!rows.length) throw new ModelValidationError("Un documento confirmado necesita líneas.");
+    if(rows.reduce((total,row)=>total+row.cantidad,0)>Number(values.limite)) throw new ModelValidationError("Las líneas superan el límite.",{lineas:"Reduce la cantidad."});
+  }
+  @action({label:"Confirmar"})
+  confirmar() {return {estado:"done"};}
+}
+class Detalle extends Model {
+  name=Fields.Text({required:true,maxLength:100,tracking:true});
+  documentoId=Fields.Many2one("LineasDocumento",{required:true,onDelete:"Restrict"});
+  cantidad=Fields.Integer({required:true,min:1,default:1});
+  normalize(values:Readonly<Record<string,unknown>>) {return {...values,name:String(values.name).trim().toUpperCase()};}
+  beforeSave(values:Record<string,unknown>,context:ModelContext) {
+    if(context.previous && !Object.isFrozen(context.previous)) throw new Error("Mutable snapshot");
+    return {...values,cantidad:values.name==="DOBLE"?2:values.cantidad};
+  }
+  @constraint("name")
+  noBloqueado(values:Readonly<Record<string,unknown>>) {if(values.name==="BLOQUEADO") throw new ModelValidationError("Detalle bloqueado.",{name:"Elige otro nombre."});}
+  afterSave(record:Record<string,unknown>) {if(record.name==="FALLAR") throw new Error("Fallo posterior de prueba");}
+}
+export default defineModule({id:"lineas",name:"Líneas",icon:"list",models:{documento:{model:Documento,kanban:"estado"},detalle:Detalle},
+  groups:{editor:"Editor",parcial:"Lectura parcial",propio:"Documentos propios"},
+  access:[{group:"propio",models:["documento","detalle"],perms:"crud"},{group:"editor",models:["documento","detalle"],perms:"crud"},{group:"parcial",models:["documento","detalle"],perms:"crud"}],
+  rules:[{id:"detalles-todos",label:"Todos los detalles propios del alcance padre",models:"detalle",groups:["propio"],domain:[]},{id:"propios",label:"Documentos propios",models:"documento",groups:["propio"],domain:({actor})=>[{field:"createBy",operator:"eq",value:actor.id}]},{id:"parcial",label:"Oculta detalles",models:"detalle",groups:["parcial"],domain:[{field:"cantidad",operator:"eq",value:1}]}],
+});

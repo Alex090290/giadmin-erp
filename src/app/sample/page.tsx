@@ -15,6 +15,7 @@ import ListViewSample from "./ListViewSample";
 import FormViewSample from "./FormViewSample";
 import AlertsSample from "./AlertsSample";
 import One2manySample from "./One2manySample";
+import One2manyDeclarativeSample from "./One2manyDeclarativeSample";
 import CollectionViewsSample from "./CollectionViewsSample";
 import ComputedCollectionSample from "./ComputedCollectionSample";
 import RelationFilterSample from "./RelationFilterSample";
@@ -71,6 +72,7 @@ export default function PageSample() {
             <a className="btn btn-sm btn-outline" href="#model-display-name">Nombre desde el modelo</a>
             <a className="btn btn-sm btn-outline" href="#field-relation-tag">FieldRelationTag</a>
             <a className="btn btn-sm btn-outline" href="#field-one2many">FieldOne2many</a>
+            <a className="btn btn-sm btn-outline" href="#one2many-model">Líneas declarativas</a>
             <a className="btn btn-sm btn-outline" href="#field-date">FieldDate</a>
             <a className="btn btn-sm btn-outline" href="#field-boolean">FieldBoolean</a>
             <a className="btn btn-sm btn-outline" href="#field-image">FieldImage</a>
@@ -101,6 +103,7 @@ export default function PageSample() {
         <ModelDisplayNameSample />
         <RelationTagSample />
         <One2manySample />
+        <One2manyDeclarativeSample />
         <ImageSample />
         <ImageSample widget="avatar" />
       </div>

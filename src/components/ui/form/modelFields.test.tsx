@@ -115,3 +115,18 @@ test("FormButton hides actions outside the published capability snapshot and all
   const readonly = renderToStaticMarkup(<FormActionsContext.Provider value={{ ...context, readOnly: true }}>{buttons}</FormActionsContext.Provider>);
   assert.doesNotMatch(readonly, /<button/);
 });
+
+test("declarative One2many columns inherit child metadata and preserve persisted IDs", async () => {
+  const { default: FieldOne2many } = await import("./FieldOne2many");
+  const childFields={name:Fields.Text({label:"Descripción",required:true,maxLength:17}),cantidad:Fields.Integer({label:"Cantidad",required:true,min:0})};
+  function LinesFixture({readonly=false}:{readonly?:boolean}) {
+    const methods=useForm({defaultValues:{lines:[{id:"database-id",revision:"2026-11-15T00:00:00.000Z",name:"Guardado",cantidad:2}]}});
+    return <FormProvider {...methods}><FormModelContext.Provider value={{fields:{},lines:{lines:{fields:childFields,minRows:0,maxRows:3,label:"Detalles",createRow:()=>({name:"",cantidad:1}),capabilities:{read:true,create:!readonly,write:!readonly,unlink:!readonly}}}}}>
+      <FieldOne2many name="lines"><FieldOne2many.Column name="name" /><FieldOne2many.Column name="cantidad" render={({fieldName})=><FieldNumber name={fieldName("cantidad")} type="integer" />} /></FieldOne2many>
+      <output>{methods.getValues("lines.0.id")}</output>
+    </FormModelContext.Provider></FormProvider>;
+  }
+  const html=renderToStaticMarkup(<LinesFixture />);
+  assert.match(html,/Descripción/);assert.match(html,/maxLength="17"/i);assert.match(html,/name="lines.0.name"/);assert.match(html,/value="Guardado"/);assert.match(html,/database-id/);assert.match(html,/Agregar línea/);assert.match(html,/autocomplete="off"/i);assert.doesNotMatch(html,/documentoId/);
+  const readonly=renderToStaticMarkup(<LinesFixture readonly />);assert.doesNotMatch(readonly,/Agregar línea|Quitar línea/);assert.match(readonly,/<fieldset disabled=""/);assert.match(readonly,/value="Guardado"/);
+});

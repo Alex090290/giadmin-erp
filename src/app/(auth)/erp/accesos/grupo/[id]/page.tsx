@@ -4,9 +4,10 @@ import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { requireAdmin } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
 import { groupDetail } from "@/lib/access/admin";
+import { menuPolicyKey } from "@/lib/access/menus";
 import { accessOperations } from "@/lib/access/declare";
 import ActionForm from "../../ActionForm";
-import { saveMembers, saveModelAccess, saveRules } from "../../actions";
+import { saveMembers, saveModelAccess, saveRules, saveMenuVisibility } from "../../actions";
 import { accessManifest } from "../../manifest";
 
 type Props = { params: Promise<{ id: string }> };
@@ -16,7 +17,7 @@ async function Group({ params }: Props) {
   const { id } = await params;
   const detail = await groupDetail(prisma, await requireAdmin(), decodeURIComponent(id));
   if (!detail) notFound();
-  const { group, users, models, rules } = detail;
+  const { group, users, models, rules, menus, menuRevision } = detail;
   return <>
     <Breadcrumbs items={[{ label: "Aplicaciones", href: "/erp" }, { label: accessManifest.name, href: "/erp/accesos" }, { label: group.label }]} />
     <header className="space-y-1">
@@ -60,6 +61,35 @@ async function Group({ params }: Props) {
             </tbody>
           </table>
         </div>
+      </ActionForm>
+    </section>
+
+    <section aria-labelledby="menus" className="space-y-2 rounded-box border border-base-300 p-3">
+      <h2 id="menus" className="font-semibold">Visibilidad de menús</h2>
+      <p className="text-xs text-base-content/60">Ocultar se aplica a los miembros de este grupo y a quienes lo heredan. Cualquier ocultación de sus grupos prevalece. Ocultar un dropdown oculta sus opciones. «Según manifest» conserva los accesos existentes; no concede permisos. Los administradores siempre ven los menús permitidos por el manifest.</p>
+      <ActionForm action={saveMenuVisibility} label="Guardar menús">
+        <input type="hidden" name="group" value={group.id} />
+        <input type="hidden" name="revision" value={menuRevision} />
+        {Array.from(new Set(menus.map(menu => menu.applicationId))).map(applicationId => {
+          const entries = menus.filter(menu => menu.applicationId === applicationId);
+          return <details key={applicationId} className="rounded-box border border-base-300" open={applicationId === group.module}>
+            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">{entries[0].applicationName}</summary>
+            <ul className="divide-y divide-base-300 border-t border-base-300">
+              {entries.map(menu => {
+                const key = menuPolicyKey(menu.applicationId, menu.menuId);
+                return <li key={key} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                  <input type="hidden" name="menu" value={key} />
+                  <label htmlFor={`menu-${key}`} className="min-w-0 flex-1 text-sm wrap-anywhere">{menu.label}{menu.group && <span className="ml-2 badge badge-ghost badge-sm">Dropdown</span>}</label>
+                  {menu.inherited.length > 0 && <span className="text-xs text-base-content/60">Oculto por: {Array.from(new Set(menu.inherited)).join(", ")}</span>}
+                  <select id={`menu-${key}`} name={`visibility|${key}`} autoComplete="off" className="select select-bordered select-sm w-44 max-w-full" defaultValue={menu.hidden ? "hidden" : "default"}
+                    aria-label={`Visibilidad de ${menu.applicationName} · ${menu.label}`}>
+                    <option value="default">Según manifest</option><option value="hidden">Oculto</option>
+                  </select>
+                </li>;
+              })}
+            </ul>
+          </details>;
+        })}
       </ActionForm>
     </section>
 

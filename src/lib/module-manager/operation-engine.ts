@@ -115,7 +115,7 @@ async function accessKeys(root: string, id: string) {
   return { groups, rules };
 }
 
-function cleanupSQL(schema: string, models: readonly string[], modelIds: readonly string[], keys: { groups: string[]; rules: string[] }) {
+function cleanupSQL(schema: string, applicationId: string, models: readonly string[], modelIds: readonly string[], keys: { groups: string[]; rules: string[] }) {
   // Unqualified like every Prisma migration: the file must replay in any schema (shadow
   // databases, temporary test schemas, deployments not using "public"). `schema` only
   // documents where the plan was reviewed.
@@ -126,6 +126,8 @@ function cleanupSQL(schema: string, models: readonly string[], modelIds: readonl
   const conditions = [keys.groups.length ? `group_id IN (${keys.groups.map(literalSQL).join(", ")})` : "", modelIds.length ? `model IN (${modelIds.map(literalSQL).join(", ")})` : ""].filter(Boolean);
   if (conditions.length) statements.push(`DELETE FROM ${table("access_model_overrides")} WHERE ${conditions.join(" OR ")};`);
   if (keys.rules.length) statements.push(`DELETE FROM ${table("access_rule_states")} WHERE rule_id IN (${keys.rules.map(literalSQL).join(", ")});`);
+  const menuConditions = [`application_id = ${literalSQL(applicationId)}`, ...(keys.groups.length ? [`group_id IN (${keys.groups.map(literalSQL).join(", ")})`] : [])];
+  statements.push(`DELETE FROM ${table("access_menu_hidden")} WHERE ${menuConditions.join(" OR ")};`);
   return statements.join("\n");
 }
 
@@ -236,7 +238,7 @@ async function buildPlan(root: string, actor: ModelActor, input: z.output<typeof
           const modules = { ...snapshot.state.modules }; delete modules[input.module];
           changes.push({ path: join(root, "prisma/.orm-installations.json"), before: snapshot.stateText!, after: `${JSON.stringify({ version: 1, modules }, null, 2)}\n` });
           const publicModels = descriptor.kind === "declarative" ? descriptor.models.map(name => `${input.module}.${name.slice(input.module.length).toLowerCase()}`) : [];
-          sql = cleanupSQL(schemaName(), descriptor.models, publicModels, keys) + "\n" + await schemaDiff(root, sources);
+          sql = cleanupSQL(schemaName(), input.module, descriptor.models, publicModels, keys) + "\n" + await schemaDiff(root, sources);
           warnings.push("Se eliminarán registros, actividad y configuración exclusiva. Antes del SQL se creará y restaurará un respaldo en una base temporal.");
         }
       }

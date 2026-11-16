@@ -1,8 +1,9 @@
 import "server-only";
 import { z } from "zod";
-import { isField, type Field, type FieldMetadata } from "./fields";
+import { isField, isOne2many, type One2manyField, type Field, type FieldMetadata } from "./fields";
 import { ModelValidationError, type ModelActor, type ModelContext } from "./context";
 import type { Prisma } from "@/generated/prisma/client";
+import { modelSnapshot } from "./snapshot";
 import { compileModelMethods } from "./reactions";
 import { decoratedMethods, type ReactionDeclaration, type ConstraintDeclaration } from "./decorators";
 import type { ReactionContext } from "./reactions";
@@ -28,6 +29,9 @@ type Constructor = new () => Model;
 type DeclaredFields<I> = { [K in keyof I as I[K] extends { readonly related: string } | {readonly compute:string} ? never : I[K] extends Field ? K extends string ? K : never : never]: Extract<I[K], Field> };
 type Shape<I> = { [K in keyof DeclaredFields<I>]: DeclaredFields<I>[K]["schema"] };
 type Values<I> = { [K in keyof DeclaredFields<I>]: z.output<DeclaredFields<I>[K]["schema"]> };
+type RelationFields<I> = { [K in keyof I as I[K] extends One2manyField ? K extends string ? K : never : never]: Extract<I[K], One2manyField> };
+type RelationShape<I> = { [K in keyof RelationFields<I>]: RelationFields<I>[K]["schema"] };
+type RelationInput<I> = { [K in keyof RelationFields<I>]: z.input<RelationFields<I>[K]["schema"]> };
 type Input<I> = { [K in keyof DeclaredFields<I>]: z.input<DeclaredFields<I>[K]["schema"]> };
 export type ModelOptions = { readonly name: string; readonly table: string };
 const reservedFields = new Set(["id", "revision", "createdAt", "updatedAt", "createBy", "createByUser", "constructor", "prototype"]);
@@ -37,6 +41,7 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
   const instance = new Declaration();
   if (!(instance instanceof Model)) throw new Error("La declaración debe extender Model.");
   const fields: Record<string, Field> = {};
+  const one2manyFields: Record<string, One2manyField> = {};
   const relatedFields: Record<string, Field> = {};
   const computedFields: Record<string, Field> = {};
   const metadata: Record<string, FieldMetadata> = {};
@@ -44,6 +49,10 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
   for (const [name, value] of Object.entries(instance)) {
     if (["displayFields","onchange","constraints","preview","displayRelations"].includes(name)) continue;
     if (typeof value === "function") continue;
+    if (isOne2many(value)) {
+      if (!/^[a-z][A-Za-z0-9]*$/.test(name) || reservedFields.has(name)) throw new Error(`Nombre One2many inválido: ${name}.`);
+      one2manyFields[name] = value; continue;
+    }
     if (!isField(value)) throw new Error(`${options.name}.${name}: declara el dato mediante Fields.`);
     if (!/^[a-z][A-Za-z0-9]*$/.test(name) || reservedFields.has(name)) throw new Error(`Nombre de campo inválido o reservado: ${name}.`);
     if (value.metadata.related) { relatedFields[name] = value; continue; }
@@ -54,17 +63,18 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
   }
   if (!Object.keys(fields).length) throw new Error("El modelo debe declarar al menos un Field.");
   for(const [alias,target] of Object.entries(instance.displayRelations??{})) if(displayRelation(metadata,alias)[1].target!==target.name) throw new Error(`Destino inválido: ${alias}.`);
-  const methods=compileModelMethods(instance,fields,relatedFields,computedFields);
+  const methods=compileModelMethods(instance,fields,relatedFields,computedFields,Object.keys(one2manyFields));
   if(methods.display && instance.displayFields) throw new Error("Usa displayFields o @displayName, no ambos.");
   const displayKeys = displayFieldPaths(metadata, methods.display?.fields ?? instance.displayFields);
   const actions = compileActions(options.name, instance, decoratedMethods(instance).actions);
   // Runtime collection filters precisely the descriptor keys represented by Shape.
   const schema = z.strictObject(shape as Shape<InstanceType<C>>);
+  const formSchema = z.strictObject({ ...shape, ...Object.fromEntries(Object.entries(one2manyFields).map(([name, field]) => [name, field.schema])) } as Shape<InstanceType<C>> & RelationShape<InstanceType<C>>);
   return Object.freeze({
     name: options.name, table: options.table,
     fields: Object.freeze(fields) as Readonly<DeclaredFields<InstanceType<C>>>,
     metadata: Object.freeze(metadata) as Readonly<{ [K in keyof DeclaredFields<InstanceType<C>>]: FieldMetadata }>,
-    schema,
+    schema, formSchema, one2manyFields: Object.freeze(one2manyFields) as Readonly<Record<string, One2manyField>>,
     displayFields: displayKeys,
     displayRelations:(instance.displayRelations??{}) as InstanceType<C> extends {displayRelations:infer R}?R:Record<never,never>,
     reactionRules: methods.rules,
@@ -79,20 +89,24 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
       const label = methods.display ? methods.format(projected) : instance.displayName ? instance.displayName(projected) : "";
       return normalizeDisplayName(label, record, metadata);
     },
-    createDefaults(): Input<InstanceType<C>> {
-      return Object.fromEntries(Object.entries(fields).map(([name, field]) => [name, field.createDefault()])) as Input<InstanceType<C>>;
+    createDefaults(): Input<InstanceType<C>> & RelationInput<InstanceType<C>> {
+      return Object.fromEntries(Object.entries({...fields,...one2manyFields}).map(([name, field]) => [name, field.createDefault()])) as Input<InstanceType<C>> & RelationInput<InstanceType<C>>;
     },
     parse(input: unknown): Values<InstanceType<C>> {
       return schema.parse(input) as Values<InstanceType<C>>;
     },
     normalize(input: Record<string, unknown>): Values<InstanceType<C>> {
       // Unknown input keys must fail even if the normalizer would drop them.
-      if (Object.keys(input).some(key => !Object.hasOwn(fields, key))) throw new Error("La normalización sólo acepta campos declarados.");
-      const values = Object.freeze({ ...input });
-      return schema.parse(instance.normalize ? instance.normalize(values) : values) as Values<InstanceType<C>>;
+      if (Object.keys(input).some(key => !Object.hasOwn(fields, key) && !Object.hasOwn(one2manyFields, key))) throw new Error("La normalización sólo acepta campos declarados.");
+      const values = modelSnapshot(input);
+      return formSchema.parse(instance.normalize ? instance.normalize(values) : values) as Values<InstanceType<C>>;
     },
+    async prepareSave(values: Values<InstanceType<C>>, context: ModelContext<Values<InstanceType<C>>>) {
+      return formSchema.parse(instance.beforeSave ? await instance.beforeSave(values, context) : values) as Values<InstanceType<C>>;
+    },
+    async constrain(values: Readonly<Record<string, unknown>>, context: ModelContext<Values<InstanceType<C>>>) { await methods.constrain(values,context); },
     async beforeSave(values: Values<InstanceType<C>>, context: ModelContext<Values<InstanceType<C>>>): Promise<Values<InstanceType<C>>> {
-      const result=schema.parse(instance.beforeSave ? await instance.beforeSave(values, context) : values) as Values<InstanceType<C>>;
+      const result=formSchema.parse(instance.beforeSave ? await instance.beforeSave(values, context) : values) as Values<InstanceType<C>>;
       await methods.constrain(result,context);
       return result;
     },
@@ -104,10 +118,10 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
       const declared = actions.byName.get(name);
       if (!declared) throw new ModelValidationError("La acción no está publicada en este modelo.");
       const method = Reflect.get(instance, declared.method) as (record: unknown, context: ActionContext) => unknown;
-      const result = await method.call(instance, Object.freeze({ ...record }), Object.freeze({ ...context }));
+      const result = await method.call(instance, modelSnapshot(record), Object.freeze({ ...context }));
       if (result === undefined || result === null) return {};
       if (typeof result !== "object" || Array.isArray(result)) throw new Error(`${options.name}.${declared.method}: una acción devuelve un objeto con campos declarados o nada.`);
-      const unknownKey = Object.keys(result).find(key => !Object.hasOwn(fields, key));
+      const unknownKey = Object.keys(result).find(key => !Object.hasOwn(fields, key) && !Object.hasOwn(one2manyFields, key));
       if (unknownKey) throw new Error(`${options.name}.${declared.method}: «${unknownKey}» no es un campo declarado.`);
       return { ...(result as Record<string, unknown>) };
     },
@@ -118,9 +132,9 @@ export type ModelAction = { readonly name: string; readonly label: string; reado
 /** Context of a business action: same transaction and authenticated actor as the save pipeline. */
 export type ActionContext = { readonly tx: Prisma.TransactionClient; readonly actor: Readonly<ModelActor>; readonly action: string };
 /** Saved record received by an action method: declared values plus identity and revision. */
-export type ActionRecord<I> = Readonly<Values<I> & { id: string; revision: string }>;
+export type ActionRecord<I> = Readonly<Values<I> & RelationInput<I> & { id: string; revision: string }>;
 /** Patch an action may return: only declared fields. */
-export type ActionPatch<I> = Partial<Values<I>> | void;
+export type ActionPatch<I> = Partial<Values<I> & RelationInput<I>> | void;
 
 const internalMethods = new Set(["normalize", "beforeSave", "afterSave", "displayName", "constructor"]);
 function compileActions(model: string, instance: object, declarations: readonly { method: string; label: string; groups?: readonly string[] }[]) {
@@ -139,8 +153,8 @@ function compileActions(model: string, instance: object, declarations: readonly 
 }
 
 /** Form values of a declaration, for typed custom views: `FieldText<FormValues<typeof Tarea>> name="name"`. Type-only; the class stays server-only. */
-export type FormValues<C extends Constructor> = Input<InstanceType<C>> & { id?: string; revision?: string };
+export type FormValues<C extends Constructor> = Input<InstanceType<C>> & RelationInput<InstanceType<C>> & { id?: string; revision?: string };
 
 type ModelContract = { readonly schema: z.ZodType };
-export type ModelInput<T extends ModelContract> = z.input<T["schema"]>;
+export type ModelInput<T extends ModelContract> = T extends { readonly formSchema: z.ZodType } ? z.input<T["formSchema"]> : z.input<T["schema"]>;
 export type ModelValues<T extends ModelContract> = z.output<T["schema"]>;

@@ -1,6 +1,19 @@
 import { z } from "zod";
 import { IMAGE_URL_MAX_LENGTH, imageUrlSchema, validateImageFolder } from "../uploads/image-policy";
 
+const one2manyTag = Symbol("orm.one2many");
+export type One2manyMetadata = { readonly target: string; readonly inverse: string; readonly label?: string; readonly minRows: number; readonly maxRows: number; readonly invisible?: boolean };
+export type One2manyRow = Record<string, unknown> & { id?: string; revision?: string };
+export type One2manyField<Row extends One2manyRow = One2manyRow> = {
+  readonly [one2manyTag]: true;
+  readonly one2many: One2manyMetadata;
+  readonly schema: z.ZodType<Row[], Row[]>;
+  createDefault(): Row[];
+};
+export function isOne2many(value: unknown): value is One2manyField {
+  return Boolean(value && typeof value === "object" && one2manyTag in value);
+}
+
 const fieldTag = Symbol("orm.field");
 export const INTEGER_MIN = -2147483648;
 export const INTEGER_MAX = 2147483647;
@@ -189,6 +202,13 @@ export const Fields = Object.freeze({
     const value = z.iso.datetime({ error: `${options.label ?? "Fecha y hora"}: usa un ISO UTC válido.` });
     const schema = z.string().nullable().transform(nullableString).pipe(options.required ? value : value.nullable());
     return makeField(schema as z.ZodType<RequiredValue<string, O>, string | null>, options, null, { kind: "datetime" });
+  },
+
+  One2many<Row extends One2manyRow = One2manyRow>(target: string, options: { inverse: string; label?: string; minRows?: number; maxRows?: number; invisible?: boolean }): One2manyField<Row> {
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(target) || !options || typeof options !== "object" || Array.isArray(options) || typeof options.inverse !== "string" || Object.keys(options).some(key => !["inverse", "label", "minRows", "maxRows", "invisible"].includes(key)) || !/^[a-z][A-Za-z0-9]*$/.test(options.inverse) || ["id", "revision", "createBy", "constructor", "prototype", "__proto__"].includes(options.inverse)) throw new Error("One2many necesita un modelo destino y un Many2one inverso válidos.");
+    const minRows = options.minRows ?? 0, maxRows = options.maxRows ?? 50;
+    if (!Number.isSafeInteger(minRows) || !Number.isSafeInteger(maxRows) || minRows < 0 || maxRows < 1 || maxRows > 100 || minRows > maxRows || (options.label !== undefined && (typeof options.label !== "string" || !options.label.trim())) || (options.invisible !== undefined && typeof options.invisible !== "boolean")) throw new Error("One2many admite entre 0 y 100 líneas, con límites y label válidos.");
+    return Object.freeze({ [one2manyTag]: true as const, one2many: Object.freeze({ target, inverse: options.inverse, minRows, maxRows, ...(options.label !== undefined ? { label: options.label } : {}), ...(options.invisible !== undefined ? { invisible: options.invisible } : {}) }), schema: z.array(z.record(z.string(), z.unknown())).min(minRows).max(maxRows) as z.ZodType<Row[], Row[]>, createDefault: () => [] });
   },
 
   Many2one<const O extends Many2oneOptions = Record<never, never>>(target: string, options: O = {} as O): Field<string | null, RequiredValue<string, O>> {

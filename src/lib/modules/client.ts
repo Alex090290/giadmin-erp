@@ -17,17 +17,27 @@ export type ModelUI = ReturnType<typeof buildModelUI>;
 export function buildModelUI(config: ModelClientConfig) {
   const fields = mapValues(config.fields, fieldFromMetadata);
   const readFields = mapValues(config.preview, fieldFromMetadata);
-  const schema = z.strictObject(mapValues(fields, field => field.schema)).extend(recordIdentityShape).superRefine(validateRecordIdentity as never);
+  const lines = mapValues(config.lines ?? {}, line => {
+    const fields = mapValues(line.fields, fieldFromMetadata);
+    const schema = z.strictObject(mapValues(fields, field => field.schema)).extend(recordIdentityShape).superRefine(validateRecordIdentity as never);
+    return {
+      fields, schema, ...line.metadata, capabilities: line.capabilities,
+      createRow: () => mapValues(fields, field => field.createDefault()),
+      lookups: mapValues(line.lookups, target => (request: ModelLookupRequest) => modelLookup(target, request)),
+      uploads: Object.fromEntries(Object.entries(line.fields).filter(([, field]) => field.kind === "image").map(([name]) => [name, createSignedCloudinaryImageUploader(() => modelSignImage(line.model, name))])),
+    };
+  });
+  const schema = z.strictObject({ ...mapValues(fields, field => field.schema), ...mapValues(lines, line => z.array(line.schema).min(line.minRows).max(line.maxRows)) }).extend(recordIdentityShape).superRefine(validateRecordIdentity as never);
   const collectionFields: Record<string, Pick<Field, "metadata">> = mapValues(collectionFieldMetadata(config), metadata => ({ metadata }));
   const images = Object.entries(config.fields).filter(([, field]) => field.kind === "image" && !field.sensitive).map(([name]) => name);
   const recordUI = {
-    fields, readFields,
+    fields, readFields, lines,
     reactions: { rules: config.reactionRules, load: (request: ReactionRequest) => modelReact(config.id, request) },
     lookups: mapValues(config.lookups, target => (request: ModelLookupRequest) => modelLookup(target, request)),
     uploads: Object.fromEntries(images.map(name => [name, createSignedCloudinaryImageUploader(() => modelSignImage(config.id, name))])),
   };
   return {
     config, fields, readFields, collectionFields, schema, recordUI,
-    createDefaults: (): Record<string, unknown> => mapValues(fields, field => field.createDefault()),
+    createDefaults: (): Record<string, unknown> => ({ ...mapValues(fields, field => field.createDefault()), ...mapValues(lines, () => []) }),
   };
 }

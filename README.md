@@ -24,7 +24,7 @@ automáticamente; lista y formulario se resuelven por convención. No requiere
 Las [capacidades efectivas](docs/capacidades-modelos.md) comparten permisos del
 actor entre menús, formularios y colecciones: consulta, crear, eliminar, acciones
 y movimientos. Incluye grupos heredados y ajustes desde Accesos; el servidor
-revalida cada operación. Permisos por campo siguen pendientes.
+revalida cada operación. Accesos incluye un [catálogo de modelos y campos](docs/catalogo-modelos-accesos.md), de sólo lectura para administradores. También permite [ocultar menús por grupo](docs/menus-por-grupo.md), con herencia y revisión de cambios. Permisos por campo siguen pendientes.
 
 ## Comandos del scaffold, en orden
 
@@ -140,3 +140,5 @@ permisos, concurrencia y eliminación con cuentas y un esquema PostgreSQL tempor
 - [Auditoría de registros](docs/auditoria-modelos.md).
 - [Historial de cambios y notas internas](docs/actividad-registros.md).
 - [Vistas de colecciones](docs/vistas-colecciones.md).
+
+Líneas de documentos: [One2many declarativo](docs/lineas-one2many.md), con edición inline, lógica del hijo y guardado transaccional del padre. Demo local en `/sample#one2many-model`.

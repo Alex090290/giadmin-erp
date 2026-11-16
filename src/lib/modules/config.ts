@@ -1,3 +1,5 @@
+import type { AccessPerms } from "../access/declare";
+import type { One2manyMetadata } from "../orm/fields";
 import type { FieldMetadata } from "../orm/fields";
 import type { ReactionRule } from "../orm/reactions.types";
 import type { ListViewConfig } from "../list/types";
@@ -27,7 +29,15 @@ export function collectionViewHref(pathname: string, current: string, view: Coll
 }
 
 /** Serializable, browser-safe description of a module model. Never contains functions or server classes. */
+export type ModelLineConfig = {
+  readonly metadata: One2manyMetadata;
+  readonly model: string;
+  readonly fields: Readonly<Record<string, FieldMetadata>>;
+  readonly lookups: Readonly<Record<string, string>>;
+  readonly capabilities: AccessPerms;
+};
 export type ModelClientConfig = {
+  readonly lines?: Readonly<Record<string, ModelLineConfig>>;
   /** Actor-specific snapshot supplied by the server route, never cached in the model registry. */
   readonly capabilities?: ModelCapabilities;
   readonly id: string;

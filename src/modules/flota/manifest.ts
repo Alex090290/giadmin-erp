@@ -1,3 +1,4 @@
+import { Mantenimiento } from "./models/mantenimiento";
 import { Vehicle } from "./models/vehicle";
 import { Modelo } from "./models/modelo";
 import { Fabricante } from "./models/fabricante";
@@ -30,6 +31,8 @@ export default defineModule({
         card: () => import("./views/VehicleCard"),
       },
     },
+
+    mantenimiento: Mantenimiento,
   },
   menu: {
     Vehículos: "vehicle",
@@ -45,6 +48,7 @@ export default defineModule({
       label: "Operador en flota",
       implies: ["consulta"],
     },
+
     responsable: {
       label: "Responsable de flota",
       implies: ["operador"],
@@ -54,13 +58,18 @@ export default defineModule({
   access: [
     {
       group: "consulta",
-      models: ["vehicle", "fabricante", "modelo"],
+      models: ["vehicle", "fabricante", "modelo", "mantenimiento"],
       perms: "r",
     },
     {
       group: "operador",
-      models: "vehicle",
+      models: ["vehicle", "mantenimiento"],
       perms: "cru",
+    },
+    {
+      group: "responsable",
+      models: "mantenimiento",
+      perms: "d",
     },
   ],
 

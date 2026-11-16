@@ -81,17 +81,38 @@ Exportar a Excel se anotó como futuro, no implementado en este bloque.
 ## Inicio de cabecera y líneas (2026-11-15)
 
 Usuario aceptó continuar con Mantenimiento relacionado con Vehicle. Primer paso:
-ejecutar npm run create:model -- flota Mantenimiento; aún no existe el modelo en
-fuentes al revisar. El usuario lo genera y personaliza paso a paso; no adelantar
-archivos ni SQL. Modelo hijo previsto: relación obligatoria a FlotaVehicle, fecha,
+create:model -- flota Mantenimiento completado por el usuario; verificados
+models/mantenimiento.ts (name/active/displayName) e import/registro mantenimiento
+en manifest. El usuario lo genera y personaliza paso a paso; no adelantar
+archivos ni SQL. Siguiente ejercicio: añadir vehicleId Many2one obligatorio a FlotaVehicle con
+onDelete Restrict y tracking. El usuario añadió vehicleId con opciones correctas,
+el destino se corrigió a FlotaVehicle y se verificó en fuentes. Siguiente:
+fecha Fields.DateTime obligatoria con tracking añadida por el usuario y
+verificada en fuentes (fecha/hora ISO UTC). Siguiente: kilometraje Integer
+obligatorio, min 0 y tracking, sin default, añadido por el usuario y verificado.
+Label tiene errata Kilomegraje: indicar Kilometraje. Siguiente: reutilizar name
+como Trabajo realizado (Text required/maxLength 300/tracking), ya modificado
+y verificado, con displayName conservado. Sigue la errata de label Kilomegraje,
+indicar corregirla; no afecta estructura. Modelo completo listo para que el
+usuario ejecute orm:sync -- flota y comparta SQL antes de aprobar: nueva tabla
+flota_mantenimiento con FK a vehículo/autor, sin eliminar tablas ni datos.
+Usuario compartió SQL 20261116032204_sync_flota: crea flota_mantenimiento con
+campos, índices y FK Restrict a vehículo/autor; revisado y luego confirmó orm:sync
+terminado. Esquema y archivo SQL verificados, sin consulta independiente de BD.
+Siguiente: reiniciar dev tras generar Prisma, abrir /erp/flota/mantenimiento con
+administrador y probar crear/guardar/reabrir seleccionando vehículo, fecha y km.
+Todavía sin menú ni permisos de Consulta/Operador para este modelo; no conectar
+líneas al padre hasta verificar el modelo hijo. No se ejecutó SQL desde el agente. Modelo hijo previsto: relación, fecha,
 kilometraje y trabajo realizado; definir campos concretos en los siguientes pasos.
 
 Distinción vigente: Fields.Many2one y las inversas Prisma están disponibles;
-FieldOne2many ya permite tabla editable inline con RHF/Zod. Todavía no existe
-Fields.One2many declarativo ni guardado anidado automático de líneas en ModelForm/
-createModelService. Para conectar líneas de Flota como parte del guardado padre
-habrá que diseñar/ampliar ese contrato, reutilizando la UI y garantías existentes,
-sin presentar el soporte como ya terminado ni cambiarlo por edición modal.
+El framework ya ofrece Fields.One2many y guardado anidado automático en módulos
+`defineModule`. [Contrato completo](lineas-one2many.md). Siguiente ejercicio guiado:
+añadir `mantenimientos = Fields.One2many("FlotaMantenimiento", { inverse:
+"vehicleId", label: "Mantenimientos", maxRows: 50 })` en Vehicle. Después añadir
+FieldOne2many con Column name/fecha/kilometraje en VehicleForm, dentro de un
+FormGroup fullWidth o NotebookPage. La inversa la asigna el servidor; no colocar
+vehicleId en esas columnas. No se han adelantado estas ediciones en Flota.
 
 ## Recorrido previsto
 
@@ -310,3 +331,24 @@ Las pruebas de fallo/reintento están en /sample#collection-core con datos ficti
 Retomar el próximo bloque de ejercicios indicado arriba, uno por vez. La propuesta
 de ofrecer botones automáticamente según estado permanece para otra mejora;
 este bloque no modifica las acciones ni clases de Flota.
+
+## Confirmación del modelo hijo (2026-11-15)
+
+El usuario confirmó «se creó el mantenimiento» después de reiniciar dev desde su
+terminal. El agente había detenido el servidor anterior; su nuevo arranque fuera
+del sandbox fue rechazado, por lo que no debe atribuirse al agente el proceso actual.
+Creación confirmada por el usuario, sin consulta independiente a BD.
+El usuario confirmó también reapertura/verificación y edición/guardado del hijo.
+La relación y sus columnas ya fueron conectadas por el usuario en Vehicle y
+VehicleForm, dentro de Notebook. Confirmados alta/edición/baja/revertir, validación
+de fecha futura en el hijo y kilometraje de las líneas en el padre (también al
+editar desde la vista independiente del hijo). Confirmados permisos de consulta,
+operador y responsable con cuentas no administradoras.
+
+El usuario eligió que las líneas sólo sean accesibles si su vehículo es accesible.
+El motor hereda automáticamente el alcance de lectura de Vehicle por la inversa
+One2many, combinado con permisos/reglas propios de Mantenimiento; no copiar domains
+ni añadir otra regla al manifest. Próxima prueba guiada: operador ve sólo los
+mantenimientos de sus vehículos accesibles en /erp/flota/mantenimiento y no puede
+abrir por URL un mantenimiento de otro vehículo; responsable conserva el alcance
+que sus reglas de Vehicle permitan. Sin orm:sync por este cambio de autorización.

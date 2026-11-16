@@ -1,20 +1,149 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-15.
+Última actualización: 2026-11-16.
 
 Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../AGENTS.md)
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
+## Accesos: visibilidad de menús por grupo (2026-11-16)
+
+Usuario autorizó seguir con ocultación de menús por grupo. Implementada sección
+en el grupo: Según manifest / Oculto, con ocultaciones heredadas identificadas.
+AccessMenuHidden almacena sólo restricciones. Navegación compartida respeta hojas,
+dropdowns, IDs por aplicación, permisos existentes y bypass admin; no cambia
+acceso directo ni CRUD. Guardado admin revalida sesión en transacción, valida
+catálogo y usa revisión para evitar sobrescribir cambios concurrentes.
+
+Metadatos nativos separados en definition.ts, consumidos por sus manifests y el
+catálogo sin cargar iconos React en scripts. El inventario admite sólo el wrapper
+local definición+icono y sigue leyendo literales sin ejecutar código. Editor para
+nativas core y módulos declarativos; descriptor de scaffold anterior pendiente.
+Keep conserva políticas; purga limpia las del módulo y sus grupos.
+
+Migración aditiva 20261116221339_add_menu_visibility revisada y aplicada con
+aprobación en localhost:5433/liteerp4_dev/public, rama codex/flota. Era la única
+pendiente; deploy confirmó todas aplicadas. Sólo se creó access_menu_hidden;
+sin asignar ocultaciones ni modificar usuarios/grupos/registros de negocio.
+Producción no se consultó ni modificó. Prisma Client regenerado.
+
+Verificados test:access (9), test:applications (11), test:module-manager (21),
+test:capabilities:integration en proyecto/esquema temporales (eliminados), Prisma
+validate, TypeScript, ESLint y build. Se repitió build tras el recordatorio de
+seguridad conocido de Next.js; dependencias sin actualizar. Revisión visual no
+confirmada en esta entrega; siguiente prueba guiada: ocultar un menú al operador,
+recargar su navegación, verificar herencia/restauración. Reiniciar dev si conserva
+el cliente Prisma anterior. [Contrato](menus-por-grupo.md).
+
+## Accesos: catálogo de modelos y Fields (2026-11-16)
+
+Usuario confirmó que primero quiere el catálogo de modelos y campos, dejando
+políticas para ocultar menús/vistas/campos para otra entrega. Accesos añade menú
+Modelos, lista compartida con búsqueda/filtros/orden/paginación y detalle de campos
+con FormViewLoader. Metadatos salen del registro declarativo: almacenados,
+related, compute/preview y One2many. No se duplican en BD ni se editan por UI.
+Servicios de lectura requieren administrador activo y sesión vigente en transacción;
+no publican valores de registros, defaults, funciones ni schemas. Aplicaciones
+manuales quedan fuera de este catálogo. [Contrato](catalogo-modelos-accesos.md).
+Verificados test:access (8), integración test:capabilities:integration (incluye
+consultas de modelos/Fields y rechazos de sesión), TypeScript, ESLint y build.
+La primera compilación y el primer arranque de la revisión temporal se detuvieron
+por el aviso de seguridad conocido de Next.js; la repetición normal pasó. No se
+actualizaron dependencias. El modo --serve ahora registra fallos de arranque y
+repite sólo una vez el mismo comando ante ese recordatorio, con bind loopback.
+Revisión visual no confirmada: el navegador no respondió a navegación/CDP. Se
+cerró la prueba mediante su archivo .stop y se eliminaron proyecto/esquema propios.
+Pendiente: usuario revisa Accesos → Modelos con su administrador y decide después
+el alcance de las políticas. Sin SQL ni datos reales modificados por esta entrega.
+
+## Flota: acceso heredado a las líneas (2026-11-16)
+
+El usuario confirmó validaciones de fecha futura y kilometraje del padre, también
+desde la vista independiente del hijo. Confirmó pruebas de los grupos consulta,
+operador y responsable con cuentas no administradoras: lectura, creación/edición y
+eliminación según lo declarado en manifest. Eligió que Mantenimiento sólo vea
+registros de vehículos a los que el actor tiene acceso.
+
+El núcleo de accesos ahora deriva el propietario desde One2many y combina con
+AND el alcance de lectura actual del padre. Protege consultas directas, listas,
+lookups y escrituras; no enumera IDs ni duplica domains. La lectura del padre no
+otorga CRUD al hijo. Capabilities niega el hijo si falta permiso de lectura del
+padre. No requiere regla adicional en manifest de Flota ni cambios de BD.
+Verificados test:access (5), test:modules (28), test:one2many:integration,
+test:capabilities:integration, TypeScript y ESLint. Build aprobado al repetirlo,
+con los avisos previos de trazado y un aviso de seguridad de Next.js instalado:
+la primera ejecución se detuvo por ese aviso después de compilar; no se actualizaron
+dependencias. Pendiente revisar/actualizar Next.js por separado. Las integraciones
+eliminaron sus proyectos/esquemas temporales, sin datos reales modificados.
+
+## Flota: líneas operativas y ajuste visual (2026-11-16)
+
+El usuario añadió mantenimientos (One2many con inversa vehicleId) a Vehicle y
+sus columnas name/fecha/kilometraje dentro de NotebookPage en VehicleForm.
+Confirmó crear, editar sin duplicados, quitar/revertir y guardar líneas. Añadió
+@constraint("fecha") en Mantenimiento para impedir fechas futuras; código revisado,
+falta confirmación explícita de su rechazo en una prueba funcional.
+
+A petición del usuario, NotebookPage ya no añade padding al contenido y
+FieldOne2many anidado omite su borde exterior para conservar sólo el del Notebook.
+FieldOne2many elimina el encabezado con contador; Agregar línea queda debajo de
+las filas, conservando límites, permisos y bloqueo durante el guardado. Aplicado a
+los componentes compartidos. TypeScript, ESLint y test:form-model (10) aprobados.
+
+## Mantenimiento: primera creación confirmada (2026-11-15)
+
+Usuario confirmó creación real de Mantenimiento. Dev fue reiniciado por el usuario:
+el agente detuvo el proceso previo de este repo pero se rechazó permiso para el
+nuevo arranque fuera del sandbox. No asumir sesión de proceso activa del agente.
+Usuario confirmó reapertura/edición del hijo con «LISTO». One2many declarativo
+ya está implementado en el framework: contrato Fields.One2many, columnas JSX,
+servicios de padre/hijo en una transacción, permisos/reglas/revisiones y rollback.
+[Guía y alcance](lineas-one2many.md). Demo local sin persistencia en
+/sample#one2many-model. La integración posterior del usuario en Vehicle/VehicleForm
+ya está confirmada (ver estado superior). Mantenimiento
+ya existe, está sincronizado y fue probado por el usuario; aún sin menú ni permisos
+no admin. La inversa vehicleId es required/Restrict. No hay que crear otro modelo.
+
+Validación del bloque: test:orm (88), test:modules (28), test:form-model (10),
+test:orm:install (19), integración PostgreSQL aislada test:one2many:integration y
+regresión test:capabilities:integration aprobadas; TypeScript/ESLint aprobados.
+Build aprobado con los tres avisos previos de trazado dinámico del gestor de
+módulos. Revisado en navegador agregar/quitar/validar/revertir, autocomplete off,
+filas adaptadas al móvil y columnas en escritorio; marcadores Column estables en
+Fast Refresh. Sin SQL en el proyecto real ni datos de Flota modificados por el agente.
+
+## Pendiente: Módulos distribuibles (2026-11-15)
+
+Usuario pidió registrar el alcance refinado: ZIP de fuentes para descomprimir y
+colocar en src/modules, comando de validación/registro y posterior despliegue
+normal. No instalación dinámica en producción. Sintaxis de empaquetado sugerida
+orm:build -- <modulo> --dist, aún no implementada; reconocimiento/versiones y
+colisiones por diseñar. [Alcance y criterios](ideas/modulos-distribuibles.md).
+Sólo documentación, comprobada con git diff --check. No ZIP, registro, cambios de
+aplicación, SQL ni despliegue; continúa pendiente el inicio guiado de Mantenimiento.
+
 ## Tutoría: inicio de Mantenimiento como líneas (2026-11-15)
 
 Usuario confirmó continuar con cabecera/líneas después de validar el flujo de
 finalizar mantenimiento. Primer paso guiado: create:model -- flota Mantenimiento;
-al revisar todavía no existe. No se crearon archivos de Flota por el agente.
-La UI FieldOne2many inline existe, pero Fields.One2many y guardado anidado genérico
-no están implementados. Explicar la diferencia antes de conectar el modelo hijo
-al formulario padre; requiere ampliación explícita del ORM al llegar a ese paso.
-Rama actual staging_v1, desarrollo en liteerp4_dev; no retirar Flota ni desplegar
+usuario ya lo creó: mantenimiento.ts con name/active/displayName e import/registro
+en manifest verificados. Rama observada ahora codex/flota. Siguiente paso guiado:
+vehicleId añadido con required/Restrict/tracking, destino corregido a FlotaVehicle y verificado. Siguiente: fecha DateTime
+obligatoria con tracking para fecha/hora del servicio ya añadida y verificada.
+Kilometraje Integer required/min 0/tracking sin default ya añadido y verificado;
+label Kilomegraje requiere corrección a Kilometraje. Siguiente: personalizar name
+name como Trabajo realizado required/maxLength 300/tracking ya verificado,
+con displayName conservado. La errata Kilomegraje del label persiste; corregirla.
+Siguiente: usuario ejecuta orm:sync -- flota y comparte SQL antes de aprobar
+(nueva tabla de mantenimiento y FK, sin eliminaciones). Usuario compartió SQL 20261116032204_sync_flota (nueva tabla, índices, FK
+Restrict a vehículo/autor), se revisó y usuario confirmó sincronización terminada.
+Esquema y SQL verificados en archivos; sin consulta independiente de BD. Próximo:
+reiniciar dev y probar crear/guardar/reabrir Mantenimiento con administrador en
+/erp/flota/mantenimiento. Aún sin menú ni permisos de usuarios para este modelo.
+Agente no ejecutó SQL ni modificó sus fuentes. No se crearon archivos de Flota por el agente ni se sincronizó el modelo.
+La ampliación de Fields.One2many y guardado anidado ya está implementada y
+verificada; queda conectarla a Vehicle durante la tutoría (ver estado superior).
+Desarrollo en liteerp4_dev; no retirar Flota ni desplegar
 producción todavía. La retirada del piloto se hará al final con revisión/respaldo,
 y el usuario hará el merge a main después. Ningún cambio de app/SQL por esta nota.
 
