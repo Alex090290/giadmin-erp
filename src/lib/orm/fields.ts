@@ -53,7 +53,8 @@ export type FieldMetadata = CommonMetadata & (
   | { readonly kind: "boolean" }
   | { readonly kind: "selection"; readonly choices: readonly SelectionOption[] }
   | { readonly kind: "datetime" }
-  | { readonly kind: "many2one"; readonly target: string; readonly onDelete: "Restrict" | "SetNull" }
+  // Cascade is internal: only the companion link of a model extension uses it (never Fields.Many2one).
+  | { readonly kind: "many2one"; readonly target: string; readonly onDelete: "Restrict" | "SetNull" | "Cascade" }
 );
 type FieldDetails<T = FieldMetadata> = T extends FieldMetadata ? Omit<T, keyof CommonMetadata> : never;
 

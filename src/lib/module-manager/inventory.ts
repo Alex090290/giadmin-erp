@@ -36,6 +36,13 @@ export function inspectManifest(text: string, id: string, kind: Exclude<ModuleKi
       const key = item.name.text;
       return id[0].toUpperCase() + id.slice(1) + key[0].toUpperCase() + key.slice(1);
     });
+    // Each extension of another module model owns a companion table: <Module><Base><Key>.
+    const extensionNode = optional(declaration, "extends");
+    for (const item of extensionNode ? object(extensionNode).properties : []) {
+      const target = item.name && (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) ? item.name.text : "";
+      if (!/^[a-z][a-z0-9]*.[a-z][a-z0-9]*$/.test(target)) throw new Error("Se necesitan claves de extensión literales <módulo>.<modelo>.");
+      models.push([id, ...target.split(".")].map(part => part[0].toUpperCase() + part.slice(1)).join(""));
+    }
   } else models = array(property(declaration, "models")).elements.map(literal);
   if (new Set(models).size !== models.length || models.some(model => !/^[A-Z][A-Za-z0-9]*$/.test(model))) throw new Error("Modelos no compatibles.");
   return { id, kind, name: value("name", id), description: value("description", ""), version: value("version", "0.1.0"), models, depends, issues: [] };

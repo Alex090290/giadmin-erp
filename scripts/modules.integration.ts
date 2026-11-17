@@ -63,6 +63,46 @@ try {
     console.log(tsx(join(root, "one2many-check.ts"), [], "One2many service check").trim());
     command("next", ["typegen"], "Next route types");
     command("tsc", ["--noEmit", "--incremental", "false"], "One2many fixture types");
+  } else if (process.argv.includes("--extensions-only")) {
+    // Model inheritance: soporte extends taller.equipo through a companion table it owns.
+    const fixture = join(project, "scripts/fixtures/modules-extension");
+    const migrate = async (name: string) => {
+      const sql = command("prisma", ["migrate", "diff", "--from-config-datasource", "--to-schema", join(root, "prisma/models"), "--script", "--config", join(root, "prisma7.config.ts")], `${name} migration diff`);
+      assert.doesNotMatch(sql, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bTRUNCATE\b/i);
+      await mkdir(join(root, "prisma/migrations", name));
+      await writeFile(join(root, "prisma/migrations", name, "migration.sql"), sql);
+      prisma(["migrate", "deploy"]); prisma(["generate"]);
+      return sql;
+    };
+    const index = (ids: string[]) => writeFile(join(root, "src/modules/index.ts"), `import "server-only";\nimport type { ModuleDefinition } from "@/lib/modules/define";\n${ids.map(id => `import ${id} from "./${id}/manifest";`).join("\n")}\nexport const modules: readonly ModuleDefinition[] = [${ids.join(", ")}];\n`);
+    await mkdir(join(root, "src/modules/taller/models"), { recursive: true });
+    await cp(join(fixture, "taller.manifest.fixture"), join(root, "src/modules/taller/manifest.ts"));
+    await cp(join(fixture, "equipo.fixture"), join(root, "src/modules/taller/models/equipo.ts"));
+    tsx(join(root, "scripts/orm-install.ts"), ["taller", "--write"], "orm:install taller");
+    assert.match(await migrate("20990203000000_taller"), /CREATE TABLE "taller_equipo"/);
+    await index(["taller"]);
+    await writeFile(join(root, "seed-legacy.ts"), `import { config } from "dotenv"; config({ path: ".env.local", quiet: true });\nconst { prisma } = await import("./src/lib/prisma");\nconst row = await prisma.tallerEquipo.create({ data: { name: "PREVIO" } });\nconsole.log(row.id);\nawait prisma.$disconnect();\n`);
+    const legacy = tsx(join(root, "seed-legacy.ts"), [], "record before the extension").trim();
+    await mkdir(join(root, "src/modules/soporte/models"), { recursive: true });
+    await cp(join(fixture, "soporte.manifest.fixture"), join(root, "src/modules/soporte/manifest.ts"));
+    await cp(join(fixture, "equipo-soporte.fixture"), join(root, "src/modules/soporte/models/equipo.ts"));
+    const baseSchema = await readFile(join(root, "prisma/models/orm-taller.prisma"), "utf8");
+    tsx(join(root, "scripts/orm-install.ts"), ["soporte", "--write"], "orm:install soporte");
+    const extended = await readFile(join(root, "prisma/models/orm-taller.prisma"), "utf8");
+    assert.match(extended, /BEGIN lite-erp:soporte:TallerEquipo[\s\S]*soporteTallerEquipoRecordIdRecords SoporteTallerEquipo\?/);
+    assert.equal(extended.replace(/\n  \/\/ BEGIN lite-erp:soporte:TallerEquipo[\s\S]*?\/\/ END lite-erp:soporte:TallerEquipo\n/, ""), baseSchema, "el esquema del base sólo recibe la inversa propiedad de la extensión");
+    const sql = await migrate("20990203000001_soporte");
+    assert.match(sql, /CREATE TABLE "soporte_taller_equipo"/);
+    assert.match(sql, /CREATE UNIQUE INDEX "soporte_taller_equipo_record_id_key"/);
+    assert.match(sql, /REFERENCES "taller_equipo"\("id"\) ON DELETE CASCADE/);
+    assert.doesNotMatch(sql, /ALTER TABLE "taller_equipo"/);
+    await index(["taller", "soporte"]);
+    console.log("✓ Extensión instalada: tabla compañera 1:1 con Cascade; el esquema del base sólo recibe la inversa de la extensión.");
+    command("next", ["typegen"], "Next route types");
+    command("tsc", ["--noEmit", "--incremental", "false"], "extension fixture types");
+    console.log("✓ El mixin con decoradores y super compila con TypeScript.");
+    await cp(join(project, "scripts/fixtures/extension-check.fixture"), join(root, "extension-check.ts"));
+    console.log(tsx(join(root, "extension-check.ts"), [legacy], "extension service check").trim());
   } else {
   // Exercise the public creation commands and automatic sync registration on an
   // independent module; no tutorial sources or ERP data are modified.

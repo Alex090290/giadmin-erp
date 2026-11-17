@@ -1,0 +1,13 @@
+import "server-only";
+import { Fields, Model } from "@/lib/orm";
+
+/** Base model of the extension fixture; it knows nothing about modules that extend it. */
+export class Equipo extends Model {
+  name = Fields.Text({ label: "Nombre", required: true, maxLength: 80, tracking: true });
+  estado = Fields.Selection([{ value: "activo", label: "Activo" }, { value: "baja", label: "Baja" }], { label: "Estado", required: true, default: "activo", tracking: true });
+
+  beforeSave(values: Record<string, unknown>): Record<string, unknown> {
+    // Keep every value (`...values`): extensions add fields this model does not know.
+    return { ...values, name: typeof values.name === "string" ? values.name.toUpperCase() : values.name };
+  }
+}

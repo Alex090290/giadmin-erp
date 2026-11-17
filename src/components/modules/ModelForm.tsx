@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formDeleteReturnHref } from "@/components/ui/form/formDeletion";
 import { useForm } from "react-hook-form";
@@ -21,29 +21,51 @@ import { useFormNavigation } from "@/components/ui/form/FormNavigationProvider";
 import { useAlerts } from "@/components/ui/alerts/AlertProvider";
 import { buildModelUI, type ModelUI } from "@/lib/modules/client";
 import type { ModelClientConfig } from "@/lib/modules/config";
+import type { FieldMetadata } from "@/lib/orm/fields";
 import { modelAction, modelActivity, modelDelete, modelNote, modelRead, modelSave } from "@/lib/modules/actions";
 import { modelUiCapabilities } from "@/lib/access/capabilities";
 
 type Values = Record<string, unknown>;
 
+function control(ui: ModelUI, name: string, field: FieldMetadata) {
+  switch (field.kind) {
+    case "image": return <FieldImage<Values> key={name} name={name} widget="avatar" />;
+    case "boolean": return <FieldBoolean<Values> key={name} name={name} direction="inline" />;
+    case "integer": return <FieldNumber<Values> key={name} name={name} type="integer" direction="inline" />;
+    case "datetime": return <FieldDate<Values> key={name} name={name} type="datetime" direction="inline" />;
+    case "selection": return <FieldSelect<Values> key={name} name={name} direction="inline" />;
+    case "many2one": return Object.hasOwn(ui.config.lookups, name) ? <FieldMany2One<Values> key={name} name={name} direction="inline" /> : null;
+    default: return <FieldText<Values> key={name} name={name} direction="inline" />;
+  }
+}
+
+function display(name: string, field: FieldMetadata) {
+  return field.kind === "image" ? <FieldImage key={name} mode="display" name={name} direction="inline" />
+    : field.kind === "integer" ? <FieldNumber key={name} mode="display" name={name} type="integer" direction="inline" />
+    : field.kind === "text" ? <FieldText key={name} mode="display" name={name} direction="inline" /> : null;
+}
+
+const ModelUIContext = createContext<ModelUI | null>(null);
+
+/**
+ * Fields added by other modules (model extensions), one group per extending module. The default
+ * form includes it; ejected forms place `<ModelExtensions />` where those groups should appear.
+ * Without it, extension values are still kept and saved by the form.
+ */
+export function ModelExtensions() {
+  const ui = useContext(ModelUIContext);
+  if (!ui?.config.extensions?.length) return null;
+  return <>{ui.config.extensions.map(extension => <FormGroup key={extension.module} legend={extension.label}>
+    {extension.fields.map(name => Object.hasOwn(ui.config.fields, name) ? control(ui, name, ui.config.fields[name]) : Object.hasOwn(ui.config.preview, name) ? display(name, ui.config.preview[name]) : null)}
+  </FormGroup>)}</>;
+}
+
 /** Controls derived from metadata, used when a view does not provide its own layout. */
 export function ModelFields({ ui }: { ui: ModelUI }) {
-  const controls = Object.entries(ui.config.fields).map(([name, field]) => {
-    switch (field.kind) {
-      case "image": return <FieldImage<Values> key={name} name={name} widget="avatar" />;
-      case "boolean": return <FieldBoolean<Values> key={name} name={name} direction="inline" />;
-      case "integer": return <FieldNumber<Values> key={name} name={name} type="integer" direction="inline" />;
-      case "datetime": return <FieldDate<Values> key={name} name={name} type="datetime" direction="inline" />;
-      case "selection": return <FieldSelect<Values> key={name} name={name} direction="inline" />;
-      case "many2one": return Object.hasOwn(ui.config.lookups, name) ? <FieldMany2One<Values> key={name} name={name} direction="inline" /> : null;
-      default: return <FieldText<Values> key={name} name={name} direction="inline" />;
-    }
-  });
-  const display = Object.entries(ui.config.preview).map(([name, field]) =>
-    field.kind === "image" ? <FieldImage key={name} mode="display" name={name} direction="inline" />
-      : field.kind === "integer" ? <FieldNumber key={name} mode="display" name={name} type="integer" direction="inline" />
-      : field.kind === "text" ? <FieldText key={name} mode="display" name={name} direction="inline" /> : null);
-  return <><FormGroup legend="Datos generales">{controls}{display}</FormGroup>{Object.keys(ui.recordUI.lines).map(name => <FormGroup fullWidth key={name}><FieldOne2many name={name} /></FormGroup>)}</>;
+  const extended = new Set(ui.config.extensions?.flatMap(extension => extension.fields) ?? []);
+  const controls = Object.entries(ui.config.fields).filter(([name]) => !extended.has(name)).map(([name, field]) => control(ui, name, field));
+  const previews = Object.entries(ui.config.preview).filter(([name]) => !extended.has(name)).map(([name, field]) => display(name, field));
+  return <><FormGroup legend="Datos generales">{controls}{previews}</FormGroup><ModelExtensions />{Object.keys(ui.recordUI.lines).map(name => <FormGroup fullWidth key={name}><FieldOne2many name={name} /></FormGroup>)}</>;
 }
 
 function Editor({ ui, record, displayName, onReload, children }: { ui: ModelUI; record: Values; displayName?: string; onReload?: () => void; children?: ReactNode }) {
@@ -56,7 +78,7 @@ function Editor({ ui, record, displayName, onReload, children }: { ui: ModelUI; 
   const [savedId, setSavedId] = useState(record.id as string | undefined);
   const [savedName, setSavedName] = useState(displayName);
   const methods = useForm<Values>({ resolver: zodResolver(ui.schema as never), defaultValues: record });
-  return <FormView
+  return <ModelUIContext.Provider value={ui}><FormView
     layout="page"
     breadcrumbs={[{ label: "Aplicaciones", href: "/erp" }, { label: config.label, href: returnHref }, { label: savedId ? savedName || "Registro" : "Nuevo registro" }]}
     title={savedId ? "Editar registro" : "Nuevo registro"}
@@ -81,7 +103,7 @@ function Editor({ ui, record, displayName, onReload, children }: { ui: ModelUI; 
     footer={<p className="text-xs text-base-content/55">Los cambios se guardan al presionar Guardar.</p>}
   >
     {children ?? <ModelFields ui={ui} />}
-  </FormView>;
+  </FormView></ModelUIContext.Provider>;
 }
 
 /**

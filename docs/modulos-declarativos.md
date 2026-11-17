@@ -322,6 +322,70 @@ valida el nombre contra las acciones publicadas, los permisos, los grupos opcion
 el mismo ciclo del guardado. Contrato completo en
 [Acciones de formulario](ideas/acciones-formulario.md#contrato-implementado-2026-11-14).
 
+## 7. Extender un modelo de otro módulo (herencia)
+
+Equivalente al `_inherit` de Odoo, con una clase mixin. El módulo que extiende no edita
+las fuentes del base:
+
+```ts
+// src/modules/soporte/models/equipo.ts
+import { Fields, ModelValidationError, action } from "@/lib/orm";
+import { extendModel } from "@/lib/modules/extend";
+import { Equipo } from "@/modules/taller/models/equipo";
+
+export const EquipoSoporte = extendModel(Equipo, Base => {
+  // Declara la clase con nombre: los decoradores legacy no admiten clases anónimas.
+  class EquipoSoporte extends Base {
+    responsable = Fields.Text({ label: "Responsable", maxLength: 60, tracking: true });
+    nivel = Fields.Integer({ label: "Nivel", required: true, default: 1, min: 1, max: 3 });
+
+    @action({ label: "Escalar" })
+    escalar(record: { nivel: number }) { return { nivel: Math.min(3, record.nivel + 1) }; }
+
+    beforeSave(values: Record<string, unknown>) {
+      const result = super.beforeSave(values); // conserva la regla del base
+      if (result.estado === "baja" && !result.responsable) throw new ModelValidationError("Asigna un responsable.");
+      return result;
+    }
+  }
+  return EquipoSoporte;
+});
+
+// src/modules/soporte/manifest.ts
+export default defineModule({
+  id: "soporte", name: "Soporte", icon: "life-buoy",
+  depends: ["taller"], models: {},
+  extends: { "taller.equipo": EquipoSoporte },
+});
+```
+
+- **Datos:** los campos persistentes van en una tabla compañera del extensor
+  (`soporte_taller_equipo`, modelo `SoporteTallerEquipo`) con `recordId` único hacia el
+  base y `ON DELETE CASCADE`. El esquema del base sólo recibe la inversa 1:1, marcada
+  como propiedad del extensor. Se instala con `orm:sync -- soporte` o desde Módulos.
+- **Lectura y guardado:** el repositorio del base lee y escribe la compañera en la misma
+  sentencia y transacción, con una sola revisión (la del base). Los registros previos a
+  la extensión no tienen fila: se presentan con los defaults y la fila se crea al guardar.
+- **Composición:** el registro aplica las extensiones en orden de dependencias
+  (`extB(extA(Base))`); `super` encadena hooks, y `@action`, `@onchange`, `@constraint`
+  y `@depends` de la subclase se registran solos. Dos extensiones no pueden declarar el
+  mismo campo, ni redeclarar campos del base.
+- **`beforeSave` del base:** devuelve siempre `{ ...values, cambios }`. Si arma un objeto
+  nuevo, perdería los campos extendidos; Zod lo rechaza y no se guarda nada.
+- **Accesos:** permisos, reglas de registro y capacidades son los del modelo base.
+- **Vistas:** el formulario por defecto añade un grupo por extensión (con el nombre del
+  módulo). En formularios expulsados, `<ModelExtensions />` (de
+  `@/components/modules/ModelForm`) marca dónde se pintan; `eject:view` ya lo incluye.
+  Sin él, los valores extendidos se conservan al guardar.
+- **Gestor:** desinstalar el base queda bloqueado mientras exista el extensor;
+  desinstalar el extensor con «Eliminar datos» borra sólo su tabla y su inversa.
+
+Límites de la fase 1: al menos un campo persistente; campos opcionales o con default
+literal; sin One2many, related, Image, sensitive ni unique; los campos extendidos no
+aparecen en columnas ni se buscan, ordenan, filtran o agrupan; no se extienden líneas
+One2many ni modelos nativos (Partner, User). Diseño y fases en
+[Herencia de modelos](ideas/herencia-modelos.md).
+
 ## Seguridad
 
 Todas las operaciones pasan por `src/lib/modules/actions.ts`: una Server Action fija
@@ -338,6 +402,10 @@ npm run test:modules
 ```bash
 npm run test:modules:integration
 ```
+
+`npm run test:extensions:integration` instala `taller` y `soporte`
+(`scripts/fixtures/modules-extension`) en un proyecto/esquema temporales y comprueba la
+herencia completa, incluida la desinstalación del extensor con respaldo.
 
 La integración instala un módulo de prueba propio (`scripts/fixtures/modules-ensayo`)
 en un proyecto y esquema PostgreSQL temporales y los elimina al terminar.

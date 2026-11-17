@@ -50,7 +50,7 @@ export function formViewSource(model: EjectModel): string {
   const name = viewName(model.key, "form");
   return `"use client";
 
-import ModelForm from "@/components/modules/ModelForm";
+import ModelForm, { ModelExtensions } from "@/components/modules/ModelForm";
 import FormGroup from "@/components/ui/form/FormGroup";
 ${[...imports].sort().map(component => `import ${component} from "@/components/ui/form/${component}";`).join("\n")}
 import type { ModelClientConfig } from "@/lib/modules/config";
@@ -69,6 +69,8 @@ export default function ${name}({ config, id }: { config: ModelClientConfig; id?
       <FormGroup legend="Datos generales">
         ${lines.join("\n        ")}
       </FormGroup>
+      {/* Campos que otros módulos añaden a este modelo (extensiones). */}
+      <ModelExtensions />
     </ModelForm>
   );
 }

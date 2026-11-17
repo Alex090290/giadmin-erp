@@ -110,13 +110,28 @@ Date, acciones con parámetros, Many2many, reglas por rol y, al final, avisos y
 adjuntos. Varias piezas no existen en el framework: se diseñan e implementan con
 aprobación cuando el ejercicio las requiera. [Plan](ideas/tickets-servicio.md).
 
-## Pendiente de diseño: herencia de modelos entre módulos (2026-11-17)
+## Herencia de modelos entre módulos: fase 1 (2026-11-17)
 
-Equivalente al `_inherit` de Odoo, adaptado a TS/Prisma: mixin `extendModel` con
-`super`, composición en el registro, tabla compañera 1:1 del módulo extensor,
-`<ModelExtensions />` en vistas y accesos del modelo base; nativos en una fase
-posterior. Ligado a la guía de Tickets; sólo documentación, sin código.
-[Propuesta y criterios](ideas/herencia-modelos.md).
+Implementada a petición del usuario en la rama `codex/herencia` (sin commit).
+Equivalente al `_inherit` de Odoo con mixin `extendModel` y `super`:
+
+- `src/lib/modules/extend.ts` (API), `define.ts` (`extends`, validación y modelo
+  compañero; compilación por modelo extraída a `compileModuleModel`), `compose.ts`
+  (composición en el registro por dependencias), `repository.ts` (select/create/upsert
+  anidados, defaults sin fila), `ModelForm.tsx` (`<ModelExtensions />` y grupo por
+  extensión), plantilla de `eject:view`, inventario del gestor (`extends` → modelo
+  compañero) y `onDelete: "Cascade"` interno en FieldMetadata.
+- Hallazgo: los decoradores legacy no admiten clases anónimas; la clase se declara con
+  nombre dentro del mixin.
+- Verificado: test:modules 34 (6 nuevas), test:extensions:integration en proyecto/esquema
+  temporales (instalar base y extensión, SQL con Cascade/único y sin tocar la tabla base,
+  registro previo con defaults, guardado/creación/revisión, super, acción e historial,
+  accesos del base, cascada, desinstalar base bloqueado, eliminar extensión con respaldo),
+  test:modules:integration y test:one2many:integration (regresión), tsc, lint y build.
+  Sin navegador: la UI del grupo de extensión no se revisó visualmente.
+- Pendiente: fase 2 anotada a petición del usuario (colecciones, vista propia, reglas y
+  campos avanzados); no se adelanta, espera un caso real de Tickets. Fase 3: Partner/User.
+  [Diseño y criterios](ideas/herencia-modelos.md).
 
 ## Flota: intervalo recomendado con @onchange (2026-11-17)
 

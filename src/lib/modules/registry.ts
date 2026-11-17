@@ -1,6 +1,6 @@
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { modules } from "@/modules";
+import { modules as declared } from "@/modules";
 import { AccessError } from "../auth/policy";
 import type { ModelActor } from "../orm/context";
 import { prisma } from "../prisma";
@@ -15,6 +15,10 @@ import type { ModelAction } from "../orm/model";
 import { createRepository } from "./repository";
 import { modelIdPattern, type ModelClientConfig } from "./config";
 import type { ModuleDefinition, ModuleModel } from "./define";
+import { composeModules } from "./compose";
+
+// Extensions declared by other modules are composed onto their base models once, at load.
+const modules = composeModules(declared);
 
 const byModule = new Map<string, ModuleDefinition>();
 const byModel = new Map<string, { module: ModuleDefinition; entry: ModuleModel }>();
@@ -162,6 +166,8 @@ export function modelClientConfig(id: string, access?: CapabilityActor): ModelCl
     ...(entry.kanban ? { kanban: entry.kanban } : {}),
     ...(entry.kanbanTransitions !== undefined ? {kanbanTransitions:entry.kanbanTransitions.map(({from,to})=>({from,to}))} : {}),
     ...(entry.defaultSort ? { defaultSort: entry.defaultSort } : {}),
+    // Fields added by other modules, presented in their own group (names only).
+    ...(entry.extensions.length ? { extensions: entry.extensions.map(extension => ({ module: extension.module, label: extension.label, fields: [...extension.fields, ...extension.computed] })) } : {}),
   };
   return access ? projectModelAccess(config, access, published, entry.kanbanTransitions) : config;
 }

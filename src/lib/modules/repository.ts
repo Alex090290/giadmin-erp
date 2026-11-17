@@ -47,10 +47,14 @@ function auditDto(record: Record<string, unknown>): RecordAudit {
  */
 export function createRepository<T extends Record<string, unknown>>(entry: ModuleModel, module: ModuleGeneration): ModelRepository<T> {
   const metadata: Readonly<Record<string, FieldMetadata>> = entry.contract.metadata;
-  const names = Object.keys(metadata);
+  // Fields of extensions live in companion tables owned by the extending modules (1:1 relation).
+  const companions = entry.extensions.filter(extension => extension.relation && extension.fields.length) as readonly { relation: string; fields: readonly string[] }[];
+  const extended = new Set(companions.flatMap(companion => companion.fields));
+  const names = Object.keys(metadata).filter(name => !extended.has(name));
   const generation = module.models.find(model => model.model.name === entry.contract.name);
   if (!generation) throw new Error(`${entry.id}: el modelo no pertenece al perfil del módulo.`);
-  const select = Object.fromEntries([["id", true], ["updatedAt", true], ...names.map(name => [name, true])]);
+  const select = Object.fromEntries([["id", true], ["updatedAt", true], ...names.map(name => [name, true]),
+    ...companions.map(companion => [companion.relation, { select: Object.fromEntries(companion.fields.map(name => [name, true])) }])]);
   const metadataOf = (model: string) => module.models.find(candidate => candidate.model.name === model)?.model.metadata ?? {};
   const guardsOf = (policy: Record<string, readonly { model: string; field: string; target?: string }[]>): Guards =>
     Object.fromEntries(Object.entries(policy).map(([path, guards]) => [path, guards.map(guard => ({ metadata: metadataOf(guard.model)[guard.field], ...(guard.target ? { target: guard.target } : {}) }))]));
@@ -63,15 +67,24 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
   const dto = (record: Record<string, unknown>) => {
     const row = record as Row;
     const result: Record<string, unknown> = { id: row.id, revision: row.updatedAt.toISOString() };
-    for (const name of names) {
-      const value = row[name];
-      result[name] = metadata[name].kind === "datetime" ? (value instanceof Date ? value.toISOString() : null) : value;
+    const read = (name: string, value: unknown) => metadata[name].kind === "datetime" ? (value instanceof Date ? value.toISOString() : null) : value;
+    for (const name of names) result[name] = read(name, row[name]);
+    for (const companion of companions) {
+      const extension = row[companion.relation] as Record<string, unknown> | null | undefined;
+      // Records saved before the extension was installed have no companion row: present defaults.
+      for (const name of companion.fields) result[name] = extension ? read(name, extension[name]) : (metadata[name].defaultKind === "literal" ? metadata[name].defaultValue ?? null : null);
     }
     return result as T & { id: string; revision: string };
   };
-  const data = (values: T) => Object.fromEntries(names.map(name => {
+  const write = (fields: readonly string[], values: T) => Object.fromEntries(fields.map(name => {
     const value = values[name];
     return [name, metadata[name].kind === "datetime" ? (value === null || value === undefined ? null : new Date(value as string)) : value];
+  }));
+  const data = (values: T) => write(names, values);
+  // Nested writes keep base and companions in one statement, transaction and revision.
+  const nested = (values: T, actorId?: string) => Object.fromEntries(companions.map(companion => {
+    const fields = write(companion.fields, values);
+    return [companion.relation, actorId ? { create: { ...fields, createBy: actorId } } : { upsert: { create: fields, update: fields } }];
   }));
   const relatedGroup = (field: string) => {
     const group = related.find(candidate => candidate.root === field);
@@ -83,10 +96,10 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
   return {
     async read(tx, id) { const record = await delegateOf(tx, entry.delegate).findUnique({ where: { id }, select }); return record ? dto(record) : null; },
     async audit(tx, id) { const record = await delegateOf(tx, entry.delegate).findUnique({ where: { id }, select: auditSelect }); return record ? auditDto(record) : null; },
-    async create(tx, values, actorId) { return dto(await delegateOf(tx, entry.delegate).create({ data: { ...data(values), createBy: actorId }, select })); },
+    async create(tx, values, actorId) { return dto(await delegateOf(tx, entry.delegate).create({ data: { ...data(values), createBy: actorId, ...nested(values, actorId) }, select })); },
     async update(tx, id, revision, values) {
       const updatedAt = new Date(Math.max(Date.now(), Date.parse(revision) + 1));
-      return dto(await delegateOf(tx, entry.delegate).update({ where: { id, updatedAt: new Date(revision) }, data: { ...data(values), updatedAt }, select }));
+      return dto(await delegateOf(tx, entry.delegate).update({ where: { id, updatedAt: new Date(revision) }, data: { ...data(values), ...nested(values), updatedAt }, select }));
     },
     async remove(tx, id, revision) { await delegateOf(tx, entry.delegate).delete({ where: { id, updatedAt: new Date(revision) }, select: { id: true } }); },
     count(tx, where) { return delegateOf(tx, entry.delegate).count({ where }); },

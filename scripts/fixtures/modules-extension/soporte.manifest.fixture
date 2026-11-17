@@ -1,0 +1,13 @@
+import "server-only";
+import { defineModule } from "@/lib/modules/define";
+import { EquipoSoporte } from "./models/equipo";
+
+/** Extension-only module: adds support fields to taller.equipo in its own companion table. */
+export default defineModule({
+  id: "soporte",
+  name: "Soporte",
+  icon: "life-buoy",
+  depends: ["taller"],
+  models: {},
+  extends: { "taller.equipo": EquipoSoporte },
+});

@@ -1,0 +1,16 @@
+import "server-only";
+import { defineModule } from "@/lib/modules/define";
+import { Equipo } from "./models/equipo";
+
+/** Base module of the extension integration fixture; installed only in a disposable schema. */
+export default defineModule({
+  id: "taller",
+  name: "Taller",
+  icon: "wrench",
+  models: { equipo: Equipo },
+  groups: { lector: "Lector", editor: { label: "Editor", implies: ["lector"] } },
+  access: [
+    { group: "lector", models: "equipo", perms: "r" },
+    { group: "editor", models: "equipo", perms: "crud" },
+  ],
+});

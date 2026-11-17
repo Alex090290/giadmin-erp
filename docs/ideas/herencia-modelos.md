@@ -1,9 +1,15 @@
 # Herencia y extensión de modelos entre módulos
 
-**Pendiente de diseño** registrado el 2026-11-17 a petición del usuario. Es una
-propuesta aceptada en lo general, ligada a la guía de
-[Tickets de servicio interno](tickets-servicio.md). No autoriza código: se detalla,
-se presenta y se implementa sólo con aprobación, cuando la guía llegue al caso real.
+**Fase 1 implementada el 2026-11-17** a petición del usuario (rama `codex/herencia`).
+Uso y límites vigentes en [Módulos declarativos §7](../modulos-declarativos.md#7-extender-un-modelo-de-otro-módulo-herencia).
+Las fases 2 y 3 siguen pendientes; el caso real llegará con la guía de
+[Tickets de servicio interno](tickets-servicio.md).
+
+**Hallazgo de la implementación:** con `experimentalDecorators` (transform legacy de
+Next/tsx) los decoradores no se aceptan en clases anónimas. Las extensiones declaran
+la clase con nombre dentro del mixin y la devuelven:
+`extendModel(Base0, Base => { class X extends Base { ... } return X; })`.
+TypeScript también rechaza redeclarar un campo del base con un tipo incompatible.
 
 ## Problema
 
@@ -89,11 +95,37 @@ Se decide en la fase 3.
 
 ## Fases
 
-1. Extensión de modelos declarativos: `extendModel`, composición en el registro,
-   tabla compañera con lectura/guardado transaccional, grupo por defecto y
-   `<ModelExtensions />`.
-2. Columnas/filtros en colecciones, vista propia de la extensión, reglas avanzadas.
-3. Nativos (Partner primero).
+1. **Implementada (2026-11-17).** Extensión de modelos declarativos: `extendModel`,
+   composición en el registro, tabla compañera con lectura/guardado transaccional,
+   grupo por defecto y `<ModelExtensions />`.
+2. **Pendiente** (detalle abajo): campos extendidos en colecciones, vista propia de la
+   extensión y reglas/campos avanzados.
+3. **Pendiente:** nativos (Partner primero, luego User).
+
+## Fase 2: pendiente (anotada el 2026-11-17)
+
+Decisión del usuario: **no adelantarla**. Se implementa cuando la guía de Tickets (u
+otro módulo real) la requiera, una pieza a la vez y con aprobación previa. Hoy los
+campos extendidos sólo existen en el formulario.
+
+1. **Colecciones.** Columnas de campos extendidos en lista, tarjetas y kanban; búsqueda,
+   filtros, orden y agrupación. El servicio traduce las condiciones a la relación 1:1
+   (`{ <relación>: { is: {...} } }`), igual que las rutas Many2one, y el repositorio
+   proyecta la compañera en `list`/`groups`. Retirar el `list: false` forzado y el
+   rechazo de `searchable/sortable/filterable/groupable` en extensiones. Registros sin
+   fila compañera: definir si filtran como default o como vacío.
+2. **Vista propia de la extensión.** `views: { form: () => import(...) }` en la
+   declaración de la extensión, montada por `<ModelExtensions />` dentro del mismo RHF,
+   sin editar la vista del base; carga diferida como las demás vistas.
+3. **Reglas y campos avanzados.** Reglas de registro (del base o del extensor) sobre
+   campos extendidos, p. ej. «el técnico ve los equipos de los que es responsable»;
+   admitir `related`, Image (uploads firmados) y quizá `unique` en extensiones.
+
+Criterios de aceptación: cada pieza con pruebas unitarias y en
+`test:extensions:integration` (proyecto/esquema temporales), sin regresión en
+`test:modules:integration`/`test:one2many:integration`; los permisos y la autorización
+siguen en el servidor; documentación en
+[Módulos declarativos §7](../modulos-declarativos.md#7-extender-un-modelo-de-otro-módulo-herencia).
 
 ## Criterios de aceptación (fase 1)
 
@@ -105,6 +137,78 @@ Se decide en la fase 3.
   desinstalar la extensión (keep/drop) y bloqueo al desinstalar la base.
 - El módulo base no se modifica para que la extensión aparezca.
 - Guía en `docs/` y demo ficticia si aporta.
+
+## Plan de implementación de la fase 1 (2026-11-17, pendiente de aprobación)
+
+Resultado de revisar el código (`src/lib/modules/define.ts`, `registry.ts`,
+`repository.ts`, `src/lib/orm/generator/generate.ts`, `install.ts`, `prepare.ts`,
+`model.ts`, `decorators.ts`, `module-manager/inventory.ts`, `ModelForm.tsx`).
+
+### Hallazgos que simplifican
+
+- La tabla compañera **es un modelo generado normal** del módulo extensor con un
+  Many2one **único y obligatorio** al modelo base: el generador ya crea la inversa
+  1:1 (`X?`) en el esquema del base y el instalador ya registra esa inversa como
+  propiedad del extensor (la quita al desinstalarlo). El esquema del base no cambia.
+- `depends` ya bloquea desinstalar el base mientras el extensor exista
+  (`inventory.ts` dependents) y el generador exige declarar la dependencia del
+  propietario del destino.
+- Los decoradores recorren la cadena de prototipos: `@action`, `@onchange`,
+  `@constraint` y `@depends` de la subclase se registran solos.
+- Las escrituras anidadas de Prisma (`create`/`upsert` dentro de `update`) dan
+  atomicidad y una sola revisión (`updatedAt` del base) sin otra transacción.
+
+### Cambios
+
+1. **API** (`src/lib/modules/extend.ts`): `extendModel(Base, Base => class extends Base {...})`
+   con import directo de la clase base (tipos inferidos). Manifest:
+   `depends: ["base"]`, `extends: { "base.modelo": Extension }`; `models` puede quedar vacío.
+2. **defineModule** del extensor: compone para validar (colisiones de campos/métodos
+   con el base, reservados, `depends` presente) y genera el modelo compañero
+   `<Extensor><Base><Clave>` / tabla `<extensor>_<base>_<clave>` con los campos nuevos
+   + `recordId` Many2one único al base. El compañero no tiene rutas, menús, accesos ni
+   servicio. Fase 1: campos persistentes opcionales o con default literal (como la
+   evolución aditiva); sin One2many, related ni Image en extensiones; compute permitido
+   si depende de campos locales.
+3. **Generador**: `onDelete: "Cascade"` sólo interno para el enlace compañero (no se
+   expone en `Fields.Many2one`), para que borrar el registro base borre su fila.
+4. **Registro**: extraer de `defineModule` la compilación de un `ModuleModel` y
+   reutilizarla para recomponer los modelos extendidos en orden de dependencias
+   (`extB(extA(Base))`, desempate por ID), con `defineModel` sobre la clase final.
+   Accesos, reglas y capabilities siguen siendo los del modelo base.
+5. **Repositorio**: el base incluye la relación compañera en `select`; el DTO aplana
+   los campos (fila ausente → defaults, sin backfill); `create` anida `create` y
+   `update` anida `upsert`, en la misma escritura y revisión.
+6. **Cliente y vistas**: `config.extensions` (módulo, etiqueta, campos);
+   `ModelFields` pinta un `FormGroup` por extensión; componente `<ModelExtensions />`
+   para formularios expulsados; plantilla de `eject:view` lo incluye. Si una vista
+   expulsada no lo incluye, RHF conserva los valores igualmente.
+7. **Gestor de módulos**: el inventario reconoce los modelos compañeros como propiedad
+   del extensor (alcance de «Eliminar datos»); un módulo sólo de extensiones no muestra
+   app en el cajón.
+8. **Fuera de fase 1**: columnas/filtros/orden/agrupación por campos extendidos
+   (`list: false` forzado), reglas de registro sobre ellos, vista propia de la
+   extensión, nativos (Partner/User).
+
+### Pruebas
+
+- Unitarias (`modules.test.ts`, `generator.test.ts`): composición y orden con dos
+  extensiones, colisiones, dependencia ausente, required sin default rechazado,
+  esquema del compañero (unique, Cascade, inversa), `super.beforeSave`, decoradores.
+- Integración en proyecto/esquema temporales: fixture nuevo `modules-ensayoext` que
+  extiende `ensayo.tarea`; instalar ambos, leer/guardar/crear con campos extendidos,
+  fila ausente con defaults, conflicto de revisión, permisos/reglas del base, borrar
+  base en cascada, desinstalar base bloqueado, desinstalar extensor keep/drop.
+- `tsc`, lint, `test:orm`, `test:modules`, integraciones existentes y build.
+
+### Riesgos
+
+- Un `beforeSave` del base que construya un objeto nuevo sin los campos extendidos los
+  perdería: Zod estricto lo rechaza con error claro; documentar `{ ...values }`.
+- El inventario AST del gestor debe aprender `extends`; verificar el alcance exacto de
+  «Eliminar datos» antes de cerrar.
+- Tipos del mixin con decoradores legacy (`experimentalDecorators`): validar con tsc en
+  el fixture antes de seguir.
 
 ## Límites
 
