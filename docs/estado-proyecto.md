@@ -6,6 +6,25 @@ Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
+## Flota retirada (2026-11-17)
+
+Decisión del usuario tras ensayar el flujo: desinstaló Flota en desarrollo con
+«Eliminar datos», hizo merge a `main` y en la base de producción de prueba ejecutó
+db:deploy, db:generate y build sin errores (confirmación del usuario).
+
+- Commit `e11bfd8` «flota:remove», en `main` y `codex/flota` (ya en origin): borra
+  `src/modules/flota`, deja `src/modules/index.ts` vacío y añade la migración
+  `20261117190856_uninstall_flota` (limpia historial, asignaciones, overrides y
+  estados de reglas de Flota; DROP de flota_fabricante/modelo/vehicle/mantenimiento).
+- `prisma/.app-retirements.json` vacío: el ID `flota` queda libre.
+- Código recuperable desde Git en `882a2c8`. Respaldo de la base previa en
+  `.module-operations/backup-66282816ac5e6492a681d8c9719f7041/database.dump`, sólo en
+  Windows (ignorado por Git); conservarlo si se quieren recuperar esos datos.
+- **Mac:** al hacer pull y `migrate deploy`, la migración borrará sus datos de Flota.
+- Comprobado por el agente en Git/archivos (rama main al día con origin); sin
+  consultas a la BD. La tutoría de Flota queda cerrada; la siguiente guía es
+  [Tickets de servicio interno](ideas/tickets-servicio.md).
+
 ## Pendiente urgente: distribuir módulos entre proyectos (2026-11-17)
 
 Prioridad elevada por el usuario. Llevar un módulo a otro proyecto mediante ZIP de

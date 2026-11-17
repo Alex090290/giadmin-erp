@@ -15,7 +15,7 @@ para un piloto posterior tipo pedidos).
 
 | Concepto | En Tickets | ¿Existe hoy? |
 | --- | --- | --- |
-| Dependencias entre módulos | Solicitante/técnico como User/Partner; ticket ligado a un Vehicle de Flota (declarar dependencia y comportamiento al desinstalar Flota) | Parcial: Many2one a User existe; dependencia declarada entre módulos declarativos, no |
+| Dependencias entre módulos | Solicitante/técnico como User/Partner; ticket ligado a un registro de otro módulo declarativo (Flota se retiró el 2026-11-17: elegir otro módulo o reinstalarla sólo si el usuario lo pide) | Parcial: Many2one a User existe; dependencia declarada entre módulos declarativos, no |
 | Folio/secuencia | `TCK-0001` consecutivo, seguro en concurrencia | No |
 | Fecha sin hora | Fecha compromiso/vencimiento | No (sólo DateTime UTC) |
 | Acciones con parámetros | «Cerrar» con nota de resolución; «Reasignar» con técnico | No (`@action` recibe sólo el registro) |
@@ -45,12 +45,12 @@ Cada pieza nueva nace del caso real; sin abstracciones por anticipación.
 4. Kanban y reglas por registro por rol.
 5. Acciones con parámetros: Cerrar y Reasignar.
 6. Many2many: etiquetas y observadores.
-7. Dependencia con Flota: vincular vehículo; definir desinstalación.
+7. Dependencia con otro módulo declarativo (Flota está retirada): vincular un registro y definir el comportamiento al desinstalar el módulo requerido.
 8. Avisos y adjuntos.
 
 ## Límites
 
-- No modificar Flota (ni añadirle la inversa) salvo petición expresa.
+- Flota está retirada desde el 2026-11-17; no reinstalarla ni recuperar su código salvo petición expresa.
 - Tutoría a ritmo del usuario: explicar y verificar un paso a la vez.
 - Pruebas del framework con fixtures/esquemas propios, nunca datos reales.
 - Considerar antes la [estrategia de entornos](entornos-bases.md) si la guía llega a

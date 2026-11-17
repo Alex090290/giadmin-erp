@@ -1,5 +1,10 @@
 # Flota: tutoría con módulos declarativos
 
+> **Retirada el 2026-11-17.** El usuario desinstaló Flota con «Eliminar datos»
+> (migración `20261117190856_uninstall_flota`). Este documento queda como registro
+> histórico del recorrido; el código completo sigue en Git en el commit `882a2c8`.
+> La siguiente guía es [Tickets de servicio interno](ideas/tickets-servicio.md).
+
 Recorrido actualizado el 2026-11-14 para `src/modules`. El usuario ejecuta los
 ejercicios; explicar y verificar uno cada vez, sin crear modelos, vistas ni reglas
 por adelantado. [Contrato y herramientas](modulos-declarativos.md).
