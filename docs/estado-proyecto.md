@@ -38,6 +38,17 @@ pruebas nuevas de ejecución. Next 16.4.6 conserva la verificación del bloque a
 
 ## Actualización de seguridad de Next.js (2026-11-16)
 
+Revisión del 2026-11-17 en otra máquina: `next upgrade --agent=security` volvió a
+proponer 16.4.3 → 16.4.6 porque node_modules local no se había reinstalado; fuentes,
+lockfile y agentUpgrade ya estaban en Git (2f0707f, origin/codex/flota). Con dev
+detenido se ejecutó `npm ci`: next --version 16.4.6, npm audit --omit=dev sin
+vulnerabilidades (7 moderadas sólo en dependencias de desarrollo), tsc, lint y
+`next build` aprobados con los tres avisos de trazado conocidos. Esa máquina no tenía
+`.env.development.local`: `npm run build` falla en `prisma generate` por falta de
+DATABASE_URL; se generó el cliente con una URL ficticia sólo para el proceso (no
+conecta). Crear ese archivo privado por máquina según [entornos](entornos-y-bases.md).
+GitHub no se consultó: gh no está instalado.
+
 Ejecutado `next upgrade --agent=security`: objetivo seleccionado 16.4.6 desde
 16.4.3. Next y eslint-config-next quedan fijados en 16.4.6; lockfile actualizado
 y experimental.agentUpgrade="security" en next.config.ts. Commit 9e52b62 en
