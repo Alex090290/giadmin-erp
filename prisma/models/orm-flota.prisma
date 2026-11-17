@@ -45,6 +45,7 @@ model FlotaVehicle {
   estado FlotaVehicleEstadoEnum @default(disponible)
   kilometraje Int @default(0)
   proximoServicioKm Int @default(20000) @map("proximo_servicio_km")
+  intervaloServicioKm Int @default(10000) @map("intervalo_servicio_km")
   createBy String? @map("create_by")
   createByUser User? @relation("FlotaVehicle_createBy", fields: [createBy], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)

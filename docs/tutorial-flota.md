@@ -9,7 +9,22 @@ comprobó que no existen sus rutas ni su carpeta de módulo, el índice está va
 los registros locales de instalación/retirada no reservaban su ID. El nuevo módulo
 ya usa **flota**; las migraciones históricas se conservan.
 
-## Punto vigente (2026-11-15)
+## Punto vigente (2026-11-17)
+
+Completados los ejercicios de líneas de Mantenimiento, validaciones y acceso
+heredado del vehículo. Vehicle ya permite intervaloServicioKm configurable y
+finalizarMantenimiento exige una línea con el kilometraje actual antes de calcular
+el próximo servicio. Confirmaciones funcionales del usuario; detalles y límites
+de verificación en [el cierre vigente](estado-proyecto.md).
+
+**Siguiente ejercicio pendiente, todavía sin implementar:** añadir un intervalo
+recomendado a Modelo y usar @onchange al seleccionar modeloId en Vehicle para
+proponerlo, permitiendo ajustes individuales. Revisar el contrato de reacciones y
+la consulta autorizada antes de escribir el ejemplo. No recalcular ni sobrescribir
+el intervalo elegido en cada guardado. Retomar con la declaración del campo en
+Modelo y avanzar un paso a la vez; no editar archivos de aplicación por adelantado.
+
+## Recorrido anterior (2026-11-15)
 
 El usuario confirmó las comprobaciones con Consulta, Operador y Responsable:
 consulta bloqueada; creación/edición y mantenimiento de vehículos propios con
@@ -348,7 +363,23 @@ operador y responsable con cuentas no administradoras.
 El usuario eligió que las líneas sólo sean accesibles si su vehículo es accesible.
 El motor hereda automáticamente el alcance de lectura de Vehicle por la inversa
 One2many, combinado con permisos/reglas propios de Mantenimiento; no copiar domains
-ni añadir otra regla al manifest. Próxima prueba guiada: operador ve sólo los
+ni añadir otra regla al manifest. Prueba guiada confirmada por el usuario: operador ve sólo los
 mantenimientos de sus vehículos accesibles en /erp/flota/mantenimiento y no puede
 abrir por URL un mantenimiento de otro vehículo; responsable conserva el alcance
 que sus reglas de Vehicle permitan. Sin orm:sync por este cambio de autorización.
+Confirmación del usuario, sin repetición independiente del agente.
+
+Intervalo de servicio parametrizado por el usuario: intervaloServicioKm (Integer
+required, default 10000, min 1, tracking), mostrado en VehicleForm. Migración
+20261117020637_sync_flota revisada: añade únicamente intervalo_servicio_km con
+default 10000. finalizarMantenimiento suma record.intervaloServicioKm al kilometraje.
+El usuario confirmó la prueba funcional del intervalo personalizado; sin consulta
+independiente a BD ni repetición del flujo por el agente.
+
+finalizarMantenimiento también exige una línea cuyo kilometraje coincida con el
+actual del vehículo mediante record.mantenimientos.some(...). El usuario confirmó
+rechazo sin esa línea y finalización permitida después de añadirla. Confirmación
+del usuario, sin repetición independiente del agente. El usuario dio por terminado
+el bloque tras la prueba propuesta de mover de mantenimiento a disponible en
+Kanban, que declara finalizarMantenimiento como acción de la transición; sin
+repetición independiente del agente.

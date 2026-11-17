@@ -72,6 +72,14 @@ export class Vehicle extends Model {
     maxRows: 50,
   });
 
+  intervaloServicioKm = Fields.Integer({
+    label: "Intervalo de servicio (km)",
+    required: true,
+    default: 10000,
+    min: 1,
+    tracking: true,
+  });
+
   @constraint("kilometraje", "mantenimientos")
   validarKilometraje(values: Readonly<Record<string, unknown>>) {
     const kilometraje = values.kilometraje;
@@ -122,7 +130,12 @@ export class Vehicle extends Model {
       throw new Err("El vehículo no está en mantenimiento");
     }
 
-    return { estado: "disponible" as const, proximoServicioKm: record.kilometraje + 10000 };
+    const servicioRegistrado = record.mantenimientos.some((linea) => linea.kilometraje === record.kilometraje);
+    if (!servicioRegistrado) {
+      throw new Err("Registra un mantenimiento con el kilometraje actual antes de finalizar.");
+    }
+
+    return { estado: "disponible" as const, proximoServicioKm: record.kilometraje + record.intervaloServicioKm };
   }
 
   normalize(values: Readonly<Record<string, unknown>>) {

@@ -58,6 +58,7 @@ function FormContent() {
           <FieldNumber<Values> name="kilometraje" type="integer" />
           <FieldNumber<Values> name="proximoServicioKm" type="integer" />
           <FieldNumber name="kilometrosRestantes" type="integer" mode="display" />
+          <FieldNumber<Values> name="intervaloServicioKm" type="integer" />
         </Stack>
         <FieldBoolean<Values> name="active" />
       </FormGroup>

@@ -1,10 +1,40 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-16.
+Última actualización: 2026-11-17.
 
 Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../AGENTS.md)
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
+
+## Cierre de Flota y siguiente ejercicio pendiente (2026-11-17)
+
+Usuario pidió guardar el progreso y dejar el próximo ejercicio sin implementar.
+Vehicle declara intervaloServicioKm (Integer obligatorio, default 10000, min 1,
+tracking); VehicleForm lo muestra con FieldNumber dentro de Stack. La migración
+20261117020637_sync_flota añade únicamente intervalo_servicio_km INTEGER NOT NULL
+DEFAULT 10000. SQL y fuentes revisados; el usuario indicó que terminó orm:sync,
+sin comprobación independiente de aplicación en BD por el agente.
+
+finalizarMantenimiento exige estado mantenimiento y una línea con el kilometraje
+actual del vehículo; devuelve disponible y proximoServicioKm = kilometraje +
+intervaloServicioKm. Usuario confirmó rechazo sin la línea y éxito al registrarla,
+y cálculo con intervalo personalizado. También dio por terminado el bloque tras
+la prueba propuesta desde Kanban; no hubo repetición independiente en navegador.
+El acceso heredado de Mantenimiento según Vehicle quedó confirmado por el usuario.
+
+**Pendiente al retomar:** intervalo recomendado por Modelo, aplicado a Vehicle al
+seleccionar modeloId mediante @onchange, permitiendo ajuste individual. Aún no se
+añadió el campo a Modelo ni se implementó la reacción. Revisar primero el contrato
+actual de decoradores/reacciones y el acceso autorizado a la relación; distinguir
+la ayuda del navegador de la validación definitiva en servidor. No sobrescribir
+el intervalo personalizado en cada guardado. Guiar un paso cada vez: campo en
+Modelo → revisar sincronización → presentación en su formulario → reacción en
+Vehicle → pruebas de selección/cambio y ajuste manual. No adelantar sus archivos.
+
+Git observado al cierre: HEAD 2f0707f (cambios de acceso revertidos), cambios locales
+del ejercicio en Vehicle/VehicleForm, esquema/registro de instalación, migración
+y tutorial. Este cierre sólo actualiza documentación; sin commit, push, SQL ni
+pruebas nuevas de ejecución. Next 16.4.6 conserva la verificación del bloque anterior.
 
 ## Actualización de seguridad de Next.js (2026-11-16)
 
