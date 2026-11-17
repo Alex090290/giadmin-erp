@@ -480,9 +480,8 @@ panel del navegador integrado no hidrató la lista como ese usuario (websocket d
 HMR fallido), así que su vista en navegador no se comprobó. `prueba-accesos` sigue
 en la BD, miembro de `demo.usuario`.
 
-Hallazgos pendientes: (1) `src/schemas/password.schema.ts` limita la contraseña
-a **máximo** 8 caracteres mientras la UI pide «al menos 8»; parece un error previo
-ajeno a esta fase. (2) Aviso sólo de desarrollo `instant-unrendered-segment` en
+Hallazgos pendientes: (1) ~~límite de contraseña de máximo 8 caracteres~~,
+resuelto el 2026-11-17: mínimo 8 y máximo 72 bytes. (2) Aviso sólo de desarrollo `instant-unrendered-segment` en
 `/erp/[module]/[[...path]]` (no afecta build ni funcionamiento); evaluar
 `export const instant = false` en el layout o reestructurar según la guía de
 navegación instantánea de Next 16.

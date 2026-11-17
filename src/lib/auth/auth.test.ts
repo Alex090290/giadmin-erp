@@ -31,10 +31,11 @@ test("post-login redirects cannot leave the ERP or redirect to external sites", 
 
 test("users require a new password on create and keep it optional on edit", () => {
   const valid = { ...newUserDefaults, name: "Ejemplo", login: "example", password: "abcd1234" };
+  const longest = "x".repeat(72);
   assert.equal(userSchema.safeParse(valid).success, true);
-  for (const password of ["1234", "abcdefgh", "abcd", "aB!2", "  ab", "éééé"]) assert.equal(userSchema.safeParse({ ...valid, password }).success, true);
-  for (const password of ["", "123", "123456789"]) assert.equal(userSchema.safeParse({ ...valid, password }).success, false);
-  for (const password of ["123", "123456789"]) assert.equal(userSchema.safeParse({ ...valid, id: "existing", revision: "2026-11-05T01:00:00.000Z", password }).success, false);
+  for (const password of ["abcdefgh", "12345678", "        ", "éééééééé", "contraseña larga sin símbolos", longest, "é".repeat(36)]) assert.equal(userSchema.safeParse({ ...valid, password }).success, true);
+  for (const password of ["", "1234", "1234567", "x".repeat(73), "é".repeat(37)]) assert.equal(userSchema.safeParse({ ...valid, password }).success, false);
+  for (const password of ["1234567", "x".repeat(73)]) assert.equal(userSchema.safeParse({ ...valid, id: "existing", revision: "2026-11-05T01:00:00.000Z", password }).success, false);
   assert.equal(userSchema.safeParse({ ...valid, id: "existing", revision: "2026-11-05T01:00:00.000Z", password: "" }).success, true);
   assert.equal(userSchema.safeParse({ ...valid, id: "existing", revision: "", password: "" }).success, false);
   assert.equal(userSchema.safeParse({ ...valid, sessionVersion: 99 }).success, false);
@@ -74,8 +75,8 @@ test("self-service profiles cannot submit a different user, credentials or permi
 });
 
 test("password changes require current credentials, matching confirmation and a distinct bounded password", () => {
-  const input = { currentPassword: "Legacy-password-123", newPassword: "abcd", confirmPassword: "abcd" };
+  const input = { currentPassword: "1234", newPassword: "abcd1234", confirmPassword: "abcd1234" };
   assert.equal(changePasswordSchema.safeParse(input).success, true);
-  for (const password of ["1234", "abcdefgh", "aB!2", "  ab", "éééé"]) assert.equal(changePasswordSchema.safeParse({ ...input, newPassword: password, confirmPassword: password }).success, true);
-  for (const patch of [{ currentPassword: "" }, { newPassword: "123", confirmPassword: "123" }, { newPassword: "123456789", confirmPassword: "123456789" }, { confirmPassword: "different" }, { currentPassword: input.newPassword }, { newPassword: "é".repeat(37), confirmPassword: "é".repeat(37) }, { id: "another-user" }]) assert.equal(changePasswordSchema.safeParse({ ...input, ...patch }).success, false);
+  for (const password of ["abcdefgh", "Legacy-password-123", "        ", "éééééééé", "x".repeat(72)]) assert.equal(changePasswordSchema.safeParse({ ...input, newPassword: password, confirmPassword: password }).success, true);
+  for (const patch of [{ currentPassword: "" }, { newPassword: "1234567", confirmPassword: "1234567" }, { newPassword: "x".repeat(73), confirmPassword: "x".repeat(73) }, { confirmPassword: "different" }, { currentPassword: input.newPassword }, { newPassword: "é".repeat(37), confirmPassword: "é".repeat(37) }, { id: "another-user" }]) assert.equal(changePasswordSchema.safeParse({ ...input, ...patch }).success, false);
 });

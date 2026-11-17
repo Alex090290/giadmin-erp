@@ -36,6 +36,17 @@ guía describía la configuración de la Mac.
 - Pendiente anotado: planear la nueva estrategia de entornos con el usuario antes
   de crear archivos o comandos. [Problemas, preguntas y criterios](ideas/entornos-bases.md).
 
+## Política de contraseñas: mínimo 8, máximo 72 bytes (2026-11-17)
+
+Decisión del usuario: sustituye la política 4–8 del 2026-11-11. `newPasswordSchema`
+exige al menos 8 caracteres y como máximo 72 bytes UTF-8 (límite de bcrypt), sin
+reglas de símbolos/mayúsculas ni recorte. Aplica a altas y cambios en Usuarios y
+Perfil; las credenciales guardadas (incluido el admin del seed con `1234`) siguen
+entrando, porque login y contraseña actual no cambian. Corregida la inconsistencia
+de UserEditor y el texto de ChangePasswordForm; docs/authentication.md actualizado.
+Verificados test:auth (9) con límites 7/8/72/73 y multibyte, test:auth:integration
+en proyecto/esquema temporales, tsc y ESLint. Sin cambios de datos ni de hashes.
+
 ## Siguiente guía planeada: Tickets de servicio interno (2026-11-17)
 
 Anotada a petición del usuario como siguiente tutoría tras Flota; todavía no inicia
@@ -801,7 +812,7 @@ Contrato en [Acciones de formulario](ideas/acciones-formulario.md#contrato-imple
     - doble clic y modo consulta.
   - No se probó con un módulo real en el navegador ni se ejecutó el build.
 - Pendientes:
-  - el esquema de contraseña limita a 8 caracteres;
+  - ~~el esquema de contraseña limita a 8 caracteres~~ (resuelto el 2026-11-17);
   - las etiquetas Many2one no se filtran por las reglas del modelo destino;
   - aviso dev `instant-unrendered-segment`.
 

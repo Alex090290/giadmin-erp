@@ -13,7 +13,7 @@ export const userSchema = z.strictObject({
   active: z.boolean(),
   isAdmin: z.boolean(),
 }).superRefine((value, context) => {
-  if (!value.id && !value.password) context.addIssue({ code: "custom", path: ["password"], message: "La contraseña debe tener al menos 4 caracteres." });
+  if (!value.id && !value.password) context.addIssue({ code: "custom", path: ["password"], message: "La contraseña debe tener al menos 8 caracteres." });
   if (value.id && !z.iso.datetime().safeParse(value.revision).success) context.addIssue({ code: "custom", path: ["revision"], message: "Recarga el usuario antes de guardar." });
   if (!value.id && value.partnerRevision !== null) context.addIssue({ code: "custom", path: ["partnerRevision"], message: "Un usuario nuevo no debe tener una revisión de contacto previa." });
 });
