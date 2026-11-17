@@ -17,11 +17,4 @@ model User {
     updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
     @@map("users")
-
-  // BEGIN lite-erp:flota:User
-  flotaFabricanteCreatedRecords FlotaFabricante[] @relation("FlotaFabricante_createBy")
-  flotaModeloCreatedRecords FlotaModelo[] @relation("FlotaModelo_createBy")
-  flotaVehicleCreatedRecords FlotaVehicle[] @relation("FlotaVehicle_createBy")
-  flotaMantenimientoCreatedRecords FlotaMantenimiento[] @relation("FlotaMantenimiento_createBy")
-  // END lite-erp:flota:User
 }
