@@ -258,7 +258,7 @@ lista y etiquetas se consultan en transacciones separadas. La respuesta incluye
 sólo etiquetas auxiliares en `$labels`, sin objetos completos del lookup. Se
 deduplican IDs por página y se dividen en lotes de hasta cien, sin caché compartida
 entre usuarios. Un fallo del proveedor rechaza la página; una referencia ausente
-se muestra como «No disponible» y una vacía conserva el estado vacío.
+o no legible para el actor se muestra vacía, igual que una relación sin valor.
 
 ListView (incluidos vista rápida y grupos), CardView y KanbanView comparten esa
 presentación. Selection usa `options` en celdas y encabezados de grupo. Orden y

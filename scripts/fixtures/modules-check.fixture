@@ -200,7 +200,7 @@ await setRulesActive(prisma, root, new Map([["ensayo.tareas-propias", true]]));
 assert.equal(await prisma.accessRuleState.count(), 0, "una regla activa no se guarda");
 await assert.rejects(setRulesActive(prisma, root, new Map([["ensayo.inventada", false]])), /Regla inexistente/);
 const detail = (await groupDetail(prisma, root, "ensayo.usuario"))!;
-assert.deepEqual(detail.rules.map(rule => [rule.id, rule.scope, rule.active]), [["ensayo.tareas-propias", "grupo", true]]);
+assert.deepEqual(detail.rules.map(rule => [rule.id, rule.scope, rule.active]), [["ensayo.tareas-propias", "grupo", true], ["ensayo.categorias-activas", "grupo", true]]);
 assert.deepEqual(detail.models.find(model => model.id === "ensayo.tarea")?.perms, flags(true, true, true, false));
 assert.equal(await groupDetail(prisma, root, "otro.grupo"), null);
 
@@ -285,5 +285,25 @@ assert.equal(wrongResult.ok,false); assert.match(!wrongResult.ok ? wrongResult.e
 const unchanged=ok(await tareas.read(prisma,ana,wrongTarget.id),"read rolled back move").values;
 assert.equal(unchanged.estado,"pendiente");assert.equal(unchanged.revision,wrongTarget.revision);
 assert.equal(await prisma.recordActivity.count({where:{model:"EnsayoTarea",recordId:wrongTarget.id}}),wrongEvents,"target mismatch also rolls back activity");
+// Related records follow the target model rules: unreadable ones are presented empty.
+const archivada = ok(await categorias.save(prisma, actor, { name: "Archivada", active: false }), "categoría inactiva").values;
+const enArchivada = ok(await tareas.save(prisma, ana, { ...base, categoria: archivada.id, name: "En archivada" }), "tarea con categoría inactiva").values;
+const preview = async (who: typeof ana, categoria: unknown) => { const result = await tareas.react(prisma, who, { field: "categoria", values: { categoria } }); assert.equal(result.ok, true, JSON.stringify(result)); return result.ok ? result.preview.categoriaNombre : undefined; };
+assert.equal(await preview(ana, archivada.id), null, "form related hides an unreadable category");
+assert.equal(await preview(ana, trabajo.values.id), "Trabajo", "form related shows a readable category");
+assert.equal(await preview(jefa, archivada.id), "Archivada", "responsable reads every category");
+const rowOf = async (who: typeof ana, record: { id?: unknown; name?: unknown }) => {
+  const page = ok(await withActor(who, () => tareas.list(prisma, who, { ...state, query: String(record.name) })), "lista con related");
+  return page.data.rows.find(row => row.id === record.id) as { categoriaNombre?: unknown; $labels?: Record<string, { label: string } | null> } | undefined;
+};
+const enTrabajo = await taskOf(ana, "Related legible");
+const anaRow = await rowOf(ana, enArchivada), jefaRow = await rowOf(jefa, enArchivada), anaOwn = await rowOf(ana, enTrabajo);
+assert.ok(anaRow && jefaRow && anaOwn, "las tareas aparecen en sus listas");
+assert.equal(anaRow?.categoriaNombre, null, "collection related hides an unreadable category");
+assert.equal(anaRow?.$labels?.categoria?.label, "", "Many2one label is empty for an unreadable category");
+assert.equal(anaOwn?.categoriaNombre, "Trabajo", "readable related values stay visible");
+assert.equal(jefaRow?.categoriaNombre, "Archivada");
+assert.equal(jefaRow?.$labels?.categoria?.label, "Archivada");
+assert.equal(ok(await tareas.read(prisma, ana, enArchivada.id), "la tarea sigue legible").values.categoria, archivada.id, "the stored ID is kept");
 await prisma.$disconnect();
 console.log("modules-check ok");

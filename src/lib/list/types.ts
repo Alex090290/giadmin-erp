@@ -93,7 +93,7 @@ export function readListDisplayValue(record: ListRecord, column: ListColumn): Li
   if (column.widget !== "many2one" || value === null || value === "") return value;
   const labels = Object.hasOwn(record, "$labels") ? record.$labels : null;
   const label = labels && typeof labels === "object" && !Array.isArray(labels) && Object.hasOwn(labels, column.field) ? labels[column.field] : null;
-  return label && typeof label === "object" && !Array.isArray(label) && label.value === value && typeof label.label === "string" ? label.label : "No disponible";
+  return label && typeof label === "object" && !Array.isArray(label) && label.value === value && typeof label.label === "string" ? label.label : "";
 }
 
 /** A record's server label is presentation metadata, never its identity. */

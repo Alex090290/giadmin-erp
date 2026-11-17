@@ -1,10 +1,12 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ModelRepository } from "../orm/repository";
+import type { RelationAccess } from "../orm/relation-access";
 import type { RecordAudit } from "../orm/audit";
 import type { FieldMetadata } from "../orm/fields";
 import { displayLookupSelect, type DisplayGuard } from "../orm/display";
 import { relatedValues } from "../orm/related";
+import { maskRelations, relationTargets, withRelationIds } from "../orm/relation-access";
 import { ModelValidationError } from "../orm/context";
 import { lookupProjectionPlan } from "../orm/generator/display";
 import { relatedProjectionPlan } from "../orm/generator/related";
@@ -54,6 +56,7 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
     Object.fromEntries(Object.entries(policy).map(([path, guards]) => [path, guards.map(guard => ({ metadata: metadataOf(guard.model)[guard.field], ...(guard.target ? { target: guard.target } : {}) }))]));
   const display = lookupProjectionPlan(module, generation);
   const displayGuards = guardsOf(display.policy);
+  const displayTargets = relationTargets(display.policy);
   const related = relatedProjectionPlan(module, generation);
   const groupFields = new Set(["id", ...names.filter(name => metadata[name].kind !== "datetime"), "createBy"]);
 
@@ -73,7 +76,8 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
   const relatedGroup = (field: string) => {
     const group = related.find(candidate => candidate.root === field);
     if (!group) throw new Error("Campo related no permitido.");
-    return { group, delegate: lowerFirst(group.target), guards: guardsOf(group.policy) };
+    // Guard 0 is the local root relation; projected paths start at the root target.
+    return { group, delegate: lowerFirst(group.target), guards: guardsOf(group.policy), targets: relationTargets(group.policy, 1) };
   };
 
   return {
@@ -88,22 +92,32 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
     count(tx, where) { return delegateOf(tx, entry.delegate).count({ where }); },
     ...(display.paths.length ? { lookupPaths: display.paths } : {}),
     async lookup(tx, query) {
-      const projection = displayLookupSelect(query.fields, displayGuards);
-      return delegateOf(tx, entry.delegate).findMany({ where: query.where, select: projection, orderBy: { id: "asc" }, skip: query.skip, take: query.take });
+      const projection = withRelationIds(displayLookupSelect(query.fields, displayGuards));
+      const rows = await delegateOf(tx, entry.delegate).findMany({ where: query.where, select: projection, orderBy: { id: "asc" }, skip: query.skip, take: query.take });
+      await maskRelations(rows, displayTargets, query.access);
+      return rows;
     },
     ...(related.length ? {
-      async related(tx: Prisma.TransactionClient, field: string, id: string) {
-        const { group, delegate, guards } = relatedGroup(field);
-        const row = await delegateOf(tx, delegate).findUnique({ where: { id }, select: displayLookupSelect(Object.keys(group.policy), guards) });
+      async related(tx: Prisma.TransactionClient, field: string, id: string, access?: RelationAccess) {
+        const { group, delegate, guards, targets } = relatedGroup(field);
+        // A related record the actor cannot read is presented empty, like an unset relation.
+        if (access && !(await access(group.target, [id])).has(id)) return Object.fromEntries(Object.keys(group.outputs).map(name => [name, null]));
+        const row = await delegateOf(tx, delegate).findUnique({ where: { id }, select: withRelationIds(displayLookupSelect(Object.keys(group.policy), guards)) });
         if (!row) throw new ModelValidationError("El registro relacionado ya no está disponible.");
+        await maskRelations([row], targets, access);
         return relatedValues(row, group.outputs);
       },
-      async relatedMany(tx: Prisma.TransactionClient, field: string, ids: readonly string[], outputs: readonly string[]) {
+      async relatedMany(tx: Prisma.TransactionClient, field: string, ids: readonly string[], outputs: readonly string[], access?: RelationAccess) {
         if (!ids.length || ids.length > 100 || !outputs.length || outputs.length > 12) throw new Error("Lote related inválido.");
-        const { group, delegate, guards } = relatedGroup(field);
+        const { group, delegate, guards, targets } = relatedGroup(field);
         if (outputs.some(name => !Object.hasOwn(group.outputs, name))) throw new Error("Salida related no permitida.");
         const selected = Object.fromEntries(Object.entries(group.outputs).filter(([name]) => outputs.includes(name)));
-        const rows = await delegateOf(tx, delegate).findMany({ where: { id: { in: [...new Set(ids)] } }, select: { ...displayLookupSelect([...new Set(Object.values(selected))], guards), id: true } });
+        const unique = [...new Set(ids)];
+        // Unreadable roots are omitted: the collection presents their outputs empty.
+        const readable = access ? [...await access(group.target, unique)] : unique;
+        if (!readable.length) return {};
+        const rows = await delegateOf(tx, delegate).findMany({ where: { id: { in: readable } }, select: { ...withRelationIds(displayLookupSelect([...new Set(Object.values(selected))], guards)), id: true } });
+        await maskRelations(rows, targets, access);
         return Object.fromEntries(rows.map(row => [row.id as string, relatedValues(row, selected)]));
       },
     } : {}),

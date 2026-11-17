@@ -24,12 +24,12 @@ export async function resolveListLabels(result: ListResult, providers: Readonly<
       labels.set(field, names);
     }));
     const groups = groupField && labels.has(groupField) && result.data.groups
-      ? { groups: result.data.groups.map(group => ({ ...group, label: typeof group.value === "string" && group.value ? labels.get(groupField)?.get(group.value) || "No disponible" : undefined })) }
+      ? { groups: result.data.groups.map(group => ({ ...group, label: typeof group.value === "string" && group.value ? labels.get(groupField)?.get(group.value) || "" : undefined })) }
       : {};
     return { ...result, data: { ...result.data, ...groups, rows: result.data.rows.map(row => ({ ...row,
       $labels: Object.fromEntries(entries.map(([field]) => {
         const id = readListValue(row, field);
-        return [field, typeof id === "string" && id ? { value: id, label: labels.get(field)?.get(id) || "No disponible" } : null];
+        return [field, typeof id === "string" && id ? { value: id, label: labels.get(field)?.get(id) || "" } : null];
       })),
     })) } };
   } catch { return { ok: false, error: "No se pudieron consultar los nombres de los registros relacionados. Intenta nuevamente." }; }

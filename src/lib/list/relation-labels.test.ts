@@ -22,11 +22,11 @@ test("relations resolve once per distinct ID batch and preserve stored values wi
   assert.equal(readListDisplayValue(result.data.rows[0], column), "Toyota");
   assert.equal(readListDisplayValue(result.data.rows[1], column), "Toyota");
   assert.equal(readListDisplayValue(result.data.rows[2], column), null);
-  assert.equal(readListDisplayValue(result.data.rows[3], column), "No disponible");
+  assert.equal(readListDisplayValue(result.data.rows[3], column), "");
   assert.equal(JSON.stringify(result).includes("not-for-list"), false);
   assert.equal(JSON.stringify(result).includes("unrequested"), false);
   assert.equal(page.ok && Object.hasOwn(page.data.rows[0], "$labels"), false);
-  assert.equal(readListDisplayValue({ ...result.data.rows[0], fabricanteId: "different" }, column), "No disponible");
+  assert.equal(readListDisplayValue({ ...result.data.rows[0], fabricanteId: "different" }, column), "");
 });
 
 test("lookup failures fail the page closed; empty, failed and grouped pages do not query relations", async () => {
@@ -59,7 +59,7 @@ test("selection presentation uses labels and preserves unknown values and raw fi
   assert.equal(formatListValue("car", selection), "Automóvil");
   assert.equal(formatListValue("unknown", selection), "unknown");
   assert.equal(formatListValue(null, selection), "—");
-  assert.equal(readListDisplayValue({ id: "1", fabricanteId: "a" }, column), "No disponible");
+  assert.equal(readListDisplayValue({ id: "1", fabricanteId: "a" }, column), "");
   assert.equal(readListDisplayValue({ id: "1", fabricanteId: "a" }, { field: "fabricanteId", label: "ID" }), "a");
 });
 
@@ -74,7 +74,7 @@ test("group headers resolve the current level in batches without merging identic
   assert.equal(calls, 1); assert.ok(result.ok);
   assert.equal(result.data.groupField, "fabricanteId");
   assert.equal(result.data.hasMoreGroups, true); assert.equal(result.data.page, 2); assert.equal(result.data.total, 9);
-  assert.deepEqual(result.data.groups?.map(group => [group.value, group.count, groupDisplayLabel(group, column)]), [["a", 2, "Volkswagen"], ["b", 3, "Volkswagen"], [null, 1, "Sin valor"], ["missing", 3, "No disponible"]]);
+  assert.deepEqual(result.data.groups?.map(group => [group.value, group.count, groupDisplayLabel(group, column)]), [["a", 2, "Volkswagen"], ["b", 3, "Volkswagen"], [null, 1, "Sin valor"], ["missing", 3, ""]]);
   assert.equal(JSON.stringify(result).includes("hidden"), false);
   assert.equal(source.data.groups?.[0].label, undefined);
   const denied = await resolveListLabels(source, { fabricanteId: async () => ({ ok: false, error: "Denied" }) });

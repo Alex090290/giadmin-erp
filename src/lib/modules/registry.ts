@@ -71,6 +71,19 @@ export function modelService(id: string): Service {
     list: entry.list, audit: true, defaultSort: entry.defaultSort,
     // Group access and record rules, revalidated inside each service transaction.
     authorize: (tx, actor, operation) => authorizeModel(tx, actor, entry.id, operation),
+    // Related records shown through displayName/related paths obey the target's read access and rules.
+    relationAccess: (tx, actor) => async (target, ids) => {
+      const related = byPrismaName.get(target);
+      // Infrastructure/manual models (User, Partner) carry no module record rules.
+      if (!related) return new Set(ids);
+      let scope: Record<string, unknown> | undefined;
+      try { scope = await authorizeModel(tx, actor, related.id, "read"); }
+      catch (error) { if (error instanceof AccessError && error.code === "DENIED") return new Set<string>(); throw error; }
+      if (!scope) return new Set(ids);
+      const delegate = (tx as unknown as Record<string, { findMany(args: unknown): Promise<{ id: string }[]> }>)[related.delegate];
+      const rows = await delegate.findMany({ where: { AND: [{ id: { in: [...ids] } }, scope] }, select: { id: true } });
+      return new Set(rows.map(row => row.id));
+    },
     // Actions with groups: superusers pass; others need one of the groups (local keys belong to this module).
     authorizeAction: async (tx, actor, action) => {
       const user = await tx.user.findUnique({ where: { id: actor.id }, select: { isAdmin: true } });

@@ -155,7 +155,7 @@ test("relational bindings compile against an isolated real Prisma client without
     // Resolve the real repository interface against the fixture client, while reusing shared DTOs.
     await mkdir(join(root, "src/lib/orm"), { recursive: true });
     const repositorySource = (await readFile(join(project, "src/lib/orm/repository.ts"), "utf8"))
-      .replaceAll('"../list/', '"@/lib/list/').replaceAll('"./record"', '"@/lib/orm/record"').replaceAll('"./audit"', '"@/lib/orm/audit"');
+      .replaceAll('"../list/', '"@/lib/list/').replaceAll('"./record"', '"@/lib/orm/record"').replaceAll('"./audit"', '"@/lib/orm/audit"').replaceAll('"./relation-access"', '"@/lib/orm/relation-access"');
     await writeFile(join(root, "src/lib/orm/repository.ts"), repositorySource);
     await writeFile(join(root, "tsconfig.json"), JSON.stringify({ extends: join(project, "tsconfig.json"), compilerOptions: { incremental: false, paths: { "@/*": [join(root, "src/*"), join(project, "src/*")] } }, include: ["src/**/*.ts"], exclude: ["node_modules"] }));
     const compiled = spawnSync(process.execPath, [join(project, "node_modules/typescript/bin/tsc"), "--project", join(root, "tsconfig.json"), "--noEmit"], { cwd: root, encoding: "utf8", timeout: 30000 });

@@ -130,7 +130,8 @@ política explícita; no combinarla con `list`.
 `relations` se declara una vez: lista normal, listas con domain, grupos y kanban
 comparten la resolución por lotes de hasta 100 IDs. Sólo sale ID/etiqueta, sin caché
 entre usuarios. Un lookup rechazado devuelve error de colección; una relación que
-ya no está disponible muestra «No disponible», conservando el ID como clave.
+ya no está disponible o que el actor no puede leer se muestra vacía, conservando el
+ID como clave.
 Cada proveedor debe autorizar su lectura. El snapshot RepeatableRead pertenece a
 la consulta base; los lookups autorizados corren después, en transacciones separadas.
 Las etiquetas pueden reflejar cambios posteriores, nunca deciden filtros, orden,

@@ -4,6 +4,7 @@ import { Fields, Model, ModelValidationError, depends, type ReactionValues, acti
 export class Tarea extends Model {
   name = Fields.Text({ label: "Título", required: true, maxLength: 120, tracking: true, searchable: true });
   categoria = Fields.Many2one("EnsayoCategoria", { label: "Categoría", required: true, tracking: true });
+  categoriaNombre = Fields.Text({ label: "Nombre de la categoría", related: "categoria.name" });
   estado = Fields.Selection([
     { value: "pendiente", label: "Pendiente" },
     { value: "curso", label: "En curso" },

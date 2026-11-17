@@ -19,6 +19,7 @@ import type { ModelRepository } from "./repository";
 import { INTEGER_MIN, INTEGER_MAX, type FieldMetadata, type Field } from "./fields";
 import { resolveCollectionComputed, validateCollectionComputed, type CollectionComputed } from "./collection-computed";
 import { resolveCollectionRelated } from "./collection-related";
+import { cachedRelationAccess, type RelationAccess } from "./relation-access";
 import type { KanbanMoveResult, KanbanRequest, KanbanConfig } from "../kanban/types";
 import { compileKanbanConfig } from "../kanban/config";
 import { auditAvatarField, auditColumnType } from "./audit";
@@ -117,6 +118,11 @@ type ServicePresentation = {
   defaultSort?: ListViewConfig["defaultSort"]; kanban?: KanbanConfig; audit?: boolean;
   relations?: Readonly<Record<string, Many2OneLoader>>;
   authorize?: ServiceAuthorizer;
+  /**
+   * Read access to related records projected by displayName/related paths (record rules of the
+   * target models). Unreadable ones are presented empty. Without it, projections are unmasked.
+   */
+  relationAccess?: (tx: Prisma.TransactionClient, actor: ModelActor) => RelationAccess;
   /** Extra check for actions that declare groups (resolved by the module registry). Superusers are handled by the caller. */
   authorizeAction?: (tx: Prisma.TransactionClient, actor: ModelActor, action: ModelAction) => Promise<void>;
 } & ({ list: ModelListPolicy; columns?: never; searchFields?: never } | { list?: never; columns: readonly ListColumn[]; searchFields: readonly string[] });
@@ -178,8 +184,10 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     if (!audit) throw new ModelValidationError("El registro ya no está disponible.");
     return { audit };
   }
-  async function readDisplayName(tx: Prisma.TransactionClient, values: Values) {
-    const names = await resolveDisplayNames(tx, [values], model, repository);
+  /** One cached access decision per target/ID within the operation. */
+  const relationAccessFor = (tx: Prisma.TransactionClient, actor: ModelActor) => presentation.relationAccess ? cachedRelationAccess(presentation.relationAccess(tx, actor)) : undefined;
+  async function readDisplayName(tx: Prisma.TransactionClient, actor: ModelActor, values: Values) {
+    const names = await resolveDisplayNames(tx, [values], model, repository, relationAccessFor(tx, actor));
     return { displayName: names.get(values.id!)! };
   }
   if (config.defaultSort && !config.columns.some(column => column.field === config.defaultSort?.field && column.sortable)) throw new Error("El orden predeterminado debe apuntar a una columna ordenable de la lista.");
@@ -198,7 +206,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         if (!await inScope(tx, id.data, scope)) return null;
         const scalar = await repository.read(tx, id.data);
         const values = scalar ? await loadLines(tx, actor, scalar, lines) as Values : null;
-        return values ? { values, ...await readAudit(tx, id.data), ...await readDisplayName(tx, values) } : null;
+        return values ? { values, ...await readAudit(tx, id.data), ...await readDisplayName(tx, actor, values) } : null;
       }, { isolationLevel: "RepeatableRead" });
       return record ? { ok: true, ...record } : { ok: false, error: "No se encontró este registro." };
     } catch (error) { return { ok: false, kind: error instanceof ModelValidationError ? "validation" : "server", error: messageFor(error) }; }
@@ -257,7 +265,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     try {
       const record = await prisma.$transaction(async tx => {
         const values = await persist(tx, actor, input);
-        return { values, ...await readAudit(tx, values.id), ...await readDisplayName(tx, values) };
+        return { values, ...await readAudit(tx, values.id), ...await readDisplayName(tx, actor, values) };
       }, { isolationLevel: "Serializable" });
       return { ok: true, ...record, message: "Registro guardado." };
     } catch (error) { return writeFailure(error); }
@@ -286,7 +294,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         const current = await inScope(tx, request.data.id, scope) ? await repository.read(tx, request.data.id) : null;
         if (!current || current.revision !== request.data.revision) throw new ModelValidationError(conflict);
         const values2 = await persistAction(tx, actor, declared, current);
-        return { values: values2, ...await readAudit(tx, values2.id), ...await readDisplayName(tx, values2) };
+        return { values: values2, ...await readAudit(tx, values2.id), ...await readDisplayName(tx, actor, values2) };
       }, { isolationLevel: "Serializable" });
       return { ok: true, ...record, message: `${declared.label}: acción completada.` };
     } catch (error) { return writeFailure(error); }
@@ -354,9 +362,10 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         }
         const page = Math.min(state.page, Math.max(1, Math.ceil(total / state.pageSize)));
         const sourceRows = await repository.list(tx, { where, sort: state.sort, direction: state.direction, skip: (page - 1) * state.pageSize, take: state.pageSize, audit: presentation.audit === true });
-        const relatedRows = await resolveCollectionRelated(tx,sourceRows,config.columns.map(column=>column.field).filter(name=>Object.hasOwn(relatedFields,name)),relatedFields,repository);
+        const access = relationAccessFor(tx, actor);
+        const relatedRows = await resolveCollectionRelated(tx,sourceRows,config.columns.map(column=>column.field).filter(name=>Object.hasOwn(relatedFields,name)),relatedFields,repository,access);
         const rows = await resolveCollectionComputed(relatedRows, computedNames, model, Object.freeze({ tx, actor: Object.freeze({ ...actor }) }));
-        const names = await resolveDisplayNames(tx, sourceRows, model, repository);
+        const names = await resolveDisplayNames(tx, sourceRows, model, repository, access);
         // Repository contracts can contain extra edit fields: collection DTOs honor the fixed server publication.
         const publishedRows = policy ? rows.map(row => projectListRow(row, [...policy.fields, ...policy.fields.flatMap(name => auditAvatarField(name) ? [auditAvatarField(name)!] : [])])) : rows;
         return { rows: publishedRows.map(row => ({ ...row, $displayName: names.get(row.id)! })), total, page, pageSize: state.pageSize };
@@ -473,7 +482,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         const total = await repository.count(tx, where);
         const pageSize = request.ids?.length ?? request.pageSize;
         const page = request.ids ? 1 : Math.min(request.page, Math.max(1, Math.ceil(total / pageSize)));
-        const records = total ? await repository.lookup(tx, { fields, where, skip: (page - 1) * pageSize, take: pageSize }) : [];
+        const records = total ? await repository.lookup(tx, { fields, where, skip: (page - 1) * pageSize, take: pageSize, ...(presentation.relationAccess ? { access: relationAccessFor(tx, actor) } : {}) }) : [];
         return { ok: true as const, total, page, pageSize, items: records.map(row => {
           if (typeof row.id !== "string") throw new Error("Invalid lookup record");
           // Only the label and ID leave this service, never the inputs used to construct it.
@@ -497,7 +506,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
           if(!current || current.revision!==request.revision) throw new ModelValidationError(conflict);
         }
         return model.react!(request.field,request.values,Object.freeze({tx,actor:Object.freeze({...actor}),id:request.id,
-          resolveRelated: repository.related ? (field:string,id:string) => repository.related!(tx,field,id) : undefined,
+          resolveRelated: repository.related ? (access => (field:string,id:string) => repository.related!(tx,field,id,access))(relationAccessFor(tx,actor)) : undefined,
         }));
       },{isolationLevel:"RepeatableRead"});
       return {ok:true,...result};

@@ -153,7 +153,7 @@ function EditableRelation<TFieldValues extends FieldValues = FieldValues>(props:
           <Search size={16} className="pointer-events-none absolute left-1 z-10 text-base-content/40" aria-hidden="true" />
           <input {...inputProps} id={inputId} name={field.name} ref={element => { input.current = element; field.ref(element); }}
             type="text" role="combobox" autoComplete="off" disabled={field.disabled} readOnly={readOnly}
-            value={expanded ? query : selected?.label ?? (value ? resolution.loading ? "Cargando selección…" : "Selección no disponible" : "")}
+            value={expanded ? query : selected?.label ?? (value ? resolution.loading ? "Cargando selección…" : "" : "")}
             placeholder={placeholder} maxLength={120} className={`${fieldInputClassName} pl-7 pr-18 ${className}`}
             aria-label={inputProps["aria-labelledby"] ? ariaLabel : accessibleLabel}
             aria-expanded={expanded} aria-controls={expanded ? listId : undefined} aria-autocomplete="list" aria-haspopup="listbox"

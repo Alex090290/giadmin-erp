@@ -3,9 +3,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { ListRecord,ListValue } from "@/lib/list/types";
 import type { Field } from "./fields";
 import type { ModelRepository } from "./repository";
+import type { RelationAccess } from "./relation-access";
 
 /** Source IDs come only from this authorized page, in the same transaction. */
-export async function resolveCollectionRelated<T>(tx:Prisma.TransactionClient, rows:readonly ListRecord[], names:readonly string[], fields:Readonly<Record<string,Field>>, repository:ModelRepository<T>):Promise<ListRecord[]> {
+export async function resolveCollectionRelated<T>(tx:Prisma.TransactionClient, rows:readonly ListRecord[], names:readonly string[], fields:Readonly<Record<string,Field>>, repository:ModelRepository<T>, access?:RelationAccess):Promise<ListRecord[]> {
   if (!rows.length || !names.length) return [...rows];
   if (!repository.relatedMany) throw new Error("Actualiza orm:bind para publicar related en colecciones.");
   const roots = new Map<string,string[]>();
@@ -20,7 +21,7 @@ export async function resolveCollectionRelated<T>(tx:Prisma.TransactionClient, r
     const ids=[...new Set(rows.map(row=>row[root]).filter((id):id is string=>typeof id==="string"&&!!id))];
     const resolved=new Map<string,Readonly<Record<string,unknown>>>();
     for (let offset=0;offset<ids.length;offset+=100) {
-      const batch=await repository.relatedMany(tx,root,ids.slice(offset,offset+100),outputs);
+      const batch=await repository.relatedMany(tx,root,ids.slice(offset,offset+100),outputs,access);
       for(const [id,record] of Object.entries(batch)) resolved.set(id,record);
     }
     for (const row of result) for (const name of outputs) {

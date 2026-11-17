@@ -36,6 +36,31 @@ guía describía la configuración de la Mac.
 - Pendiente anotado: planear la nueva estrategia de entornos con el usuario antes
   de crear archivos o comandos. [Problemas, preguntas y criterios](ideas/entornos-bases.md).
 
+## Relaciones con reglas del destino (2026-11-17)
+
+Corrige la fuga de etiquetas Many2one: lookup y etiquetas de lista ya aplicaban el
+alcance del destino, pero las rutas de `@displayName` (p. ej. Modelo →
+`fabricante.name`) y los campos `related` (formulario y colecciones) se proyectaban
+sin las reglas del modelo destino. Ahora `createModelService` acepta
+`relationAccess` y el registro de módulos lo resuelve con `authorizeModel` (lectura
+y reglas, superusuario sin restricción) en la misma transacción, por lotes y con
+caché por operación (`src/lib/orm/relation-access.ts`). El repositorio declarativo
+carga el ID de cada salto y enmascara como null lo no legible y lo que cuelga de él.
+Decisión del usuario: lo no legible se muestra **vacío**; también se cambiaron
+«No disponible»/«Selección no disponible» por vacío en celdas, grupos y FieldMany2One.
+El ID guardado se conserva. User/Partner no tienen reglas de módulo. Repositorios
+generados por orm:bind (scaffold legacy, sólo admin) ignoran el parámetro.
+
+Pendiente conocido: asignar al guardar una referencia que el actor no puede leer
+todavía no se rechaza (autorización de referencias).
+
+Verificado: tests nuevos de enmascarado (4) y etiquetas (5), test:orm 91/92 (el fallo
+es EPERM de symlinks en Windows), modules 28, list-grouping 16, list-selection 8,
+form-model 10, relation-filter 1, access 5; test:modules:integration completa con la
+regla nueva del fixture (categorías activas para usuario y related categoriaNombre:
+formulario, lista, etiqueta vacía e ID conservado) y test:one2many:integration; tsc
+y lint. Sin navegador ni cambios en Flota o datos reales. Sin commit.
+
 ## Política de contraseñas: mínimo 8, máximo 72 bytes (2026-11-17)
 
 Decisión del usuario: sustituye la política 4–8 del 2026-11-11. `newPasswordSchema`
@@ -813,7 +838,8 @@ Contrato en [Acciones de formulario](ideas/acciones-formulario.md#contrato-imple
   - No se probó con un módulo real en el navegador ni se ejecutó el build.
 - Pendientes:
   - ~~el esquema de contraseña limita a 8 caracteres~~ (resuelto el 2026-11-17);
-  - las etiquetas Many2one no se filtran por las reglas del modelo destino;
+  - ~~las etiquetas Many2one no se filtran por las reglas del modelo destino~~
+    (resuelto el 2026-11-17);
   - aviso dev `instant-unrendered-segment`.
 
   Usar acciones en Flota sólo en un ejercicio acordado; Ventas no existe.

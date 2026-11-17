@@ -5,18 +5,23 @@ import type { SavedRecord } from "./record";
 import type { RecordAudit } from "./audit";
 import type { GroupQuery } from "../list/grouping";
 import type { ListGroup } from "../list/types";
+import type { RelationAccess } from "./relation-access";
 
 export type RepositoryQuery = { where: Record<string, unknown>; sort: string; direction: "asc" | "desc"; skip: number; take: number; audit?: boolean };
+/**
+ * `access` (optional) lets the service mask related records the actor cannot read as null.
+ * Repositories whose relations carry no record rules may ignore it.
+ */
 export interface ModelRepository<T> {
-  related?(tx: Prisma.TransactionClient, field: string, id: string): Promise<Record<string, unknown>>;
-  relatedMany?(tx: Prisma.TransactionClient, field: string, ids: readonly string[], outputs: readonly string[]): Promise<Readonly<Record<string, Readonly<Record<string, unknown>>>>>;
+  related?(tx: Prisma.TransactionClient, field: string, id: string, access?: RelationAccess): Promise<Record<string, unknown>>;
+  relatedMany?(tx: Prisma.TransactionClient, field: string, ids: readonly string[], outputs: readonly string[], access?: RelationAccess): Promise<Readonly<Record<string, Readonly<Record<string, unknown>>>>>;
   read(tx: Prisma.TransactionClient, id: string): Promise<SavedRecord<T> | null>;
   audit?(tx: Prisma.TransactionClient, id: string): Promise<RecordAudit | null>;
   create(tx: Prisma.TransactionClient, values: T, actorId: string): Promise<SavedRecord<T>>;
   update(tx: Prisma.TransactionClient, id: string, revision: string, values: T): Promise<SavedRecord<T>>;
   remove?(tx: Prisma.TransactionClient, id: string, revision: string): Promise<void>;
   count(tx: Prisma.TransactionClient, where: Record<string, unknown>): Promise<number>;
-  lookup?(tx: Prisma.TransactionClient, query: { fields: readonly string[]; where: Record<string, unknown>; skip: number; take: number }): Promise<Record<string, unknown>[]>;
+  lookup?(tx: Prisma.TransactionClient, query: { fields: readonly string[]; where: Record<string, unknown>; skip: number; take: number; access?: RelationAccess }): Promise<Record<string, unknown>[]>;
   /** Generated, authorized relation paths. Legacy adapters fail closed until rebound. */
   readonly lookupPaths?: readonly string[];
   list(tx: Prisma.TransactionClient, query: RepositoryQuery): Promise<ListRecord[]>;

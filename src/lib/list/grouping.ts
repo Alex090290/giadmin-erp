@@ -33,6 +33,7 @@ export function groupValueLabel(value: ListGroupValue) {
 
 export function groupDisplayLabel(group: ListGroup, column?: ListColumn) {
   if (group.value === null || group.value === "") return groupValueLabel(group.value);
-  if (column?.widget === "many2one") return group.label?.trim() || "No disponible";
+  // Unreadable or missing relations are presented empty, never by ID.
+  if (column?.widget === "many2one") return group.label?.trim() ?? "";
   return column?.options?.find(option => option.value === group.value)?.label ?? groupValueLabel(group.value);
 }

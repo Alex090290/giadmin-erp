@@ -43,5 +43,8 @@ export default defineModule({
     // Un usuario sólo ve y edita sus propias tareas; el responsable, todas (reglas de grupo con OR).
     { id: "tareas-propias", label: "Sólo mis tareas", models: "tarea", groups: ["usuario"], domain: ({ actor }) => [{ field: "createBy", operator: "eq", value: actor.id }] },
     { id: "tareas-todas", label: "Todas las tareas", models: "tarea", groups: ["responsable"], domain: [] },
+    // Related records obey these too: an inactive category is shown empty to a usuario.
+    { id: "categorias-activas", label: "Sólo categorías activas", models: "categoria", groups: ["usuario"], domain: [{ field: "active", operator: "eq", value: true }] },
+    { id: "categorias-todas", label: "Todas las categorías", models: "categoria", groups: ["responsable"], domain: [] },
   ],
 });

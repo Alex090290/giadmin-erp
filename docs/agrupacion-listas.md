@@ -61,8 +61,8 @@ los Many2one escalares se agrupan por ID y pueden mostrar su displayName mediant
 `resolveListLabels` y columnas `widget: "many2one"`. `groupedPage` publica el
 `groupField` del nivel actual; el resolvedor consulta sólo los IDs de esa página
 con el lookup autorizado y añade `label`, conservando `value` y conteos. Dos IDs
-con el mismo nombre siguen siendo grupos distintos. Referencias ausentes muestran
-«No disponible»; errores del lookup rechazan la consulta completa. Selection usa
+con el mismo nombre siguen siendo grupos distintos. Referencias ausentes o que el actor
+no puede leer se muestran vacías (desde el 2026-11-17); errores del lookup rechazan la consulta completa. Selection usa
 sus `options` también en encabezados. Esto no habilita agrupación por rutas
 de relaciones (`createByUser.login`), ni fechas/periodos. `null` y cadena vacía son
 grupos distintos; el texto usa igualdad exacta, incluso mayúsculas/minúsculas.

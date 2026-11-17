@@ -211,6 +211,14 @@ rules: [
 - Se aplican en lista, conteo, grupos, kanban, lookup, lectura, guardado (antes y
   después de escribir), movimiento, borrado, reacciones, historial y notas. Un
   registro fuera de las reglas se comporta como inexistente.
+- **Registros relacionados** (desde el 2026-11-17): etiquetas Many2one, rutas de
+  `@displayName` (por ejemplo `modelo.fabricante.name`) y campos `related`
+  respetan el permiso de lectura y las reglas **del modelo destino**. Si el actor no
+  puede leer ese registro, ese tramo se presenta **vacío** (y todo lo que cuelga de
+  él); el ID guardado se conserva y guardar no borra la relación. Lo resuelve el
+  servidor por lotes, dentro de la misma transacción. Modelos de infraestructura
+  (User, Partner) no tienen reglas de módulo. Asignar una referencia que el actor no
+  puede leer todavía no se rechaza al guardar.
 - **Superusuario**: `isAdmin` tiene acceso total. Un módulo sin `groups` sigue
   siendo sólo para administradores.
 - La app **Control de accesos** (`/erp/accesos`, sólo administradores) asigna
