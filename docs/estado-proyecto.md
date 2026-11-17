@@ -33,8 +33,8 @@ guía describía la configuración de la Mac.
 - Verificado: `prisma migrate status` contra lite-erp4 (40 migraciones, al día),
   tsc, lint y `npm run build` con Next 16.4.6 (tres avisos de trazado conocidos).
   Sin SQL, sin cambios de datos, sin commit.
-- Siguiente: planear la nueva estrategia de entornos con el usuario antes de
-  crear archivos o comandos.
+- Pendiente anotado: planear la nueva estrategia de entornos con el usuario antes
+  de crear archivos o comandos. [Problemas, preguntas y criterios](ideas/entornos-bases.md).
 
 ## Cierre de Flota y siguiente ejercicio pendiente (2026-11-17)
 

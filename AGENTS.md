@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Entornos y base de datos
 
-- La separación por ambientes (.env.development.local/.env.production.local, comandos db:check/*:production y compose de producción) se revirtió el 2026-11-17 a petición del usuario; la estrategia nueva está pendiente de planear. Vigente: una sola `.env.local` con la base de desarrollo, que leen Next, Prisma (prisma7.config.ts) y los scripts. No crear otros `.env.*` ni desplegar a producción hasta acordar la estrategia. Las bases/contenedores existentes de cada máquina no se borraron; no tocarlos sin aprobación.
+- La separación por ambientes (.env.development.local/.env.production.local, comandos db:check/*:production y compose de producción) se revirtió el 2026-11-17 a petición del usuario; la estrategia nueva está pendiente de planear. Vigente: una sola `.env.local` con la base de desarrollo, que leen Next, Prisma (prisma7.config.ts) y los scripts. No crear otros `.env.*` ni desplegar a producción hasta acordar la estrategia. Planeación pendiente (problemas, preguntas y criterios) en [Estrategia de entornos](docs/ideas/entornos-bases.md). Las bases/contenedores existentes de cada máquina no se borraron; no tocarlos sin aprobación.
 
 ## Continuidad entre agentes y máquinas
 
@@ -85,6 +85,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - La distribución como paquete npm es una dirección futura, conservando Next.js y Prisma. Primero consolidar el framework mediante aplicaciones reales y contratos estables. Idea documentada en [docs/ideas/aplicaciones-modulares.md](docs/ideas/aplicaciones-modulares.md).
 
 ## Ideas pendientes
+
+- Estrategia de entornos y bases: pendiente solicitado el 2026-11-17 tras revertir la separación anterior. Sólo planeación con el usuario; sin archivos, comandos ni despliegues por anticipación. [Pendiente](docs/ideas/entornos-bases.md).
 
 - «Módulos distribuibles»: pendiente solicitado el 2026-11-15. ZIP de fuentes del módulo, descompresión en src/modules/<id>, comando de validación/reconocimiento y registro explícito, sincronización/pruebas en desarrollo, luego merge/build/deploy/migraciones normales. No instalación dinámica ni carga de ZIP desde producción. Comandos/compatibilidad/dependencias/colisiones por diseñar; no exportar secretos, datos o historial global de migraciones sin reconciliación. Sólo anotar, sin implementación anticipada. Alcance docs/ideas/modulos-distribuibles.md.
 
