@@ -65,13 +65,13 @@ test("the companion schema links 1:1 to the base record and deletes with it", ()
   assert.ok(review.relations.some(relation => relation.target === "BasexEquipo" && relation.owner === "basex" && /soporteBasexEquipoRecordIdRecords SoporteBasexEquipo\? /.test(relation.declaration)));
 });
 
-test("the registry composes the extension: fields, super hooks, decorators; list stays base-only", async () => {
+test("the registry composes extension fields, super hooks, decorators and collections", async () => {
   const [, composed] = composeModules([base, soporte]);
   assert.equal(composed, soporte);
   const equipo = composeModules([base, soporte])[0].models[0];
   assert.deepEqual(Object.keys(equipo.metadata), ["name", "estado", "responsable", "nivel"]);
-  assert.deepEqual(equipo.extensions, [{ module: "soporte", label: "Soporte", fields: ["responsable", "nivel"], computed: ["etiqueta"], relation: "soporteBasexEquipoRecordIdRecords" }]);
-  assert.deepEqual(equipo.list.fields, ["name", "estado"]);
+  assert.deepEqual(equipo.extensions, [{ module: "soporte", label: "Soporte", fields: ["responsable", "nivel"], computed: ["etiqueta"], relation: "soporteBasexEquipoRecordIdRecords", delegate: "soporteBasexEquipo" }]);
+  assert.deepEqual(equipo.list.fields, ["name", "estado", "responsable", "nivel", "etiqueta"]);
   assert.deepEqual(equipo.contract.actions.map(item => item.name), ["escalar"]);
   assert.equal((equipo.contract.createDefaults() as Record<string, unknown>).nivel, 1);
   const context = { operation: "update", id: "e1", previous: null } as unknown as ModelContext;
@@ -87,7 +87,7 @@ test("extension declarations are validated", () => {
   assert.throws(() => defineModule({ ...spec, extends: { "basex.equipo": extendModel(Equipo, Base => class extends Base { name = Fields.Text({ label: "Otro", required: true }); }) } }), /ya declara/);
   assert.throws(() => defineModule({ ...spec, extends: { "basex.equipo": extendModel(Equipo, Base => class extends Base { codigo = Fields.Text({ label: "Código", required: true }); }) } }), /necesita default/);
   assert.throws(() => defineModule({ ...spec, extends: { "basex.equipo": extendModel(Equipo, Base => class extends Base { recordId = Fields.Text({ label: "X" }); }) } }), /reservado/);
-  assert.throws(() => defineModule({ ...spec, extends: { "basex.equipo": extendModel(Equipo, Base => class extends Base { codigo = Fields.Text({ label: "X", sortable: true }); }) } }), /ordenan/);
+  assert.throws(() => defineModule({ ...spec, extends: { "basex.equipo": extendModel(Equipo, Base => class extends Base { codigo = Fields.Text({ label: "X", unique: true, default: "duplicado" }); }) } }), /opcional sin default/);
   assert.throws(() => defineModule({ ...spec, extends: { "basex.equipo": extendModel(Equipo, Base => class extends Base { beforeSave(values: Record<string, unknown>) { return super.beforeSave(values); } }) } }), /persistente/);
   assert.throws(() => defineModule({ ...spec, extends: { "basex.equipo": Equipo as never } }), /extendModel/);
   class Otro extends Model { name = Fields.Text({ label: "Nombre" }); }

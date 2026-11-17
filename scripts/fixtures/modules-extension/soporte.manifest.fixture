@@ -9,5 +9,7 @@ export default defineModule({
   icon: "life-buoy",
   depends: ["taller"],
   models: {},
-  extends: { "taller.equipo": EquipoSoporte },
+  extends: { "taller.equipo": { model: EquipoSoporte, views: { form: () => import("./views/EquipoSoporte") } } },
+  groups: { tecnico: { label: "Técnico", implies: ["taller.editor"] } },
+  rules: [{ id: "nivel-tecnico", label: "Técnicos: nivel hasta 2", models: "taller.equipo", groups: ["tecnico"], domain: [{ field: "nivel", operator: "lte", value: 2 }] }],
 });

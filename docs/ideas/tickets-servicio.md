@@ -16,7 +16,7 @@ para un piloto posterior tipo pedidos).
 | Concepto | En Tickets | ¿Existe hoy? |
 | --- | --- | --- |
 | Dependencias entre módulos | Solicitante/técnico como User/Partner; ticket ligado a un registro de otro módulo declarativo (Flota se retiró el 2026-11-17: elegir otro módulo o reinstalarla sólo si el usuario lo pide) | Parcial: Many2one a User existe; dependencia declarada entre módulos declarativos, no |
-| Herencia/extensión de modelos | Añadir campos de Tickets a un modelo de otro módulo o a Partner (p. ej. departamento) | Fase 1 sí (modelos declarativos); Partner/User en fase 3. [Diseño](herencia-modelos.md) |
+| Herencia/extensión de modelos | Añadir campos de Tickets a un modelo de otro módulo o a Partner (p. ej. departamento) | Fases 1–2 sí (declarativos, colecciones, vistas y reglas); Partner/User en fase 3. [Diseño](herencia-modelos.md) |
 | Folio/secuencia | `TCK-0001` consecutivo, seguro en concurrencia | No |
 | Fecha sin hora | Fecha compromiso/vencimiento | No (sólo DateTime UTC) |
 | Acciones con parámetros | «Cerrar» con nota de resolución; «Reasignar» con técnico | No (`@action` recibe sólo el registro) |

@@ -22,7 +22,7 @@ function command(binary: string, args: string[], name: string, expected = 0) {
   const cli = { prisma: "prisma/build/index.js", tsc: "typescript/bin/tsc", next: "next/dist/bin/next" };
   const executable = Object.entries(cli).find(([name]) => binary === name);
   if (executable) { args = [join(root, "node_modules", executable[1]), ...args]; binary = process.execPath; }
-  const result = spawnSync(binary, args, { cwd: root, env: { ...process.env, DATABASE_URL: url.toString() }, encoding: "utf8", timeout: name === "module lifecycle operations" ? 900000 : 180000 });
+  const result = spawnSync(binary, args, { cwd: root, env: { ...process.env, DATABASE_URL: url.toString() }, encoding: "utf8", timeout: name === "module lifecycle operations" ? 900000 : name === "extension service check" ? 600000 : 180000 });
   if (result.error) throw result.error;
   assert.equal(result.status, expected, sanitize(`${name}: ${result.stderr}\n${result.stdout}`));
   return result.stdout;
@@ -35,7 +35,7 @@ try {
   await database.connect();
   await database.query(`CREATE SCHEMA "${schema}"`); created = true;
   for (const directory of ["src", "scripts", "public", "prisma/models", "prisma/migrations"]) await cp(join(project, directory), join(root, directory), { recursive: true });
-  for (const file of ["package.json", "package-lock.json", "tsconfig.json", "next-env.d.ts", "prisma7.config.ts", "prisma/.orm-installations.json"]) await cp(join(project, file), join(root, file));
+  for (const file of ["package.json", "package-lock.json", "tsconfig.json", "next-env.d.ts", "prisma7.config.ts", "prisma/.orm-installations.json", ".gitignore"]) await cp(join(project, file), join(root, file));
   await symlink(join(project, "node_modules"), join(root, "node_modules"), process.platform === "win32" ? "junction" : "dir");
   await writeFile(join(root, ".env.local"), `DATABASE_URL=${JSON.stringify(url.toString())}\nAUTH_SECRET=${randomBytes(32).toString("hex")}\nAUTH_TRUST_HOST=true\nAUTH_URL=http://127.0.0.1:3032\n`, { mode: 0o600 });
   const authPath = join(root, "src/auth.config.ts");
@@ -44,7 +44,10 @@ try {
   assert.ok(auth.includes("providers: [],"));
   await writeFile(authPath, auth.replace("providers: [],", `providers: [],\n  cookies: ${JSON.stringify(fixtureCookies)},`));
   const next = await readFile(join(project, "next.config.ts"), "utf8");
-  await writeFile(join(root, "next.config.ts"), next.replace("turbopack: {", `turbopack: {\n    root: ${JSON.stringify(project)},`));
+  // Tailwind must scan this fixture's application sources, not generated test projects,
+  // operation backups or dependency junctions while Next is writing its build output.
+  await writeFile(join(root, "next.config.ts"), next.replace("turbopack: {", `turbopack: {\n    root: ${JSON.stringify(project)},`)
+    .replace('"@tailwindcss/turbopack"', `{ loader: "@tailwindcss/turbopack", options: { base: ${JSON.stringify(join(root, "src"))} } }`));
   prisma(["migrate", "deploy"]);
 
   if (process.argv.includes("--one2many-only")) {
@@ -86,6 +89,8 @@ try {
     await mkdir(join(root, "src/modules/soporte/models"), { recursive: true });
     await cp(join(fixture, "soporte.manifest.fixture"), join(root, "src/modules/soporte/manifest.ts"));
     await cp(join(fixture, "equipo-soporte.fixture"), join(root, "src/modules/soporte/models/equipo.ts"));
+    await mkdir(join(root, "src/modules/soporte/views"), { recursive: true });
+    await cp(join(fixture, "equipo-form.fixture"), join(root, "src/modules/soporte/views/EquipoSoporte.tsx"));
     const baseSchema = await readFile(join(root, "prisma/models/orm-taller.prisma"), "utf8");
     tsx(join(root, "scripts/orm-install.ts"), ["soporte", "--write"], "orm:install soporte");
     const extended = await readFile(join(root, "prisma/models/orm-taller.prisma"), "utf8");
@@ -102,6 +107,7 @@ try {
     command("tsc", ["--noEmit", "--incremental", "false"], "extension fixture types");
     console.log("✓ El mixin con decoradores y super compila con TypeScript.");
     await cp(join(project, "scripts/fixtures/extension-check.fixture"), join(root, "extension-check.ts"));
+    await cp(join(project, "scripts/fixtures/extension-render.fixture"), join(root, "extension-render.ts"));
     console.log(tsx(join(root, "extension-check.ts"), [legacy], "extension service check").trim());
   } else {
   // Exercise the public creation commands and automatic sync registration on an

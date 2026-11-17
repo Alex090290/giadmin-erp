@@ -17,13 +17,15 @@ export function validateCollectionComputed(model: CollectionComputed, names: rea
 }
 
 /** Compute only this authorized page. Dependencies are already in its repository DTO; no extra reads. */
-export async function resolveCollectionComputed(rows: readonly ListRecord[], names: readonly string[], model: CollectionComputed, context: ReactionContext): Promise<ListRecord[]> {
+export async function resolveCollectionComputed(rows: readonly ListRecord[], names: readonly string[], model: CollectionComputed, context: ReactionContext, missingStorageFields: readonly string[] = []): Promise<ListRecord[]> {
   if (!rows.length || !names.length) return [...rows];
   if (!model.computeCollection) throw new Error("El proveedor no admite compute en colecciones.");
   const result: ListRecord[] = [];
   for (let offset = 0; offset < rows.length; offset += 100) {
     for (const row of rows.slice(offset, offset + 100)) {
-      const values = await model.computeCollection(names, row, Object.freeze({ ...context, id: row.id }));
+      const empty = (model.computedRules ?? []).filter(rule => rule.reads.some(name => missingStorageFields.includes(name) && row[name] == null)).flatMap(rule => rule.outputs).filter(name => names.includes(name));
+      const ready = names.filter(name => !empty.includes(name));
+      const values = { ...Object.fromEntries(empty.map(name => [name, null])), ...(ready.length ? await model.computeCollection(ready, row, Object.freeze({ ...context, id: row.id })) : {}) };
       result.push({ ...row, ...values });
     }
   }

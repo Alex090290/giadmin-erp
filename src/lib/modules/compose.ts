@@ -1,5 +1,7 @@
 import "server-only";
 import { compileModuleModel, type ModuleDefinition, type ModuleExtension, type ModuleModel } from "./define";
+import { extensionFields } from "./extend";
+import { relationFieldName } from "../orm/display";
 
 /**
  * Compose the extensions declared by registered modules onto their base models:
@@ -32,16 +34,29 @@ export function composeModules(definitions: readonly ModuleDefinition[]): readon
     if (!extensions) return entry;
     const ordered = [...extensions].sort((a, b) => depth(a.module) - depth(b.module) || a.module.localeCompare(b.module));
     const names = new Map<string, string>();
-    for (const extension of ordered) for (const name of [...extension.fields, ...extension.computed]) {
-      const owner = names.get(name);
-      if (owner) throw new Error(`${entry.id}.${name}: lo declaran las extensiones de ${owner} y ${extension.module}.`);
-      names.set(name, extension.module);
+    for (const extension of ordered) {
+      const fields = extensionFields(extension.extension);
+      for (const name of [...extension.fields, ...extension.computed].flatMap(name => fields[name].metadata.kind === "many2one" ? [name, relationFieldName(name)] : [name])) {
+        const owner = names.get(name);
+        if (owner) throw new Error(`${entry.id}.${name}: lo declaran las extensiones de ${owner} y ${extension.module}.`);
+        names.set(name, extension.module);
+      }
     }
-    const model = ordered.reduce((current, extension) => extension.extension.apply(current), entry.declaration.model);
-    return compileModuleModel(entry.module, entry.key, { ...entry.declaration, model }, entry.label, ordered.map(extension => Object.freeze({
+    const methodOwners = new Map<string, string>();
+    const model = ordered.reduce((current, extension) => {
+      const next = extension.extension.apply(current);
+      for (const name of Object.getOwnPropertyNames(next.prototype)) methodOwners.set(name, extension.module);
+      return next;
+    }, entry.declaration.model);
+    const compiled = compileModuleModel(entry.module, entry.key, { ...entry.declaration, model }, entry.label, ordered.map(extension => Object.freeze({
       module: extension.module, label: extension.label, fields: extension.fields, computed: extension.computed,
-      ...(extension.companion ? { relation: extension.companion.relation } : {}),
+      ...(extension.views ? { views: extension.views } : {}),
+      ...(extension.companion ? { relation: extension.companion.relation, delegate: extension.companion.name[0].toLowerCase() + extension.companion.name.slice(1) } : {}),
     })));
+    // Local group names of extension actions belong to the declaring module, not the base.
+    return Object.freeze({ ...compiled, contract: Object.freeze({ ...compiled.contract, actions: Object.freeze(compiled.contract.actions.map(action => Object.freeze({
+      ...action, ...(action.groups ? { groups: Object.freeze(action.groups.map(group => group.includes(".") ? group : `${methodOwners.get(action.name) ?? entry.module}.${group}`)) } : {}),
+    }))) }) });
   };
   return Object.freeze(definitions.map(definition => {
     const models = definition.models.map(compose);

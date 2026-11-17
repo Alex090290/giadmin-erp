@@ -2,11 +2,11 @@ import { listColumnType, listModels, type ListConfig, type ListDataType, type Li
 
 export const filterOperators: Record<ListDataType, readonly ListFilterOperator[]> = {
   text: ["contains", "eq", "neq", "startsWith", "endsWith", "empty", "notEmpty"],
-  number: ["eq", "neq", "gt", "gte", "lt", "lte", "between"],
-  integer: ["eq", "neq", "gt", "gte", "lt", "lte", "between"],
+  number: ["eq", "neq", "gt", "gte", "lt", "lte", "between", "empty", "notEmpty"],
+  integer: ["eq", "neq", "gt", "gte", "lt", "lte", "between", "empty", "notEmpty"],
   date: ["eq", "gt", "gte", "lt", "lte", "between", "empty", "notEmpty"],
   datetime: ["eq", "gt", "gte", "lt", "lte", "between", "empty", "notEmpty"],
-  boolean: ["eq"],
+  boolean: ["eq", "empty", "notEmpty"],
 };
 /** Relation IDs and selections support identity/emptiness, never textual label predicates. */
 export function columnFilterOperators(type: ListDataType, selection = false): readonly ListFilterOperator[] {
@@ -83,7 +83,7 @@ export function compileColumnFilter(type: ListDataType, filter: ListFilter, null
       const prefix = parts.slice(0, index + 1).join(".");
       return optionalRelations.includes(prefix) ? [atRelation(parts.slice(0, index), { [parts[index]]: { is: null } })] : [];
     });
-    if (filter.operator === "empty") return { OR: [...empty, ...absent] };
+    if (filter.operator === "empty") return empty.length || absent.length ? { OR: [...empty, ...absent] } : { id: { in: [] } };
     return { AND: [...(nullable ? [nest({ not: null })] : []), ...(type === "text" ? [nest({ not: "" })] : []), ...(parts.length ? [atRelation(parts, {})] : [])] };
   }
   if (type === "text") {

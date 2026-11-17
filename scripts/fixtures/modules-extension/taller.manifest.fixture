@@ -7,7 +7,7 @@ export default defineModule({
   id: "taller",
   name: "Taller",
   icon: "wrench",
-  models: { equipo: Equipo },
+  models: { equipo: { model: Equipo, kanban: "estado", views: { list: true, card: true, kanban: true } } },
   groups: { lector: "Lector", editor: { label: "Editor", implies: ["lector"] } },
   access: [
     { group: "lector", models: "equipo", perms: "r" },

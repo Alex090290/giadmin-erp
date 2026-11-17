@@ -1,0 +1,22 @@
+"use client";
+
+import FieldText from "@/components/ui/form/FieldText";
+import FieldNumber from "@/components/ui/form/FieldNumber";
+import FieldImage from "@/components/ui/form/FieldImage";
+import FieldMany2One from "@/components/ui/form/FieldMany2One";
+import type { ModelClientConfig } from "@/lib/modules/config";
+
+/** Mounted inside the base's FormView/RHF, with the same metadata and save. */
+export default function EquipoSoporte({ config }: { config: ModelClientConfig }) {
+  return <div data-extension={config.id}>
+    <FieldText name="responsable" direction="inline" />
+    <FieldNumber name="nivel" type="integer" direction="inline" />
+    <FieldText name="codigo" direction="inline" />
+    <FieldImage name="logo" widget="avatar" />
+    <FieldMany2One name="equipoId" direction="inline" />
+    <FieldText name="etiqueta" mode="display" direction="inline" />
+    <FieldText name="nombreEquipo" mode="display" direction="inline" />
+    <FieldText name="responsableEquipo" mode="display" direction="inline" />
+    <FieldImage name="imagenEquipo" mode="display" direction="inline" />
+  </div>;
+}

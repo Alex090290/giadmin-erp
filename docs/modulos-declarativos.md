@@ -380,10 +380,78 @@ export default defineModule({
 - **Gestor:** desinstalar el base queda bloqueado mientras exista el extensor;
   desinstalar el extensor con «Eliminar datos» borra sólo su tabla y su inversa.
 
-Límites de la fase 1: al menos un campo persistente; campos opcionales o con default
-literal; sin One2many, related, Image, sensitive ni unique; los campos extendidos no
-aparecen en columnas ni se buscan, ordenan, filtran o agrupan; no se extienden líneas
-One2many ni modelos nativos (Partner, User). Diseño y fases en
+### Fase 2: colecciones, presentación propia y campos avanzados
+
+Los campos extendidos participan en la misma política de Lista/Tarjetas/Kanban del
+base: `list`, `searchable`, `sortable`, `filterable` y `groupable` se declaran en el
+Field. Se conservan los límites compartidos (12 columnas, seis campos de búsqueda,
+tres niveles de agrupación); un override explícito de `list` del base prevalece.
+Los predicados se traducen a la relación 1:1 de la compañera, el orden usa esa
+relación y los grupos/conteos se consultan y paginan en SQL. No se descargan todos
+los registros ni se enumeran IDs para aplicar reglas.
+
+**Sin fila compañera:** las colecciones, filtros, dominios, reglas y lookups usan
+vacío (`null`), no el default del formulario. Se incluye un único grupo «Sin valor»
+al final; cero y false son valores. Al abrir un formulario se ofrecen los defaults,
+que sólo se persisten al guardar. No hay backfill ni escrituras al consultar. Un
+compute cuya dependencia obligatoria extendida esté vacía se presenta vacío en
+colecciones, sin ejecutar el método con datos inválidos. Una Selection extendida
+usada como columna Kanban no incluye registros sin valor en sus estados; localizarlos
+en Lista con el filtro «Está vacío» y guardarlos para asignarles el default.
+
+Una extensión puede declarar `Fields.Image({folder: "..."})`, `Fields.Text/Image`
+con `related` y `unique` **opcional sin default**. El índice único pertenece a la
+compañera; un duplicado revierte base, compañera y revisión en la misma transacción.
+Las subidas reutilizan el firmante autorizado del modelo base, sin secretos en el
+cliente. Related sigue siendo virtual y readonly, admite campos del base o de
+extensiones en destinos declarativos registrados y respeta las reglas de lectura
+de cada destino; no admite búsqueda/filtro/orden/grupos sobre la salida virtual.
+La publicación de cada salto se valida contra los contratos compuestos del registro.
+
+Para una presentación propia, el manifest admite un objeto sin romper la forma
+anterior `extends: { "taller.equipo": EquipoSoporte }`:
+
+```ts
+extends: {
+  "taller.equipo": {
+    model: EquipoSoporte,
+    views: { form: () => import("./views/EquipoSoporte") },
+  },
+},
+```
+
+El componente es cliente, recibe `{config: ModelClientConfig}` y devuelve los Fields
+de la extensión. No monta otro ModelForm, FormView ni FormProvider. Se resuelve
+desde la ruta servidor y se entrega como contenido React, nunca pasando loaders
+del manifest al navegador. `<ModelExtensions />` lo sitúa dentro del grupo del
+extensor y del RHF/FormView del base: comparte validación, modo consulta, bloqueo,
+dirty guard, actividad y guardado. Sin vista propia se conservan los controles
+automáticos. Un formulario expulsado sólo necesita conservar `<ModelExtensions />`.
+
+El extensor también puede añadir reglas al modelo que extiende:
+
+```ts
+groups: { tecnico: { label: "Técnico", implies: ["taller.editor"] } },
+rules: [{
+  id: "nivel-tecnico", label: "Técnicos: nivel hasta 2",
+  models: "taller.equipo", groups: ["tecnico"],
+  domain: [{ field: "nivel", operator: "lte", value: 2 }],
+}],
+```
+
+Sólo se aceptan destinos externos declarados en `extends`, con su dependencia;
+esto no añade grants CRUD al modelo base. Las reglas se combinan por el motor
+existente (globales AND, grupos OR), pueden desactivarse desde Accesos y se aplican
+a read/list/lookup y mutaciones, incluida la comprobación del resultado guardado.
+Los callbacks de reglas del base se validan contra sus metadatos compuestos al
+ejecutarse; los dominios estáticos se validan al declarar cada módulo. Los grupos
+locales de una @action de la extensión pertenecen al extensor, incluso al ejecutar
+la acción desde el base. El superusuario conserva el bypass existente.
+
+Límites vigentes: al menos un campo persistente por extensión; campos obligatorios
+con default literal; sin One2many, sensitive, unique obligatorio/con default ni
+extensión de líneas One2many. Partner/User siguen fuera (fase 3). No se edita el
+esquema/propiedad del base para almacenar campos extendidos. Diseño e historial en
 [Herencia de modelos](ideas/herencia-modelos.md).
 
 ## Seguridad
@@ -405,7 +473,10 @@ npm run test:modules:integration
 
 `npm run test:extensions:integration` instala `taller` y `soporte`
 (`scripts/fixtures/modules-extension`) en un proyecto/esquema temporales y comprueba la
-herencia completa, incluida la desinstalación del extensor con respaldo.
+herencia completa, incluida la desinstalación del extensor con respaldo. También
+inicia un Next temporal en puerto libre y comprueba por HTTP autenticado que su
+vista diferida usa los Fields/metadatos del base dentro de un único formulario.
+Usa cuentas ficticias y firmas de imagen de prueba, sin subir archivos externos.
 
 La integración instala un módulo de prueba propio (`scripts/fixtures/modules-ensayo`)
 en un proyecto y esquema PostgreSQL temporales y los elimina al terminar.

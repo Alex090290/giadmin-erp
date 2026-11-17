@@ -113,6 +113,8 @@ export type ServiceOperation = "read" | "create" | "write" | "unlink";
  */
 export type ServiceAuthorizer = (tx: Prisma.TransactionClient, actor: ModelActor, operation: ServiceOperation) => Promise<Record<string, unknown> | undefined>;
 type ServicePresentation = {
+  /** Fields whose storage row may be absent (declarative extensions only). */
+  collectionNullable?: readonly string[];
   lines?: LineRelations;
   owners?: readonly OwnerRelation[];
   defaultSort?: ListViewConfig["defaultSort"]; kanban?: KanbanConfig; audit?: boolean;
@@ -136,6 +138,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
   const auditFields = new Set(presentation.audit ? ["createdAt", "updatedAt", "createBy", "createByUser.login", "createByUser.partner.name"] : []);
   const policy = presentation.list;
   const relatedFields=model.relatedFields??{};
+  const nullableCollection = new Set(presentation.collectionNullable ?? []);
   const computedFields=model.computedFields??{};
   const virtualFields={...relatedFields,...computedFields};
   const collectionMetadata:Readonly<Record<string,FieldMetadata>>={...model.metadata,...Object.fromEntries(Object.entries(virtualFields).map(([name,field])=>[name,{...field.metadata,readOnly:true}]))};
@@ -342,8 +345,9 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
             if (!field.choices.some(choice => choice.value === filter.value)) throw new ModelValidationError("El valor no corresponde a una opción del campo.");
             predicates.push({ [filter.field]: { [filter.operator === "eq" ? "equals" : "not"]: filter.value } });
           } else if (field?.kind === "selection") {
-            predicates.push(filter.operator === "empty" ? { OR: field.required ? [] : [{ [filter.field]: null }] } : field.required ? {} : { [filter.field]: { not: null } });
-          } else predicates.push(compileColumnFilter(type, filter, field ? !field.required : ["createBy", "createByUser.partner.name"].includes(filter.field), presentation.audit ? ["createByUser", "createByUser.partner"] : []));
+            const nullable = !field.required || nullableCollection.has(filter.field);
+            predicates.push(filter.operator === "empty" ? nullable ? { [filter.field]: null } : { id: { in: [] } } : nullable ? { [filter.field]: { not: null } } : {});
+          } else predicates.push(compileColumnFilter(type, filter, nullableCollection.has(filter.field) || (field ? !field.required : ["createBy", "createByUser.partner.name"].includes(filter.field)), presentation.audit ? ["createByUser", "createByUser.partner"] : []));
         }
         if (state.query) {
           predicates.push({ OR: config.searchFields.map(field => compileColumnFilter("text", { field, operator: "contains", value: state.query })) });
@@ -364,7 +368,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         const sourceRows = await repository.list(tx, { where, sort: state.sort, direction: state.direction, skip: (page - 1) * state.pageSize, take: state.pageSize, audit: presentation.audit === true });
         const access = relationAccessFor(tx, actor);
         const relatedRows = await resolveCollectionRelated(tx,sourceRows,config.columns.map(column=>column.field).filter(name=>Object.hasOwn(relatedFields,name)),relatedFields,repository,access);
-        const rows = await resolveCollectionComputed(relatedRows, computedNames, model, Object.freeze({ tx, actor: Object.freeze({ ...actor }) }));
+        const rows = await resolveCollectionComputed(relatedRows, computedNames, model, Object.freeze({ tx, actor: Object.freeze({ ...actor }) }), [...nullableCollection].filter(name => model.metadata[name]?.required));
         const names = await resolveDisplayNames(tx, sourceRows, model, repository, access);
         // Repository contracts can contain extra edit fields: collection DTOs honor the fixed server publication.
         const publishedRows = policy ? rows.map(row => projectListRow(row, [...policy.fields, ...policy.fields.flatMap(name => auditAvatarField(name) ? [auditAvatarField(name)!] : [])])) : rows;
@@ -410,8 +414,9 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     const source = options.domain;
     const dynamic = typeof source === "function" ? source : undefined;
     // Validate and snapshot static declarations immediately; callbacks run after session revalidation.
-    const fixed = dynamic ? undefined : compileListDomain(model.metadata, source === undefined ? [] : source);
-    const resolve = async (context: ListDomainContext) => dynamic ? compileListDomain(model.metadata, await dynamic(context)) : fixed!;
+    const queryMetadata = Object.fromEntries(Object.entries(model.metadata).map(([name, field]) => [name, nullableCollection.has(name) ? { ...field, required: false } : field]));
+    const fixed = dynamic ? undefined : compileListDomain(queryMetadata, source === undefined ? [] : source);
+    const resolve = async (context: ListDomainContext) => dynamic ? compileListDomain(queryMetadata, await dynamic(context)) : fixed!;
     return (prisma: PrismaClient, actor: ModelActor, input: unknown) => list(prisma, actor, input, undefined, resolve);
   }
 

@@ -66,13 +66,18 @@ export function modelService(id: string): Service {
       return modelService(target).lookup(prisma, actor, request);
     };
   }
-  const service = createModelService(entry.contract, createRepository(entry, module.profile.module), {
+  // Runtime projection uses composed contracts across installed modules; generation still
+  // uses each owner's uncomposed profile so extension columns stay in companion tables.
+  const runtimeModels = modules.flatMap(definition => definition.models);
+  const runtimeProfile = { ...module.profile.module, models: runtimeModels.map(model => ({ model: model.contract, clientFields: model.clientFields })) };
+  const service = createModelService(entry.contract, createRepository(entry, runtimeProfile, runtimeModels), {
     lines: Object.fromEntries(Object.entries(entry.contract.one2manyFields).map(([name, field]) => {
       const child = module.models.find(model => model.contract.name === field.one2many.target)!;
       return [name, { metadata: field.one2many, child: () => modelService(child.id).transaction }];
     })),
     owners: module.models.flatMap(parent => Object.values(parent.contract.one2manyFields).filter(field => field.one2many.target === entry.contract.name).map(field => ({ inverse: field.one2many.inverse, parent: () => modelService(parent.id).transaction }))),
     list: entry.list, audit: true, defaultSort: entry.defaultSort,
+    collectionNullable: entry.extensions.flatMap(extension => extension.fields),
     // Group access and record rules, revalidated inside each service transaction.
     authorize: (tx, actor, operation) => authorizeModel(tx, actor, entry.id, operation),
     // Related records shown through displayName/related paths obey the target's read access and rules.

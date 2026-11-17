@@ -34,6 +34,15 @@ test("false is a valid boolean and operators are type constrained", () => {
   assert.notEqual(filterValueError("date", { field: "day", operator: "contains", value: "hello" }), null);
 });
 
+test("numeric and boolean empty filters preserve NULL storage without treating zero or false as empty", () => {
+  for (const type of ["integer", "number", "boolean"]) {
+    assert.equal(filterValueError(type, { field: "x", operator: "empty" }), null);
+    assert.deepEqual(compileColumnFilter(type, { field: "x", operator: "empty" }, true), { OR: [{ x: null }] });
+    assert.deepEqual(compileColumnFilter(type, { field: "x", operator: "notEmpty" }, true), { AND: [{ x: { not: null } }] });
+    assert.deepEqual(compileColumnFilter(type, { field: "x", operator: "empty" }), { id: { in: [] } });
+  }
+});
+
 test("text filters escape pattern characters and nest to-one relation paths", () => {
   assert.deepEqual(compileColumnFilter("text", { field: "user.login", operator: "contains", value: "a_b%" }), { user: { is: { login: { contains: "a\\_b\\%", mode: "insensitive" } } } });
   assert.deepEqual(compileColumnFilter("text", { field: "user.login", operator: "neq", value: "alex" }), { user: { is: { login: { not: "alex", mode: "insensitive" } } } });

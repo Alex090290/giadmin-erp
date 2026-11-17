@@ -91,6 +91,10 @@ Los README detallan dónde intervienen `db:generate`, el enlace y el reinicio de
 Los modelos admiten reacciones de borrador, restricciones, presentación y cálculos
 de lectura con registro explícito o decoradores. [Guía de reacciones](docs/reacciones-modelos.md).
 
+Los módulos pueden extender modelos declarativos ajenos con `extendModel`: campos
+en tabla compañera, colecciones, vista propia dentro del formulario base y reglas
+sobre el modelo extendido. [Herencia y límites](docs/modulos-declarativos.md#7-extender-un-modelo-de-otro-módulo-herencia).
+
 ## Desarrollo
 
 Desde la raíz, con las dependencias y la base local configuradas:

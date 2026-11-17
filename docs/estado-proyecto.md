@@ -6,6 +6,83 @@ Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
+Revisión de continuidad (2026-11-17): rama `codex/herencia`, HEAD `dd70ff9`
+(`herencia primera fase`), árbol limpio antes de esta corrección documental.
+Contrastados README, instrucciones, historial, registro vacío de módulos, API y
+composición de extensiones y configuración de Prisma. Las secciones antiguas de
+Flota y de separación de entornos son históricas; prevalecen las decisiones del
+2026-11-17. Esta revisión no ejecuta suites, navegador ni consultas a la BD.
+Al iniciar esta revisión, la siguiente prioridad registrada era diseñar y presentar
+la distribución de módulos entre proyectos. Después el usuario autorizó la fase 2
+de herencia, cuyo avance se registra abajo. Distribución, entornos y fase 3 siguen pendientes.
+
+## Pendiente urgente: capacidades restantes del ORM (2026-11-17)
+
+Prioridad elevada por petición expresa del usuario. Quedan estas capacidades para
+incorporar cuando una aplicación concreta las necesite:
+
+- **Many2many declarativo:** declaración en el modelo, tabla intermedia, lectura,
+  guardado y autorización. Ya existe FieldRelationTag como selector múltiple
+  visual; falta el soporte de Fields.Many2many y su persistencia en el ORM.
+- **Folios:** numeración de documentos. Caso previsto en
+  [Tickets de servicio](ideas/tickets-servicio.md).
+- **Acciones con parámetros:** ampliar el contrato de @action para recibir
+  parámetros validados. Caso previsto en [Tickets de servicio](ideas/tickets-servicio.md).
+- **Permisos por campo:** lectura/escritura autorizadas en servidor y presentación
+  por grupo; alcance y criterios en [el diseño pendiente](ideas/permisos-campos.md).
+- **Compute persistido:** store:true, recomputación y evolución de datos;
+  alcance y criterios en [el diseño pendiente](ideas/compute-persistido.md).
+
+Registrar urgencia no inicia su implementación ni la tutoría de Tickets. Los
+contratos pendientes se diseñarán con el caso real, conservando permisos,
+transacciones y concurrencia. Esta actualización sólo cambia documentación;
+verificada con git diff --check, sin nuevas pruebas de código ni consultas a BD.
+
+## Herencia de modelos: fase 2 (2026-11-17)
+
+Implementada por autorización posterior del usuario, sin esperar a Tickets. La fase
+1 permanece en `dd70ff9`; los cambios de fase 2 todavía no tienen commit.
+
+- Colecciones publican campos extendidos, con búsqueda/filtros/dominios/orden/grupos
+  traducidos a la compañera. Los grupos se paginan en SQL, incluido un grupo vacío
+  final, sin descargar registros ni enumerar IDs. Sin compañera: null en consultas,
+  reglas y colecciones; defaults sólo al abrir formulario y persistidos al guardar.
+  Compute con dependencia obligatoria extendida ausente queda vacío. Añadidos
+  filtros vacío/no vacío para numéricos/booleanos y falso SQL explícito para
+  filtros vacío sobre campos no anulables.
+- `extends` conserva la forma corta y admite `{model, views:{form:()=>import(...)}}`.
+  La ruta servidor entrega contenido React mediante ModelExtensionViews;
+  ModelExtensions lo monta bajo el mismo RHF/FormView, sin formularios anidados ni
+  pasar loaders del manifest al navegador. Sin vista propia conserva el grupo automático.
+- El extensor declara reglas para sus destinos explícitos; el catálogo de permisos
+  usa contratos compuestos y traduce el alcance antes de usarlo incluso en relaciones.
+  CRUD sigue siendo el del base y los grupos locales de @action pertenecen a su
+  módulo declarante. Related puede proyectar campos extendidos del destino, con
+  enmascarado de registros no legibles. Image reutiliza las firmas autorizadas;
+  unique sólo opcional sin default, con índice en la compañera y rollback conjunto.
+- Límites conservados: sin Partner/User (fase 3), One2many/líneas ni sensitive en
+  extensiones; sin unique obligatorio/con default. Contrato y ejemplos en
+  [Módulos declarativos §7](modulos-declarativos.md#7-extender-un-modelo-de-otro-módulo-herencia).
+- Verificación en esta máquina Windows: test:modules 38/38, test:orm 92/93 (único
+  fallo: EPERM de symlink de archivo en generator.test.ts, ya conocido); filtros
+  12/12, comprobaciones focalizadas de servicio/compute/dominios/accesos aprobadas,
+  tsc, lint y build aprobados (tres avisos de trazado conocidos).
+  test:extensions:integration, test:one2many:integration y test:modules:integration
+  aprobadas en sus proyectos y esquemas temporales, incluido el ciclo del gestor.
+  test:form-model 10/10. Next/RSC por HTTP autenticado: vista diferida propia,
+  Fields enlazados y un solo formulario base. Sin inspección visual ni interacción
+  de navegador. La primera comprobación HTTP agotó 90s durante la compilación;
+  con margen mayor pasó. El fixture ahora copia .gitignore y acota Tailwind a su
+  src para no escanear salidas/respaldos/junctions. No hay subidas externas reales.
+- No se instalaron módulos en el ERP, no se creó SQL para sus datos ni se modificó
+  Flota. Las pruebas de imagen firman con configuración ficticia, sin subir archivos.
+
+Oportunidad acotada pendiente: compartir el resultado puro de composeModules entre
+registro de servicios y catálogo de acceso, que hoy lo construyen por separado.
+Motivo: evitar ejecutar los mismos mixins dos veces al iniciar. Aceptación: una
+composición inmutable compartida, sin ciclos de importación ni caché de permisos
+privados; mismas pruebas de extensiones, módulos y capacidades. No impide usar la fase 2.
+
 ## Flota retirada (2026-11-17)
 
 Decisión del usuario tras ensayar el flujo: desinstaló Flota en desarrollo con
@@ -112,7 +189,7 @@ aprobación cuando el ejercicio las requiera. [Plan](ideas/tickets-servicio.md).
 
 ## Herencia de modelos entre módulos: fase 1 (2026-11-17)
 
-Implementada a petición del usuario en la rama `codex/herencia` (sin commit).
+Implementada a petición del usuario en la rama `codex/herencia`, commit `dd70ff9`.
 Equivalente al `_inherit` de Odoo con mixin `extendModel` y `super`:
 
 - `src/lib/modules/extend.ts` (API), `define.ts` (`extends`, validación y modelo
@@ -129,8 +206,8 @@ Equivalente al `_inherit` de Odoo con mixin `extendModel` y `super`:
   accesos del base, cascada, desinstalar base bloqueado, eliminar extensión con respaldo),
   test:modules:integration y test:one2many:integration (regresión), tsc, lint y build.
   Sin navegador: la UI del grupo de extensión no se revisó visualmente.
-- Pendiente: fase 2 anotada a petición del usuario (colecciones, vista propia, reglas y
-  campos avanzados); no se adelanta, espera un caso real de Tickets. Fase 3: Partner/User.
+- La fase 2 se dejó pendiente al cerrar este commit y posteriormente fue autorizada
+  e implementada: ver la entrada de fase 2 al inicio de este documento. Fase 3: Partner/User.
   [Diseño y criterios](ideas/herencia-modelos.md).
 
 ## Flota: intervalo recomendado con @onchange (2026-11-17)
@@ -662,7 +739,7 @@ Los detalles y comprobaciones por alcance se conservan debajo y en
 
 - Para módulos declarativos: create:module → create:model → personalizar la clase
   → orm:sync; lista/formulario por convención y eject:view para personalizar TSX.
-  Es el flujo vigente de Flota: [Módulos declarativos](modulos-declarativos.md).
+  Fue el flujo de la tutoría de Flota, ahora retirada: [Módulos declarativos](modulos-declarativos.md).
   El scaffold anterior conserva clientFields/create:views como alternativa;
   no mezclar ambos recorridos. [Modelo y vistas](modelos-y-vistas.md).
 - Framework ERP en TypeScript, Next.js, React, Prisma 7 y PostgreSQL.
@@ -672,8 +749,8 @@ Los detalles y comprobaciones por alcance se conservan debajo y en
 - Aplicaciones con manifest, dependencias y menús de navegación; servicios con
   autorización, validación, transacciones, concurrencia y hooks de negocio.
   Contactos y Usuarios son aplicaciones activas; las versiones anteriores de Citas
-  y Flota se retiraron el 2026-11-13. En esta rama, Flota se recreó como módulo
-  declarativo para la tutoría. Mantienen alcances distintos;
+  y Flota se retiraron el 2026-11-13. Flota se recreó como módulo declarativo
+  para la tutoría y volvió a retirarse el 2026-11-17. Mantienen alcances distintos;
   no asumir que todos usan el mismo adaptador o política de acceso.
 - ListView con selección y eliminación por lote desde «Acciones»; dominios fijos
   de servidor combinados con filtros visibles. Los dominios filtran consultas y

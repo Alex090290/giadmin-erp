@@ -36,7 +36,7 @@ const key = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const groupId = (module: string, value: string) => value.includes(".") ? value : `${module}.${value}`;
 
 /** Validate and normalize a module's access declarations to public ids (`<module>.<key>`). */
-export function declareAccess(module: string, spec: AccessSpec, models: Readonly<Record<string, Readonly<Record<string, FieldMetadata>>>>): ModuleAccess {
+export function declareAccess(module: string, spec: AccessSpec, models: Readonly<Record<string, Readonly<Record<string, FieldMetadata>>>>, extended: Readonly<Record<string, Readonly<Record<string, FieldMetadata>>>> = {}): ModuleAccess {
   const modelId = (value: string) => {
     if (!Object.hasOwn(models, value)) throw new Error(`${module}: el acceso apunta a un modelo inexistente: ${value}.`);
     return `${module}.${value}`;
@@ -80,9 +80,9 @@ export function declareAccess(module: string, spec: AccessSpec, models: Readonly
     if (typeof rule.label !== "string" || !rule.label.trim()) throw new Error(`${module}.${rule.id}: la regla necesita una etiqueta.`);
     const operations = rule.operations ?? accessOperations;
     if (!operations.length || operations.some(operation => !accessOperations.includes(operation))) throw new Error(`${module}.${rule.id}: operaciones inválidas.`);
-    const targets = list(rule.models).map(modelId);
+    const targets = list(rule.models).map(value => Object.hasOwn(extended, value) ? value : modelId(value));
     // Static domains are validated now against every target model; callbacks after session revalidation.
-    if (typeof rule.domain !== "function") for (const target of list(rule.models)) compileListDomain(models[target], rule.domain);
+    if (typeof rule.domain !== "function") for (const target of list(rule.models)) compileListDomain(extended[target] ?? models[target], rule.domain);
     return Object.freeze({ id: `${module}.${rule.id}`, module, label: rule.label, models: Object.freeze(targets), operations: Object.freeze([...operations]),
       ...(rule.groups ? { groups: Object.freeze(rule.groups.map(item => known(groupId(module, item)))) } : {}), domain: rule.domain });
   });

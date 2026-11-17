@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import ModelCollection from "@/components/modules/ModelCollection";
 import ModelForm from "@/components/modules/ModelForm";
+import ModelExtensionViews from "@/components/modules/ModelExtensionViews";
 import CollectionViews from "@/components/modules/CollectionViews";
 import { selectedCollectionView } from "@/lib/modules/config";
 import { getModule, getModuleModel, modelClientConfig } from "@/lib/modules/registry";
@@ -57,7 +58,11 @@ async function Resolve({ params, searchParams }: Props) {
     return <CollectionViews views={entry.collectionViews} selected={selected}><Presentation config={{ ...config, view: selected }} /></CollectionViews>;
   }
   const Form = views.form ? (await views.form()).default : ModelForm;
-  return <Form key={id ?? "nuevo"} config={config} id={id} />;
+  const extensionViews = Object.fromEntries(await Promise.all(entry.extensions.filter(extension => extension.views?.form).map(async extension => {
+    const View = (await extension.views!.form!()).default;
+    return [extension.module, <View key={extension.module} config={config} />];
+  })));
+  return <ModelExtensionViews views={extensionViews}><Form key={id ?? "nuevo"} config={config} id={id} /></ModelExtensionViews>;
 }
 
 export default function Page(props: Props) {

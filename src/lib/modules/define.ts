@@ -13,6 +13,7 @@ import { declareAccess, readGroups, type AccessSpec, type ModuleAccess } from ".
 import { compileKanbanConfig } from "../kanban/config";
 import type { KanbanConfig, KanbanTransition } from "../kanban/types";
 import { declaredNames, extensionFields, isModelExtension, type ModelExtension } from "./extend";
+import { relationFieldName } from "../orm/display";
 
 type ModelClass = new () => Model;
 export type ModuleModelSpec = ModelClass | {
@@ -30,6 +31,10 @@ export type ModuleModelSpec = ModelClass | {
 export type ModuleModelOptions = Exclude<ModuleModelSpec, ModelClass>;
 export type ModelFormView = ComponentType<{ config: ModelClientConfig; id?: string }>;
 export type ModelListView = ComponentType<{ config: ModelClientConfig }>;
+export type ModuleExtensionSpec = ModelExtension | {
+  readonly model: ModelExtension;
+  readonly views?: { readonly form?: () => Promise<{ default: ModelListView }> };
+};
 /**
  * Lazy loaders (`() => import("./views/TareaForm")`): views are client components, and a
  * static import would load React into scripts such as orm:sync that read the manifest.
@@ -53,20 +58,22 @@ export type ModuleSpec = {
   readonly depends?: readonly string[];
   readonly models: Readonly<Record<string, ModuleModelSpec>>;
   /** Models of other modules extended by this one: `{ "flota.vehicle": extendModel(Vehicle, ...) }`. */
-  readonly extends?: Readonly<Record<string, ModelExtension>>;
+  readonly extends?: Readonly<Record<string, ModuleExtensionSpec>>;
   readonly menu?: ModuleMenu;
 } & AccessSpec;
 
-/** Extension fields as presented on the extended model (browser-safe names only). */
+/** Server-side compiled extension; modelClientConfig publishes only its names and label. */
 export type ModelExtensionInfo = {
   readonly module: string;
   readonly label: string;
   /** Persistent fields stored in the companion table. */
   readonly fields: readonly string[];
-  /** Virtual compute fields declared by the extension. */
+  /** Virtual compute/related fields declared by the extension. */
   readonly computed: readonly string[];
+  readonly views?: { readonly form?: () => Promise<{ default: ModelListView }> };
   /** Prisma relation (on the base model) to the companion row; absent without persistent fields. */
   readonly relation?: string;
+  readonly delegate?: string;
 };
 
 /** Compiled declaration of a model extension; the registry composes it onto the base model. */
@@ -78,6 +85,7 @@ export type ModuleExtension = {
   readonly extension: ModelExtension;
   readonly fields: readonly string[];
   readonly computed: readonly string[];
+  readonly views?: { readonly form?: () => Promise<{ default: ModelListView }> };
   readonly companion?: { readonly name: string; readonly table: string; readonly relation: string };
 };
 
@@ -162,16 +170,15 @@ function menuLabel(menu: ModuleMenu | undefined, modelKey: string) {
 
 /**
  * Compile one manifest model. The registry calls it again with the composed class when other
- * modules extend the model; `extensions` fields stay out of the list policy (phase 1: form only).
+ * modules extend the model; collection capabilities still come only from server metadata.
  */
 export function compileModuleModel(id: string, modelKey: string, options: ModuleModelOptions, label: string, extensions: readonly ModelExtensionInfo[] = []): ModuleModel {
   const name = `${pascal(id)}${pascal(modelKey)}`;
   const contract = defineModel(options.model, { name, table: options.table ?? `${id}_${modelKey}` });
   const clientFields = Object.keys(contract.metadata);
-  const extended = new Set(extensions.flatMap(extension => [...extension.fields, ...extension.computed]));
   const collectionMetadata = collectionFieldMetadata({
-    fields: Object.fromEntries(Object.entries(contract.metadata as Readonly<Record<string, FieldMetadata>>).filter(([field]) => !extended.has(field))),
-    preview: Object.fromEntries(Object.entries({ ...contract.relatedFields, ...contract.computedFields }).filter(([field]) => !extended.has(field)).map(([field, value]) => [field, value.metadata])),
+    fields: contract.metadata as Readonly<Record<string, FieldMetadata>>,
+    preview: Object.fromEntries(Object.entries({ ...contract.relatedFields, ...contract.computedFields }).map(([field, value]) => [field, value.metadata])),
     related: Object.keys(contract.relatedFields),
   });
   const list = derivedListPolicy(collectionMetadata, options.list);
@@ -203,7 +210,10 @@ function compileExtensions(spec: ModuleSpec): { extensions: ModuleExtension[]; c
   const { id } = spec;
   const extensions: ModuleExtension[] = [];
   const companions: GenerationModel[] = [];
-  for (const [target, extension] of Object.entries(spec.extends ?? {})) {
+  for (const [target, declaration] of Object.entries(spec.extends ?? {})) {
+    const extension = isModelExtension(declaration) ? declaration : declaration?.model;
+    const views = isModelExtension(declaration) ? undefined : declaration?.views;
+    if (views && Object.entries(views).some(([kind, loader]) => kind !== "form" || typeof loader !== "function")) throw new Error(`${id}: la extensión sólo registra views.form con un loader diferido.`);
     if (!modelIdPattern.test(target)) throw new Error(`${id}: extends usa identificadores <módulo>.<modelo>: ${target}.`);
     const [baseModule, baseKey] = target.split(".");
     if (baseModule === id) throw new Error(`${id}: un módulo no extiende sus propios modelos; decláralos directamente.`);
@@ -216,15 +226,13 @@ function compileExtensions(spec: ModuleSpec): { extensions: ModuleExtension[]; c
       if (!/^[a-z][A-Za-z0-9]*$/.test(name) || reservedExtensionNames.has(name)) throw new Error(`${where}: nombre de campo inválido o reservado.`);
       if (baseNames.has(name)) throw new Error(`${where}: el modelo base ya declara ese nombre.`);
       const metadata = field.metadata;
-      if (metadata.related) throw new Error(`${where}: las extensiones todavía no admiten campos related.`);
-      if (metadata.kind === "image") throw new Error(`${where}: las extensiones todavía no admiten imágenes.`);
-      if (metadata.sensitive || metadata.unique) throw new Error(`${where}: una extensión no declara campos sensitive ni unique.`);
-      if (metadata.searchable || metadata.sortable || metadata.filterable || metadata.groupable) throw new Error(`${where}: los campos extendidos aún no se buscan, ordenan, filtran ni agrupan.`);
-      if (!metadata.compute && metadata.required && metadata.defaultKind !== "literal") throw new Error(`${where}: un campo obligatorio de una extensión necesita default (los registros existentes no tienen valor).`);
+      if (metadata.kind === "many2one" && (baseNames.has(relationFieldName(name)) || Object.hasOwn(fields, relationFieldName(name)) || reservedExtensionNames.has(relationFieldName(name)))) throw new Error(`${where}: el alias relacional ya está declarado o reservado.`);
+      if (metadata.sensitive) throw new Error(`${where}: una extensión no declara campos sensitive.`);
+      if (metadata.unique && (metadata.required || metadata.defaultKind !== "empty")) throw new Error(`${where}: unique en extensiones requiere un campo opcional sin default.`);
+      if (!metadata.compute && !metadata.related && metadata.required && metadata.defaultKind !== "literal") throw new Error(`${where}: un campo obligatorio de una extensión necesita default (los registros existentes no tienen valor).`);
     }
-    const persistent = Object.keys(fields).filter(name => !fields[name].metadata.compute);
-    const computed = Object.keys(fields).filter(name => fields[name].metadata.compute);
-    // Phase 1: the companion table is what the module manager installs, owns and drops.
+    const persistent = Object.keys(fields).filter(name => !fields[name].metadata.compute && !fields[name].metadata.related);
+    const computed = Object.keys(fields).filter(name => fields[name].metadata.compute || fields[name].metadata.related);
     if (!persistent.length) throw new Error(`${id}: la extensión de ${target} necesita al menos un campo persistente.`);
     let companion: ModuleExtension["companion"];
     {
@@ -239,7 +247,7 @@ function compileExtensions(spec: ModuleSpec): { extensions: ModuleExtension[]; c
       companions.push({ model: contract, clientFields: Object.keys(contract.metadata) });
       companion = Object.freeze({ name, table, relation: `${lowerFirst(name)}${pascal(companionLink)}Records` });
     }
-    extensions.push(Object.freeze({ target, module: id, label: spec.name, extension, fields: Object.freeze(persistent), computed: Object.freeze(computed), ...(companion ? { companion } : {}) }));
+    extensions.push(Object.freeze({ target, module: id, label: spec.name, extension, fields: Object.freeze(persistent), computed: Object.freeze(computed), ...(views ? { views } : {}), ...(companion ? { companion } : {}) }));
   }
   return { extensions, companions };
 }
@@ -272,7 +280,11 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
     }
   }
   const byKey = new Map(models.map(model => [model.key, model]));
-  const access = declareAccess(id, spec, Object.fromEntries(models.map(model => [model.key, model.metadata])));
+  const ruleTargets = Object.fromEntries(extensions.map(extension => {
+    const metadata = defineModel(extension.extension.apply(extension.extension.base), { name: "ExtensionRules", table: "extension_rules" }).metadata as Readonly<Record<string, FieldMetadata>>;
+    return [extension.target, Object.fromEntries(Object.entries(metadata).map(([name, field]) => [name, extension.fields.includes(name) ? { ...field, required: false } : field]))];
+  }));
+  const access = declareAccess(id, spec, Object.fromEntries(models.map(model => [model.key, model.metadata])), ruleTargets);
   // Without groups the module stays admin-only (superuser), as before access control existed.
   const grouped = access.groups.length > 0;
   const visibility = (groups: readonly string[]) => grouped ? { access: "authenticated" as const, groups } : { access: "admin" as const };

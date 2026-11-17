@@ -89,3 +89,13 @@ test("collection compute validates entire shared output and dependencies, isolat
   const values = await resolveCollectionComputed(Array.from({ length: 205 }, (_, n) => ({ ...rows[0], id: String(n) })), ["remaining"], { computeCollection: async (names, _values, ctx) => { assert.deepEqual(names, ["remaining"]); assert.equal(ctx.actor.id, actor.id); ids.push(ctx.id!); return { remaining: 1 }; } }, context);
   assert.equal(values.length, 205); assert.equal(new Set(ids).size, 205);
 });
+
+test("a missing companion required dependency makes its computed outputs empty without running the method", async () => {
+  calls = 0;
+  const source = { ...rows[0], current: null };
+  const result = await resolveCollectionComputed([source], ["remaining"], model, { tx: {}, actor } as never, ["current"]);
+  assert.equal(result[0].remaining, null);
+  assert.equal(calls, 0);
+  assert.equal(source.current, null);
+  await assert.rejects(resolveCollectionComputed([source], ["remaining"], model, { tx: {}, actor } as never), /number/);
+});

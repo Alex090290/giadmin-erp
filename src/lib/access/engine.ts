@@ -1,6 +1,8 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { modules } from "@/modules";
+import { composeModules } from "../modules/compose";
+import { extensionWhere } from "../modules/storage";
 import { AccessError } from "../auth/policy";
 import type { ModelActor } from "../orm/context";
 import { compileListDomain } from "../orm/domain";
@@ -12,17 +14,22 @@ type Predicate = Record<string, unknown>;
 export type AccessCatalog = { owners?: Map<string, { model: string; relation: string }>; groups: Map<string, AccessGroup>; grants: Map<string, AccessGrant[]>; rules: Map<string, AccessRule[]>; models: Map<string, Readonly<Record<string, FieldMetadata>>> };
 type Catalog = AccessCatalog;
 let catalog: Catalog | undefined;
+const installed = composeModules(modules);
+const entries = new Map(installed.flatMap(module => module.models.map(model => [model.id, model] as const)));
 
 /** Declarations of every installed module, indexed once. Code is the source of truth. */
 export function accessCatalog(): Catalog {
   if (catalog) return catalog;
   const owners = new Map<string, { model: string; relation: string }>();
   const next: Catalog = { owners, groups: new Map(), grants: new Map(), rules: new Map(), models: new Map() };
-  for (const definition of modules) {
+  for (const definition of installed) {
     for (const group of definition.access.groups) next.groups.set(group.id, group);
     for (const grant of definition.access.grants) next.grants.set(grant.model, [...next.grants.get(grant.model) ?? [], grant]);
     for (const rule of definition.access.rules) for (const model of rule.models) next.rules.set(model, [...next.rules.get(model) ?? [], rule]);
-    for (const model of definition.models) next.models.set(model.id, model.metadata);
+    for (const model of definition.models) {
+      const extended = new Set(model.extensions.flatMap(extension => extension.fields));
+      next.models.set(model.id, Object.fromEntries(Object.entries(model.metadata).map(([name, field]) => [name, extended.has(name) ? { ...field, required: false } : field])));
+    }
     for (const parent of definition.models) for (const field of Object.values(parent.contract.one2manyFields)) {
       const child = definition.models.find(model => model.contract.name === field.one2many.target);
       if (!child || owners.has(child.id)) throw new Error("Propietario One2many inválido o duplicado.");
@@ -123,5 +130,7 @@ export async function authorizeModel(tx: Prisma.TransactionClient, actor: ModelA
     const scope = await authorizeModel(tx, actor, owner.model, "read");
     if (scope) predicates.push({ [owner.relation]: { is: scope } });
   }
-  return predicates.length ? { AND: predicates } : undefined;
+  const predicate = predicates.length ? { AND: predicates } : undefined;
+  const entry = entries.get(model);
+  return predicate && entry ? extensionWhere(entry, predicate) : predicate;
 }

@@ -1,9 +1,10 @@
 # Herencia y extensión de modelos entre módulos
 
-**Fase 1 implementada el 2026-11-17** a petición del usuario (rama `codex/herencia`).
+**Fases 1 y 2 implementadas el 2026-11-17** a petición del usuario (rama `codex/herencia`).
 Uso y límites vigentes en [Módulos declarativos §7](../modulos-declarativos.md#7-extender-un-modelo-de-otro-módulo-herencia).
-Las fases 2 y 3 siguen pendientes; el caso real llegará con la guía de
-[Tickets de servicio interno](tickets-servicio.md).
+La fase 3 (Partner/User) sigue pendiente. El usuario autorizó la fase 2 antes de
+Tickets para poder utilizarla y ajustarla sobre la marcha. Las propuestas originales
+de abajo son históricas; prevalece el contrato vigente de la guía enlazada.
 
 **Hallazgo de la implementación:** con `experimentalDecorators` (transform legacy de
 Next/tsx) los decoradores no se aceptan en clases anónimas. Las extensiones declaran
@@ -11,14 +12,14 @@ la clase con nombre dentro del mixin y la devuelven:
 `extendModel(Base0, Base => { class X extends Base { ... } return X; })`.
 TypeScript también rechaza redeclarar un campo del base con un tipo incompatible.
 
-## Problema
+## Problema original (histórico)
 
 Hoy un módulo sólo puede modificar sus propios modelos. No existe el equivalente al
 `_inherit` de Odoo: que un módulo B añada campos, reglas o vistas a un modelo de un
 módulo A sin editar las fuentes de A. Tampoco se pueden extender los nativos
 (Partner, User), porque son modelos manuales.
 
-## Propuesta
+## Propuesta original (histórica)
 
 ### 1. Declaración: mixin de clase
 
@@ -98,28 +99,29 @@ Se decide en la fase 3.
 1. **Implementada (2026-11-17).** Extensión de modelos declarativos: `extendModel`,
    composición en el registro, tabla compañera con lectura/guardado transaccional,
    grupo por defecto y `<ModelExtensions />`.
-2. **Pendiente** (detalle abajo): campos extendidos en colecciones, vista propia de la
-   extensión y reglas/campos avanzados.
+2. **Implementada (2026-11-17)**: campos extendidos en colecciones, vista propia de la
+   extensión, reglas sobre el base, related, Image y unique opcional sin default.
 3. **Pendiente:** nativos (Partner primero, luego User).
 
-## Fase 2: pendiente (anotada el 2026-11-17)
+## Fase 2: alcance implementado (2026-11-17)
 
-Decisión del usuario: **no adelantarla**. Se implementa cuando la guía de Tickets (u
-otro módulo real) la requiera, una pieza a la vez y con aprobación previa. Hoy los
-campos extendidos sólo existen en el formulario.
+Decisión posterior del usuario: implementarla ahora, sin esperar a Tickets. Se
+conserva la tabla compañera y se reutilizan los motores de consultas y permisos.
+Registros sin compañera se consultan como vacío y el formulario ofrece defaults;
+no se rellenan filas ni se modifican datos reales al instalar esta mejora del framework.
 
 1. **Colecciones.** Columnas de campos extendidos en lista, tarjetas y kanban; búsqueda,
    filtros, orden y agrupación. El servicio traduce las condiciones a la relación 1:1
    (`{ <relación>: { is: {...} } }`), igual que las rutas Many2one, y el repositorio
-   proyecta la compañera en `list`/`groups`. Retirar el `list: false` forzado y el
-   rechazo de `searchable/sortable/filterable/groupable` en extensiones. Registros sin
-   fila compañera: definir si filtran como default o como vacío.
+   proyecta la compañera en `list` y agrupa mediante su delegate con alcance por
+   `record.is`, paginación SQL y un grupo vacío final. Los campos ya participan
+   de la política derivada; el override explícito del base prevalece.
 2. **Vista propia de la extensión.** `views: { form: () => import(...) }` en la
    declaración de la extensión, montada por `<ModelExtensions />` dentro del mismo RHF,
    sin editar la vista del base; carga diferida como las demás vistas.
 3. **Reglas y campos avanzados.** Reglas de registro (del base o del extensor) sobre
    campos extendidos, p. ej. «el técnico ve los equipos de los que es responsable»;
-   admitir `related`, Image (uploads firmados) y quizá `unique` en extensiones.
+   admitir `related`, Image (uploads firmados) y `unique` opcional sin default.
 
 Criterios de aceptación: cada pieza con pruebas unitarias y en
 `test:extensions:integration` (proyecto/esquema temporales), sin regresión en
@@ -138,7 +140,7 @@ siguen en el servidor; documentación en
 - El módulo base no se modifica para que la extensión aparezca.
 - Guía en `docs/` y demo ficticia si aporta.
 
-## Plan de implementación de la fase 1 (2026-11-17, pendiente de aprobación)
+## Plan original de implementación de la fase 1 (histórico, 2026-11-17)
 
 Resultado de revisar el código (`src/lib/modules/define.ts`, `registry.ts`,
 `repository.ts`, `src/lib/orm/generator/generate.ts`, `install.ts`, `prepare.ts`,
@@ -212,8 +214,7 @@ Resultado de revisar el código (`src/lib/modules/define.ts`, `registry.ts`,
 
 ## Límites
 
-- No implementar por anticipación; el caso real lo aporta la guía de Tickets
-  (ticket que amplía un modelo de otro módulo o Partner con departamento).
+- Partner/User (fase 3) siguen pendientes; no se implementan como parte de la fase 2.
 - Flota está retirada; el ejemplo `flota.vehicle` es ilustrativo.
 
 Relacionado: [Módulos declarativos](../modulos-declarativos.md),

@@ -18,7 +18,7 @@ export type ModelExtension<B extends ModelClass = ModelClass> = {
 };
 
 /**
- * `extendModel(Vehicle, Base => class extends Base { responsableId = Fields.Many2one(...) })`.
+ * `extendModel(Vehicle, Base => { class X extends Base { ... } return X; })`.
  * Register it in the manifest of the extending module: `extends: { "flota.vehicle": ... }`,
  * with `depends: ["flota"]`. New persistent fields live in a companion table owned by the
  * extending module; access, rules and revision remain those of the base model.

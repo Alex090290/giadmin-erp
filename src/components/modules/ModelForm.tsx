@@ -24,6 +24,7 @@ import type { ModelClientConfig } from "@/lib/modules/config";
 import type { FieldMetadata } from "@/lib/orm/fields";
 import { modelAction, modelActivity, modelDelete, modelNote, modelRead, modelSave } from "@/lib/modules/actions";
 import { modelUiCapabilities } from "@/lib/access/capabilities";
+import { useModelExtensionViews } from "./ModelExtensionViews";
 
 type Values = Record<string, unknown>;
 
@@ -54,9 +55,10 @@ const ModelUIContext = createContext<ModelUI | null>(null);
  */
 export function ModelExtensions() {
   const ui = useContext(ModelUIContext);
+  const views = useModelExtensionViews();
   if (!ui?.config.extensions?.length) return null;
   return <>{ui.config.extensions.map(extension => <FormGroup key={extension.module} legend={extension.label}>
-    {extension.fields.map(name => Object.hasOwn(ui.config.fields, name) ? control(ui, name, ui.config.fields[name]) : Object.hasOwn(ui.config.preview, name) ? display(name, ui.config.preview[name]) : null)}
+    {views[extension.module] ?? extension.fields.map(name => Object.hasOwn(ui.config.fields, name) ? control(ui, name, ui.config.fields[name]) : Object.hasOwn(ui.config.preview, name) ? display(name, ui.config.preview[name]) : null)}
   </FormGroup>)}</>;
 }
 

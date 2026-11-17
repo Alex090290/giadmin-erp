@@ -5,7 +5,9 @@ import type { ModuleOperationPlan, OperationResult } from "./src/lib/module-mana
 import { config } from "dotenv";
 config({ path: ".env.local", quiet: true });
 const { prisma } = await import("./src/lib/prisma");
-const { modelService, modelClientConfig, withActor } = await import("./src/lib/modules/registry");
+const { modelService, modelClientConfig, getModuleModel, withActor } = await import("./src/lib/modules/registry");
+const { createModelImageSigner } = await import("./src/lib/uploads/model-image.server");
+const { authorizeModel } = await import("./src/lib/access/engine");
 const { hashPassword } = await import("./src/lib/auth/password");
 
 // Disposable accounts in the temporary schema only.
@@ -15,9 +17,19 @@ const reader = await prisma.user.create({ data: { login: "extension-reader", pas
 await prisma.accessUserGroup.create({ data: { userId: reader.id, groupId: "taller.lector" } });
 const actor = { id: root.id, sessionVersion: root.sessionVersion };
 const lector = { id: reader.id, sessionVersion: reader.sessionVersion };
+const technician = await prisma.user.create({ data: { login: "extension-tech", password } });
+await prisma.accessUserGroup.create({ data: { userId: technician.id, groupId: "soporte.tecnico" } });
+const tecnico = { id: technician.id, sessionVersion: technician.sessionVersion };
 type Saved = Record<string, unknown> & { id: string; revision: string };
 const ok = <T extends { ok: boolean }>(result: T, step: string) => { assert.ok(result.ok, `${step}: ${JSON.stringify(result)}`); return result as T & { values: Saved }; };
 const equipos = modelService("taller.equipo");
+const defaults = getModuleModel("taller.equipo")!.entry.contract.createDefaults();
+const state = { query: "", sort: "name", direction: "asc" as const, page: 1, pageSize: 10, filters: [] };
+const listOf = async (request: Record<string, unknown> = {}, who = actor) => {
+  const result = await withActor(who, () => equipos.list(prisma, who, { ...state, ...request }));
+  assert.ok(result.ok, JSON.stringify(result));
+  return result.data;
+};
 // Raw SQL for the companion table: after the extension is dropped its Prisma delegate no
 // longer exists, and the module manager type-checks the whole project.
 const schema = new URL(process.env.DATABASE_URL!).searchParams.get("schema")!;
@@ -35,6 +47,14 @@ assert.equal(legacy.values.name, "PREVIO");
 assert.equal(legacy.values.responsable, null);
 assert.equal(legacy.values.nivel, 1);
 assert.equal((await companions()).length, 0);
+const initial = await listOf();
+assert.equal(initial.rows[0].nivel, null, "collections use empty storage semantics before a companion exists");
+assert.equal(initial.rows[0].etiqueta, null, "compute with a missing required storage dependency is empty");
+assert.deepEqual((await listOf({ groupBy: ["nivel"] })).groups?.map(group => [group.value, group.count]), [[null, 1]]);
+assert.equal((await listOf({ filters: [{ field: "nivel", operator: "empty" }] })).total, 1);
+assert.equal((await listOf({ filters: [{ field: "nivel", operator: "notEmpty" }] })).total, 0);
+assert.equal((await listOf({ groupBy: ["nivel"], groupPath: [null] })).total, 1);
+assert.equal((await equipos.read(prisma, tecnico, legacyId)).ok, false, "rules do not treat missing storage as the form default");
 
 // Saving it creates the companion row in the same write and advances the single revision.
 const updated = ok(await equipos.save(prisma, actor, { ...legacy.values, responsable: "Ana", nivel: 2 }), "guardar con campos extendidos");
@@ -47,7 +67,7 @@ assert.equal((await equipos.save(prisma, actor, { ...legacy.values, nivel: 3 }))
 assert.equal((await companions())[0].nivel, 2, "el rechazo no toca la fila compañera");
 
 // Create: base rule (uppercase, from the base class) and extension rule (super) both apply.
-const created = ok(await equipos.save(prisma, actor, { name: "taladro", estado: "activo", responsable: "Luis", nivel: 1 }), "crear");
+const created = ok(await equipos.save(prisma, actor, { ...defaults, name: "taladro", estado: "activo", responsable: "Luis", nivel: 1, codigo: "T-1", logo: "https://example.com/logo.png", equipoId: legacyId }), "crear");
 assert.equal(created.values.name, "TALADRO");
 assert.equal((await companionOf(created.values.id))[0]?.createBy, actor.id);
 const before = await companions(), baseBefore = await prisma.tallerEquipo.findMany({ orderBy: { id: "asc" } });
@@ -67,14 +87,65 @@ const read = ok(await equipos.read(prisma, lector, created.values.id), "lectura 
 assert.equal(read.values.responsable, "Luis");
 assert.equal((await equipos.save(prisma, lector, { ...read.values, responsable: "Otro" })).ok, false, "lector no escribe campos extendidos");
 
-// Client contract: one group per extension; collections stay on base fields (phase 1).
+// Client contract and server-resolved lazy view: no loaders/functions in browser config.
 const client = modelClientConfig("taller.equipo");
-assert.deepEqual(client.extensions, [{ module: "soporte", label: "Soporte", fields: ["responsable", "nivel", "etiqueta"] }]);
+assert.deepEqual(client.extensions, [{ module: "soporte", label: "Soporte", fields: ["responsable", "nivel", "logo", "codigo", "equipoId", "etiqueta", "nombreEquipo", "responsableEquipo", "imagenEquipo"] }]);
 assert.ok(client.fields.responsable && client.preview.etiqueta);
-assert.deepEqual(client.list.fields, ["name", "estado"]);
+assert.ok(client.list.fields.includes("responsable") && client.list.fields.includes("nombreEquipo"));
+assert.equal(typeof getModuleModel("taller.equipo")!.entry.extensions[0].views?.form, "function");
+assert.doesNotMatch(JSON.stringify(client), /views|loader|apiSecret/);
 assert.deepEqual(client.actions, [{ name: "escalar", label: "Escalar" }]);
-const list = ok(await withActor(actor, () => equipos.list(prisma, actor, { query: "", sort: "name", direction: "asc" as const, page: 1, pageSize: 10, filters: [] })), "lista") as unknown as { data: { rows: Record<string, unknown>[] } };
-assert.equal(list.data.rows.length, 2);
+const list = await listOf();
+assert.equal(list.rows.length, 2);
+assert.equal(list.rows.find(row => row.id === created.values.id)?.nombreEquipo, "PREVIO");
+assert.equal(list.rows.find(row => row.id === created.values.id)?.responsableEquipo, "Ana", "related can project a target extension field");
+assert.equal((await listOf({ query: "Luis" })).total, 1, "search on a companion field");
+assert.equal((await listOf({ sort: "nivel", direction: "desc" })).rows.length, 2);
+assert.equal((await listOf({ filters: [{ field: "nivel", operator: "eq", value: "2" }] })).total, 2);
+assert.deepEqual((await listOf({ groupBy: ["nivel"] })).groups?.map(group => [group.value, group.count]), [[2, 2]]);
+assert.equal((await listOf({ groupBy: ["nivel", "responsable"], groupPath: [2] })).groups?.length, 2);
+assert.deepEqual(client.collectionViews, ["list", "card", "kanban"]);
+const board = await withActor(actor, () => equipos.kanban(prisma, actor, { group: "activo", state }));
+assert.ok(board.ok && board.data.rows.some(row => row.logo === "https://example.com/logo.png" && row.responsable === "Luis"), JSON.stringify(board));
+const domain = equipos.defineListAction({ domain: [{ field: "responsable", operator: "eq", value: "Luis" }] });
+const fixed = await withActor(actor, () => domain(prisma, actor, state));
+assert.ok(fixed.ok && fixed.data.total === 1, JSON.stringify(fixed));
+const lookup = await equipos.lookup(prisma, actor, { query: "Luis" });
+assert.ok(lookup.ok && lookup.items.length === 1 && lookup.items[0].value === created.values.id, JSON.stringify(lookup));
+
+// Unique constraints roll back both tables and preserve the revision on failure.
+const prior = ok(await equipos.read(prisma, actor, legacyId), "prior unique");
+const duplicate = await equipos.save(prisma, actor, { ...prior.values, name: "NO GUARDAR", codigo: "T-1" });
+assert.ok(!duplicate.ok && /únicos/.test(duplicate.error), JSON.stringify(duplicate));
+const afterUnique = ok(await equipos.read(prisma, actor, legacyId), "after unique");
+assert.equal(afterUnique.values.name, prior.values.name);
+assert.equal(afterUnique.values.revision, prior.values.revision);
+
+// The extension's rule targets the base: read/list/lookup/write/create all use it.
+const hidden = ok(await equipos.save(prisma, actor, { ...defaults, name: "oculto", estado: "activo", responsable: "Ana", nivel: 3 }), "hidden");
+assert.equal((await equipos.read(prisma, tecnico, hidden.values.id)).ok, false);
+assert.equal((await listOf({}, tecnico)).total, 2);
+const hiddenLookup = await equipos.lookup(prisma, tecnico, { id: hidden.values.id });
+assert.ok(hiddenLookup.ok && hiddenLookup.items.length === 0, JSON.stringify(hiddenLookup));
+const visible = ok(await equipos.read(prisma, tecnico, legacyId), "visible to technician");
+assert.equal((await equipos.save(prisma, tecnico, { ...visible.values, nivel: 3 })).ok, false, "post-write scope rolls back a forbidden level");
+assert.equal(ok(await equipos.read(prisma, actor, legacyId), "rollback level").values.nivel, 2);
+assert.equal((await equipos.save(prisma, tecnico, { ...defaults, name: "forjado", nivel: 3 })).ok, false);
+const masked = await withActor(tecnico, () => equipos.react(prisma, tecnico, { field: "equipoId", values: { equipoId: hidden.values.id } }));
+assert.ok(masked.ok && masked.preview.nombreEquipo === null && masked.preview.responsableEquipo === null, JSON.stringify(masked));
+
+// Sign an extension image using fake configuration; no external upload is performed.
+let authorized = 0;
+const sign = createModelImageSigner({ authorize: async () => { authorized++; }, getConfig: () => ({ cloudName: "fixture", apiKey: "123", apiSecret: "test-only" }) }, { metadata: client.fields }, Object.keys(client.fields));
+const signed = await sign("logo");
+assert.ok(signed.ok && signed.data.parameters.asset_folder === "extension-fixture", JSON.stringify(signed));
+assert.equal(authorized, 1);
+assert.equal((await sign("nombreEquipo")).ok, false, "related is not an upload target");
+const deniedSign = createModelImageSigner({ authorize: () => prisma.$transaction(tx => authorizeModel(tx, lector, "taller.equipo", "write")), getConfig: () => { throw new Error("must authorize before reading secrets"); } }, { metadata: client.fields }, Object.keys(client.fields));
+assert.equal((await deniedSign("logo")).ok, false, "a read-only account cannot upload an extension image");
+ok(await equipos.remove(prisma, actor, [{ id: hidden.values.id, revision: hidden.values.revision }]), "cleanup hidden");
+
+await (await import("./extension-render")).verifyExtensionForm();
 
 // Deleting the base record deletes its companion row (Cascade).
 const current = ok(await equipos.read(prisma, actor, created.values.id), "releer");
