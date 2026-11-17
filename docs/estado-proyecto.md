@@ -6,6 +6,15 @@ Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
+## Pendiente urgente: distribuir módulos entre proyectos (2026-11-17)
+
+Prioridad elevada por el usuario. Llevar un módulo a otro proyecto mediante ZIP de
+fuentes, con exportar/importar y validaciones (compatibilidad, dependencias, choque
+de ID, limpieza, seed opcional, extracción segura). La prueba manual del concepto
+(copiar carpeta, desinstalar con eliminar datos, pegar e instalar) se razonó con el
+gestor actual, sin ejecutarla. Sólo documentación; diseñar y presentar antes de
+implementar. [Estrategia](ideas/modulos-distribuibles.md).
+
 ## Entornos: separación revertida (2026-11-17)
 
 A petición del usuario se revirtió la separación por ambientes del 2026-11-15

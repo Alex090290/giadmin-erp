@@ -86,13 +86,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Ideas pendientes
 
+- **Pendiente urgente (2026-11-17): estrategia para distribuir módulos entre proyectos.** ZIP de fuentes para llevar un módulo a otro proyecto (no aplica dentro del mismo: ahí va por Git). Exportar/importar en el desarrollo del destino con validación de compatibilidad del framework, dependencias entre módulos, choque de ID/reservas, limpieza del paquete, datos iniciales opcionales y extracción segura; el destino genera su propia migración. Nunca viajan datos, asignaciones, historial, migraciones ni secretos. Diseñar y presentar antes de implementar. [Estrategia](docs/ideas/modulos-distribuibles.md).
+
 - Siguiente guía planeada (2026-11-17): **Tickets de servicio interno**, segundo piloto para dependencias entre módulos, folios, Date, acciones con parámetros, Many2many y reglas por rol. No inicia todavía: el usuario quiere afinar antes otros módulos. No crear el módulo ni piezas del framework por anticipación; no modificar Flota. Orden, ritmo y límites en [Tickets de servicio](docs/ideas/tickets-servicio.md).
 
 - Rutas relacionales en reads (2026-11-17): **sugerencia condicionada, no pendiente activo**. El flujo vigente usa consultas explícitas con tx/select en los métodos (idiomático JS/Prisma); conservarlo. Reconsiderar sólo si hay evidencia de mucha repetición o errores por consultas manuales al escalar, presentándola al usuario antes de diseñar. Nunca acceso perezoso tipo Odoo. [Sugerencia](docs/ideas/rutas-reads.md).
 
 - Estrategia de entornos y bases: acordada el 2026-11-17 (producción en Docker sólo en Windows; desarrollo en Windows y Mac). Implementación pendiente de autorización; sin archivos, comandos ni despliegues por anticipación. [Estrategia](docs/ideas/entornos-bases.md).
-
-- «Módulos distribuibles»: pendiente solicitado el 2026-11-15. ZIP de fuentes del módulo, descompresión en src/modules/<id>, comando de validación/reconocimiento y registro explícito, sincronización/pruebas en desarrollo, luego merge/build/deploy/migraciones normales. No instalación dinámica ni carga de ZIP desde producción. Comandos/compatibilidad/dependencias/colisiones por diseñar; no exportar secretos, datos o historial global de migraciones sin reconciliación. Sólo anotar, sin implementación anticipada. Alcance docs/ideas/modulos-distribuibles.md.
 
 - Compute persistido con store:true: pendiente solicitado el 2026-11-15 para cuando aparezca un ejemplo real. No implementarlo por anticipado; diseñar ciclo/recomputación/defaults/backfill/migraciones, contratos no editables, permisos y concurrencia antes de aplicarlo. Hoy compute sigue virtual. Alcance en docs/ideas/compute-persistido.md.
 
