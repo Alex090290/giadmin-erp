@@ -17,6 +17,14 @@ export class Modelo extends Model {
     tracking: true,
   });
 
+  intervaloServicioKm = Fields.Integer({
+    label: "Intervalo de servicio (km)",
+    required: true,
+    default: 10000,
+    min: 1,
+    tracking: true,
+  });
+
   @displayName("name", "fabricante.name")
   displayName(
     record: Readonly<{

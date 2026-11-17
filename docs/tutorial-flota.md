@@ -17,12 +17,28 @@ finalizarMantenimiento exige una línea con el kilometraje actual antes de calcu
 el próximo servicio. Confirmaciones funcionales del usuario; detalles y límites
 de verificación en [el cierre vigente](estado-proyecto.md).
 
-**Siguiente ejercicio pendiente, todavía sin implementar:** añadir un intervalo
-recomendado a Modelo y usar @onchange al seleccionar modeloId en Vehicle para
-proponerlo, permitiendo ajustes individuales. Revisar el contrato de reacciones y
-la consulta autorizada antes de escribir el ejemplo. No recalcular ni sobrescribir
-el intervalo elegido en cada guardado. Retomar con la declaración del campo en
-Modelo y avanzar un paso a la vez; no editar archivos de aplicación por adelantado.
+**Intervalo recomendado por Modelo: completado el 2026-11-17.** El usuario:
+
+1. Declaró `intervaloServicioKm` en Modelo (Integer obligatorio, default 10000,
+   min 1, tracking). Migración `20261117154411_sync_flota`: sólo
+   `ADD COLUMN intervalo_servicio_km INTEGER NOT NULL DEFAULT 10000` en flota_modelo;
+   se aplicó antes de la revisión prevista y después se comprobó correcta.
+2. Lo mostró en ModeloForm con FieldNumber inline (metadatos del modelo).
+3. Escribió `@onchange({ fields: ["modeloId"], writes: ["intervaloServicioKm"] })`
+   `proponerIntervalo`: valida modeloId, consulta con `tx.flotaModelo.findUnique`
+   y un select mínimo, y devuelve `{}` sin modelo.
+4. Validó en el navegador: propone al elegir/cambiar modelo, conserva el ajuste
+   manual al guardar y recargar, no cambia al abrir un vehículo existente y
+   rechaza 0 por min. Confirmación del usuario; el agente revisó fuentes, tsc y la
+   carga de reglas, sin repetir la prueba en el navegador.
+
+Aprendizaje: la reacción es ayuda del borrador (transacción de sólo lectura, sin
+guardar ni historial); las reglas definitivas siguen en save/constraints.
+
+**Siguiente:** el usuario afinará otros módulos; después, la guía planeada de
+[Tickets de servicio interno](ideas/tickets-servicio.md). El usuario decidió conservar la consulta
+explícita con `tx`; la alternativa queda como [sugerencia condicionada](ideas/rutas-reads.md)
+si la escala del framework llega a requerirla.
 
 ## Recorrido anterior (2026-11-15)
 

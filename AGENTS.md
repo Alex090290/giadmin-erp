@@ -86,6 +86,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Ideas pendientes
 
+- Siguiente guía planeada (2026-11-17): **Tickets de servicio interno**, segundo piloto para dependencias entre módulos, folios, Date, acciones con parámetros, Many2many y reglas por rol. No inicia todavía: el usuario quiere afinar antes otros módulos. No crear el módulo ni piezas del framework por anticipación; no modificar Flota. Orden, ritmo y límites en [Tickets de servicio](docs/ideas/tickets-servicio.md).
+
+- Rutas relacionales en reads (2026-11-17): **sugerencia condicionada, no pendiente activo**. El flujo vigente usa consultas explícitas con tx/select en los métodos (idiomático JS/Prisma); conservarlo. Reconsiderar sólo si hay evidencia de mucha repetición o errores por consultas manuales al escalar, presentándola al usuario antes de diseñar. Nunca acceso perezoso tipo Odoo. [Sugerencia](docs/ideas/rutas-reads.md).
+
 - Estrategia de entornos y bases: pendiente solicitado el 2026-11-17 tras revertir la separación anterior. Sólo planeación con el usuario; sin archivos, comandos ni despliegues por anticipación. [Pendiente](docs/ideas/entornos-bases.md).
 
 - «Módulos distribuibles»: pendiente solicitado el 2026-11-15. ZIP de fuentes del módulo, descompresión en src/modules/<id>, comando de validación/reconocimiento y registro explícito, sincronización/pruebas en desarrollo, luego merge/build/deploy/migraciones normales. No instalación dinámica ni carga de ZIP desde producción. Comandos/compatibilidad/dependencias/colisiones por diseñar; no exportar secretos, datos o historial global de migraciones sin reconciliación. Sólo anotar, sin implementación anticipada. Alcance docs/ideas/modulos-distribuibles.md.

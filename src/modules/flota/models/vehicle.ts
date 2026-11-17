@@ -1,5 +1,18 @@
 import "server-only";
-import { Fields, Model, ModelValidationError as Err, action, type DisplayRecord, type ModelContext, ActionRecord, constraint, depends, ReactionValues } from "@/lib/orm";
+import {
+  Fields,
+  Model,
+  ModelValidationError as Err,
+  action,
+  type DisplayRecord,
+  type ModelContext,
+  type ReactionContext,
+  ActionRecord,
+  constraint,
+  depends,
+  ReactionValues,
+  onchange,
+} from "@/lib/orm";
 
 export class Vehicle extends Model {
   name = Fields.Text({
@@ -80,6 +93,27 @@ export class Vehicle extends Model {
     tracking: true,
   });
 
+  @onchange({ fields: ["modeloId"], writes: ["intervaloServicioKm"] })
+  async proponerIntervalo(values: ReactionValues, { tx }: ReactionContext) {
+    const modeloId = values.modeloId;
+    if (typeof modeloId !== "string" || !modeloId) {
+      return {};
+    }
+
+    const modelo = await tx.flotaModelo.findUnique({
+      where: { id: modeloId },
+      select: {
+        intervaloServicioKm: true,
+      },
+    });
+
+    if (!modelo) return {};
+
+    return {
+      intervaloServicioKm: modelo.intervaloServicioKm,
+    };
+  }
+
   @constraint("kilometraje", "mantenimientos")
   validarKilometraje(values: Readonly<Record<string, unknown>>) {
     const kilometraje = values.kilometraje;
@@ -91,7 +125,8 @@ export class Vehicle extends Model {
 
     mantenimientos.forEach((linea, index) => {
       if (linea.kilometraje > kilometraje) {
-        errores[`mantenimientos.${index}.kilometraje`] = `No puede superar los ${kilometraje} km del vehículo.`;
+        errores[`mantenimientos.${index}.kilometraje`] =
+          `No puede superar los ${kilometraje} km del vehículo.`;
       }
     });
 
@@ -105,7 +140,9 @@ export class Vehicle extends Model {
     const objetivo = values.proximoServicioKm;
     const actual = values.kilometraje;
 
-    return typeof objetivo === "number" && typeof actual === "number" ? objetivo - actual : null;
+    return typeof objetivo === "number" && typeof actual === "number"
+      ? objetivo - actual
+      : null;
   }
 
   @action({ label: "Testing" })
@@ -130,27 +167,40 @@ export class Vehicle extends Model {
       throw new Err("El vehículo no está en mantenimiento");
     }
 
-    const servicioRegistrado = record.mantenimientos.some((linea) => linea.kilometraje === record.kilometraje);
+    const servicioRegistrado = record.mantenimientos.some(
+      (linea) => linea.kilometraje === record.kilometraje,
+    );
     if (!servicioRegistrado) {
-      throw new Err("Registra un mantenimiento con el kilometraje actual antes de finalizar.");
+      throw new Err(
+        "Registra un mantenimiento con el kilometraje actual antes de finalizar.",
+      );
     }
 
-    return { estado: "disponible" as const, proximoServicioKm: record.kilometraje + record.intervaloServicioKm };
+    return {
+      estado: "disponible" as const,
+      proximoServicioKm: record.kilometraje + record.intervaloServicioKm,
+    };
   }
 
   normalize(values: Readonly<Record<string, unknown>>) {
     return {
       ...values,
-      plate: typeof values.plate === "string" ? values.plate.trim().toUpperCase() : values.plate,
+      plate:
+        typeof values.plate === "string"
+          ? values.plate.trim().toUpperCase()
+          : values.plate,
     };
   }
 
   @constraint("active", "estado")
   validarDesactivacion(values: Readonly<Record<string, unknown>>) {
     if (values.active === false && values.estado === "mantenimiento") {
-      throw new Err("Finaliza el mantenimiento antes de desactivar el vehículo.", {
-        active: "El vehículo sigue en mantenimiento",
-      });
+      throw new Err(
+        "Finaliza el mantenimiento antes de desactivar el vehículo.",
+        {
+          active: "El vehículo sigue en mantenimiento",
+        },
+      );
     }
   }
 
@@ -161,7 +211,11 @@ export class Vehicle extends Model {
     const anterior = context.previous?.kilometraje;
     const nuevo = values.kilometraje;
 
-    if (typeof anterior === "number" && typeof nuevo === "number" && nuevo < anterior) {
+    if (
+      typeof anterior === "number" &&
+      typeof nuevo === "number" &&
+      nuevo < anterior
+    ) {
       throw new Err("El kilometraje no puede disminuir.", {
         kilometraje: `Debe ser mayor o igual a ${anterior}`,
       });

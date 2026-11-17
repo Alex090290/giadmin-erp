@@ -25,6 +25,7 @@ model FlotaModelo {
   active Boolean @default(true)
   fabricanteId String @map("fabricante_id")
   fabricante FlotaFabricante @relation("FlotaModelo_fabricanteId", fields: [fabricanteId], references: [id], onDelete: Restrict)
+  intervaloServicioKm Int @default(10000) @map("intervalo_servicio_km")
   createBy String? @map("create_by")
   createByUser User? @relation("FlotaModelo_createBy", fields: [createBy], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)

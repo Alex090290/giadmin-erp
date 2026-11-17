@@ -36,6 +36,25 @@ guía describía la configuración de la Mac.
 - Pendiente anotado: planear la nueva estrategia de entornos con el usuario antes
   de crear archivos o comandos. [Problemas, preguntas y criterios](ideas/entornos-bases.md).
 
+## Siguiente guía planeada: Tickets de servicio interno (2026-11-17)
+
+Anotada a petición del usuario como siguiente tutoría tras Flota; todavía no inicia
+porque antes quiere afinar otros módulos. Cubre dependencias entre módulos, folios,
+Date, acciones con parámetros, Many2many, reglas por rol y, al final, avisos y
+adjuntos. Varias piezas no existen en el framework: se diseñan e implementan con
+aprobación cuando el ejercicio las requiera. [Plan](ideas/tickets-servicio.md).
+
+## Flota: intervalo recomendado con @onchange (2026-11-17)
+
+Ejercicio completado por el usuario: Modelo.intervaloServicioKm (migración
+20261117154411_sync_flota, sólo ADD COLUMN con default 10000), FieldNumber en
+ModeloForm y @onchange proponerIntervalo en Vehicle con tx de sólo lectura.
+Validado por el usuario en el navegador (proponer, cambiar, ajuste manual
+conservado, existente sin cambios, rechazo de 0). Agente: revisión de fuentes y
+SQL, tsc y carga de reactionRules; `prisma migrate status` al día. Sin commit.
+Detalle en [tutorial](tutorial-flota.md). Se conserva la consulta explícita con tx; las rutas en reads quedan como
+[sugerencia condicionada](ideas/rutas-reads.md), no como pendiente activo.
+
 ## Cierre de Flota y siguiente ejercicio pendiente (2026-11-17)
 
 Usuario pidió guardar el progreso y dejar el próximo ejercicio sin implementar.
