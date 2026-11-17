@@ -3,7 +3,6 @@ import type { AccessPerms } from "./declare";
 /** UI hints by model, never a substitute for transactional authorization. */
 export type ModelCapabilities = AccessPerms & { readonly move: boolean };
 export type CapabilityActor = {
-  readonly hiddenMenus?: ReadonlySet<string>;
   readonly isAdmin: boolean;
   readonly groups: ReadonlySet<string>;
   readonly modelAccess: Readonly<Record<string, AccessPerms>>;

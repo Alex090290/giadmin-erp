@@ -20,14 +20,11 @@ const catalog: AccessCatalog = {
   ]), rules: new Map(), models: new Map([["unit.item", {}], ["unit.catalog", {}], ["unit.empty", {}]]),
 };
 type Override = AccessPerms & { groupId: string; model: string };
-function fixture({ groups = ["unit.writer"], overrides = [] as Override[], active = true, admin = false, version = 1, hiddenMenus = [] as {groupId:string;applicationId:string;menuId:string}[] } = {}) {
+function fixture({ groups = ["unit.writer"], overrides = [] as Override[], active = true, admin = false, version = 1 } = {}) {
   const queries: string[] = [];
   const tx = {
     user: { findUnique: async () => { queries.push("user"); return { active, isAdmin: admin, sessionVersion: version }; } },
     accessUserGroup: { findMany: async () => { queries.push("groups"); return groups.map(groupId => ({ groupId })); } },
-    accessMenuHidden: { findMany: async ({ where }: {where:{groupId:{in:string[]}}}) => {
-      queries.push("menus");return hiddenMenus.filter(row=>where.groupId.in.includes(row.groupId));
-    } },
     accessModelOverride: { findMany: async ({ where }: { where: { model: { in: string[] }; groupId: { in: string[] } } }) => {
       queries.push("overrides");
       assert.deepEqual(where.model.in, [...catalog.models.keys()]);
@@ -44,7 +41,7 @@ test("capabilities batch inherited grants and overrides once for every model", a
   assert.deepEqual(value.modelAccess["unit.item"], read, "another group still grants read");
   assert.deepEqual(value.modelAccess["unit.catalog"], read);
   assert.deepEqual(value.modelAccess["unit.empty"], denied);
-  assert.deepEqual(queries, ["user", "groups", "overrides", "menus"]);
+  assert.deepEqual(queries, ["user", "groups", "overrides"]);
 });
 
 test("snapshots reflect new overrides/membership per actor; unknown groups cannot grant access", async () => {
@@ -94,14 +91,4 @@ test("One2many hints require owner read permission without granting child permis
   assert.deepEqual((await readAccessCapabilities(childDenied.tx, actor, owned)).modelAccess["unit.item"], denied);
   const admin = fixture({ admin: true });
   assert.deepEqual((await readAccessCapabilities(admin.tx, actor, owned)).modelAccess["unit.item"], { read: true, create: true, write: true, unlink: true });
-});
-
-
-test("menu restrictions are read once for effective inherited groups, ignored for unknown memberships and bypassed by admins",async()=>{
-  const hiddenMenus=[{groupId:"unit.reader",applicationId:"unit",menuId:"list"},{groupId:"removed",applicationId:"unit",menuId:"catalog"}];
-  const actor={id:"one",sessionVersion:1};
-  const current=fixture({hiddenMenus});
-  assert.deepEqual([...(await readAccessCapabilities(current.tx,actor,catalog)).hiddenMenus],["unit/list"]);
-  assert.equal(current.queries.filter(query=>query==="menus").length,1);
-  const admin=fixture({admin:true,hiddenMenus});assert.deepEqual([...(await readAccessCapabilities(admin.tx,actor,catalog)).hiddenMenus],[]);
 });

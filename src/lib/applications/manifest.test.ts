@@ -117,19 +117,3 @@ test("menus reject ambiguous declarations and unsafe or foreign application rout
   for (const href of ["https://example.test/erp/contactos", "//example.test/erp/contactos", "/erp/usuarios", "/erp/contactos-extra", "/erp/contactos/../usuarios", "/erp/contactos/%2e%2e/usuarios", "/erp/contactos\\nuevo", "/erp/contactos?q=x", "/erp/contactos#x"]) invalid.push([{ ...link, href }]);
   for (const menus of invalid) assert.throws(() => defineApplication({ ...contacts, menus } as ApplicationManifest));
 });
-
-
-test("stored menu restrictions hide leaves and entire dropdowns without granting access or mutating manifests",()=>{
-  const actor={isAdmin:false,hiddenMenus:new Set(["contactos/contacts"])};
-  assert.deepEqual(applicationNavigation(withMenus,actor)?.menus,[]);
-  assert.equal(canOpenApplication(withMenus,actor),true,"hiding navigation doesn't revoke direct record access");
-  const admin={...actor,isAdmin:true,hiddenMenus:new Set(["contactos/contacts","contactos/management","contactos/reports"])};
-  assert.equal(applicationNavigation(withMenus,admin)?.menus.length,3);
-  const all={...withMenus,menus:[{id:"dropdown",label:"Grupo",items:[{id:"a",label:"A",href:"/erp/contactos/a"},{id:"b",label:"B",href:"/erp/contactos/b"}]}]};
-  const leaf=applicationNavigation(all,{isAdmin:false,hiddenMenus:new Set(["contactos/a"])})!;
-  assert.deepEqual("items" in leaf.menus[0] ? leaf.menus[0].items.map(item=>item.id):[],["b"]);
-  assert.deepEqual(applicationNavigation(all,{isAdmin:false,hiddenMenus:new Set(["contactos/dropdown"])})?.menus,[]);
-  assert.equal(applicationNavigation(all,{isAdmin:false,hiddenMenus:new Set(["usuarios/dropdown"])})?.menus.length,1,"IDs are namespaced by application");
-  assert.equal(all.menus[0].items.length,2);
-  assert.equal(applicationNavigation(users,actor),null);
-});

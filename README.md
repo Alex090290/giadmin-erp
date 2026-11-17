@@ -24,7 +24,7 @@ automáticamente; lista y formulario se resuelven por convención. No requiere
 Las [capacidades efectivas](docs/capacidades-modelos.md) comparten permisos del
 actor entre menús, formularios y colecciones: consulta, crear, eliminar, acciones
 y movimientos. Incluye grupos heredados y ajustes desde Accesos; el servidor
-revalida cada operación. Accesos incluye un [catálogo de modelos y campos](docs/catalogo-modelos-accesos.md), de sólo lectura para administradores. También permite [ocultar menús por grupo](docs/menus-por-grupo.md), con herencia y revisión de cambios. Permisos por campo siguen pendientes.
+revalida cada operación. El [catálogo y gestor ampliado de Accesos](docs/ideas/access-manager.md) quedan pendientes; se conserva la administración básica de grupos, miembros, CRUD y reglas.
 
 ## Comandos del scaffold, en orden
 

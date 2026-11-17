@@ -4,7 +4,6 @@ import { modules } from "@/modules";
 import { AccessError } from "../auth/policy";
 import type { ModelActor } from "../orm/context";
 import { compileListDomain } from "../orm/domain";
-import { menuPolicyKey } from "./menus";
 import { relationFieldName } from "../orm/display";
 import type { FieldMetadata } from "../orm/fields";
 import { accessOperations, type AccessGrant, type AccessGroup, type AccessOperation, type AccessPerms, type AccessRule } from "./declare";
@@ -76,9 +75,6 @@ export async function readAccessCapabilities(tx: Prisma.TransactionClient, actor
   const groups = user.isAdmin ? new Set<string>() : await userGroups(tx, actor.id, catalog.groups);
   const models = [...catalog.models.keys()];
   const overrides = !user.isAdmin && groups.size && models.length ? await tx.accessModelOverride.findMany({ where: { model: { in: models }, groupId: { in: [...groups] } } }) : [];
-  const hidden = !user.isAdmin && groups.size ? await tx.accessMenuHidden.findMany({
-    where: { groupId: { in: [...groups] } }, select: { applicationId: true, menuId: true },
-  }) : [];
   const byModel = new Map<string, typeof overrides>();
   for (const row of overrides) byModel.set(row.model, [...(byModel.get(row.model) ?? []), row]);
   const permissions = new Map(models.map(model => [model, user.isAdmin
@@ -90,7 +86,6 @@ export async function readAccessCapabilities(tx: Prisma.TransactionClient, actor
   }
   return {
     isAdmin: user.isAdmin,
-    hiddenMenus: new Set(hidden.map(row => menuPolicyKey(row.applicationId, row.menuId))) as ReadonlySet<string>,
     groups: groups as ReadonlySet<string>,
     modelAccess: Object.freeze(Object.fromEntries([...permissions].map(([model, perms]) => [model, Object.freeze(perms)]))),
   };

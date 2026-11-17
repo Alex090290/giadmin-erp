@@ -36,14 +36,3 @@ model AccessRuleState {
 
   @@map("access_rule_states")
 }
-
-// Navigation restrictions only. Absence means follow the manifest and model permissions.
-model AccessMenuHidden {
-  groupId       String   @map("group_id") @db.VarChar(120)
-  applicationId String   @map("application_id") @db.VarChar(120)
-  menuId        String   @map("menu_id") @db.VarChar(120)
-  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  @@id([groupId, applicationId, menuId])
-  @@map("access_menu_hidden")
-}

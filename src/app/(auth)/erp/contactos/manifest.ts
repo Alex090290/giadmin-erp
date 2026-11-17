@@ -1,5 +1,16 @@
 import { UsersRound } from "lucide-react";
 import { defineApplication } from "@/lib/applications/manifest";
-import { contactsDefinition } from "./definition";
 
-export const contactsManifest = defineApplication({ ...contactsDefinition, icon: UsersRound });
+export const contactsManifest = defineApplication({
+  id: "contactos",
+  name: "Contactos",
+  description: "Contactos compartidos de empresas, usuarios, clientes y proveedores.",
+  version: "0.1.0",
+  icon: UsersRound,
+  depends: [],
+  access: "authenticated",
+  models: ["Partner"],
+  menus: [
+    { id: "contacts", label: "Contactos", href: "/erp/contactos" },
+  ],
+});

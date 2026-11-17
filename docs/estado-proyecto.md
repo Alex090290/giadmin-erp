@@ -6,55 +6,46 @@ Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
-## Accesos: visibilidad de menús por grupo (2026-11-16)
+## Actualización de seguridad de Next.js (2026-11-16)
 
-Usuario autorizó seguir con ocultación de menús por grupo. Implementada sección
-en el grupo: Según manifest / Oculto, con ocultaciones heredadas identificadas.
-AccessMenuHidden almacena sólo restricciones. Navegación compartida respeta hojas,
-dropdowns, IDs por aplicación, permisos existentes y bypass admin; no cambia
-acceso directo ni CRUD. Guardado admin revalida sesión en transacción, valida
-catálogo y usa revisión para evitar sobrescribir cambios concurrentes.
+Ejecutado `next upgrade --agent=security`: objetivo seleccionado 16.4.6 desde
+16.4.3. Next y eslint-config-next quedan fijados en 16.4.6; lockfile actualizado
+y experimental.agentUpgrade="security" en next.config.ts. Commit 9e52b62 en
+codex/next-security-16-4-6, verificado en worktree aislado; los mismos tres archivos
+están aplicados en el checkout codex/flota, conservando la reversión de Accesos.
+Verificados instalación npm ci, next --version, ESLint, 113 pruebas de access,
+applications, form-model y orm, y build con TypeScript en el checkout actual.
+Persisten tres avisos previos de trazado del gestor de módulos. No se ejecutó SQL.
+Sin push ni PR: gh no está disponible para consultar duplicados abiertos.
 
-Metadatos nativos separados en definition.ts, consumidos por sus manifests y el
-catálogo sin cargar iconos React en scripts. El inventario admite sólo el wrapper
-local definición+icono y sigue leyendo literales sin ejecutar código. Editor para
-nativas core y módulos declarativos; descriptor de scaffold anterior pendiente.
-Keep conserva políticas; purga limpia las del módulo y sus grupos.
+## Accesos ampliado: revertido y pendiente (2026-11-16)
 
-Migración aditiva 20261116221339_add_menu_visibility revisada y aplicada con
-aprobación en localhost:5433/liteerp4_dev/public, rama codex/flota. Era la única
-pendiente; deploy confirmó todas aplicadas. Sólo se creó access_menu_hidden;
-sin asignar ocultaciones ni modificar usuarios/grupos/registros de negocio.
-Producción no se consultó ni modificó. Prisma Client regenerado.
+El usuario pidió retirar las ampliaciones recientes de Accesos por dudas sobre su
+funcionamiento y retomarlas más adelante. Se eliminan catálogo de modelos/Fields,
+editor de menús, filtros de navegación por ocultación y sus refactors auxiliares.
+Se recupera la versión básica de grupos, miembros, ajustes CRUD y reglas.
+[Alcance futuro pendiente](ideas/access-manager.md).
 
-Verificados test:access (9), test:applications (11), test:module-manager (21),
-test:capabilities:integration en proyecto/esquema temporales (eliminados), Prisma
-validate, TypeScript, ESLint y build. Se repitió build tras el recordatorio de
-seguridad conocido de Next.js; dependencias sin actualizar. Revisión visual no
-confirmada en esta entrega; siguiente prueba guiada: ocultar un menú al operador,
-recargar su navegación, verificar herencia/restauración. Reiniciar dev si conserva
-el cliente Prisma anterior. [Contrato](menus-por-grupo.md).
+El commit ffe0e9f mezcla estas ampliaciones con Flota/One2many: reversión selectiva
+en el árbol de trabajo, sin revertir todo el commit ni reescribir Git. Se conservan
+Flota, cambios visuales de formularios, One2many, validaciones y acceso de líneas
+por el padre. Las asignaciones y permisos básicos de la base no se modifican.
 
-## Accesos: catálogo de modelos y Fields (2026-11-16)
+Se conserva la migración ya aplicada 20261116221339_add_menu_visibility y se añade
+20261117013335_revert_menu_visibility (DROP sólo de access_menu_hidden), aplicada
+con aprobación en localhost:5433/liteerp4_dev/public. Había 0 filas. Respaldo JSON
+privado verificado en .environment-backups/access-menu-revert-2026-11-17T01-42-59-566Z.json;
+no versionarlo. El comando comprobó el checksum de la migración original y que sólo
+la reversión estaba pendiente; deploy confirmó todas aplicadas. Producción intacta.
+Prisma Client regenerado y rutas retiradas de la compilación.
 
-Usuario confirmó que primero quiere el catálogo de modelos y campos, dejando
-políticas para ocultar menús/vistas/campos para otra entrega. Accesos añade menú
-Modelos, lista compartida con búsqueda/filtros/orden/paginación y detalle de campos
-con FormViewLoader. Metadatos salen del registro declarativo: almacenados,
-related, compute/preview y One2many. No se duplican en BD ni se editan por UI.
-Servicios de lectura requieren administrador activo y sesión vigente en transacción;
-no publican valores de registros, defaults, funciones ni schemas. Aplicaciones
-manuales quedan fuera de este catálogo. [Contrato](catalogo-modelos-accesos.md).
-Verificados test:access (8), integración test:capabilities:integration (incluye
-consultas de modelos/Fields y rechazos de sesión), TypeScript, ESLint y build.
-La primera compilación y el primer arranque de la revisión temporal se detuvieron
-por el aviso de seguridad conocido de Next.js; la repetición normal pasó. No se
-actualizaron dependencias. El modo --serve ahora registra fallos de arranque y
-repite sólo una vez el mismo comando ante ese recordatorio, con bind loopback.
-Revisión visual no confirmada: el navegador no respondió a navegación/CDP. Se
-cerró la prueba mediante su archivo .stop y se eliminaron proyecto/esquema propios.
-Pendiente: usuario revisa Accesos → Modelos con su administrador y decide después
-el alcance de las políticas. Sin SQL ni datos reales modificados por esta entrega.
+Verificados test:access (5), test:applications (10), test:module-manager (20),
+test:capabilities:integration y test:one2many:integration en esquemas temporales,
+Prisma validate, TypeScript, ESLint y build (repetido tras el aviso de seguridad
+conocido de Next.js). Pruebas temporales limpiadas. Git confirma que esta reversión
+no modifica src/modules/flota, src/lib/orm, src/lib/modules ni src/components.
+Reiniciar dev si algún proceso conserva el cliente/rutas anteriores. Trabajo en el
+árbol local; no se creó commit ni se reescribió el historial Git.
 
 ## Flota: acceso heredado a las líneas (2026-11-16)
 
@@ -73,7 +64,7 @@ Verificados test:access (5), test:modules (28), test:one2many:integration,
 test:capabilities:integration, TypeScript y ESLint. Build aprobado al repetirlo,
 con los avisos previos de trazado y un aviso de seguridad de Next.js instalado:
 la primera ejecución se detuvo por ese aviso después de compilar; no se actualizaron
-dependencias. Pendiente revisar/actualizar Next.js por separado. Las integraciones
+dependencias entonces; actualización a 16.4.6 verificada en la sección anterior. Las integraciones
 eliminaron sus proyectos/esquemas temporales, sin datos reales modificados.
 
 ## Flota: líneas operativas y ajuste visual (2026-11-16)

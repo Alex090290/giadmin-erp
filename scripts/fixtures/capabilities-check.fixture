@@ -28,38 +28,6 @@ assert.ok(record.ok);
 const application = { ...entry.module.application, icon: (() => null) as never };
 const state = { query: "", sort: "name", direction: "asc" as const, page: 1, pageSize: 10, filters: [] };
 
-// Menu settings are restrictions, composed across inherited groups, with concurrent-edit protection.
-const {groupDetail,setMenuVisibility}=await import("./src/lib/access/admin");
-const policy=async(groupId:string,changes:unknown[],revision?:string)=>{
-  const detail=await groupDetail(prisma,admin,groupId);assert.ok(detail);
-  await setMenuVisibility(prisma,admin,{groupId,revision:revision??detail.menuRevision,changes});
-};
-const hideTask={applicationId:"ensayo",menuId:"tarea-list",mode:"hidden"};
-const initial=await groupDetail(prisma,admin,"ensayo.usuario");assert.ok(initial);
-assert.ok(initial.menus.some(menu=>menu.applicationId==="ensayo"&&menu.menuId==="configuracion-group"&&menu.group));
-await policy("ensayo.usuario",[hideTask]);
-assert.ok(!(applicationNavigation(application,await snapshot(reader))?.menus.some(menu=>menu.id==="tarea-list")));
-assert.ok(!(applicationNavigation(application,await snapshot(manager))?.menus.some(menu=>menu.id==="tarea-list")),"responsable inherits usuario's restriction");
-assert.ok((await tasks.read(prisma,reader,record.values.id)).ok,"hiding a menu doesn't change data authorization");
-assert.ok(applicationNavigation(application,await snapshot(admin))?.menus.some(menu=>menu.id==="tarea-list"));
-const inherited=await groupDetail(prisma,admin,"ensayo.responsable");assert.ok(inherited?.menus.find(menu=>menu.applicationId==="ensayo"&&menu.menuId==="tarea-list")?.inherited.length);
-await policy("ensayo.responsable",[{...hideTask,mode:"default"}]);
-assert.ok(!(applicationNavigation(application,await snapshot(manager))?.menus.some(menu=>menu.id==="tarea-list")),"default doesn't undo another group's hide");
-await assert.rejects(policy("ensayo.usuario",[{...hideTask,mode:"default"}],initial.menuRevision),/cambió/);
-const beforeMenus=await prisma.accessMenuHidden.count();
-await assert.rejects(policy("ensayo.usuario",[{applicationId:"ensayo",menuId:"categoria-list",mode:"hidden"},{...hideTask,menuId:"missing"}]));
-assert.equal(await prisma.accessMenuHidden.count(),beforeMenus,"invalid batches don't partially persist");
-const latest=await groupDetail(prisma,admin,"ensayo.usuario");assert.ok(latest);
-for(const actor of [reader,{...admin,sessionVersion:admin.sessionVersion+1}]) await assert.rejects(setMenuVisibility(prisma,actor,{groupId:"ensayo.usuario",revision:latest.menuRevision,changes:[hideTask]}));
-await assert.rejects(policy("ensayo.usuario",[hideTask,hideTask]));
-await assert.rejects(policy("ensayo.usuario",[{...hideTask,mode:"visible"}]));
-await policy("ensayo.usuario",[{...hideTask,mode:"default"}]);
-assert.ok(applicationNavigation(application,await snapshot(reader))?.menus.some(menu=>menu.id==="tarea-list"));
-await policy("ensayo.usuario",[{applicationId:"ensayo",menuId:"configuracion-group",mode:"hidden"}]);
-assert.deepEqual(applicationNavigation(application,await snapshot(manager))?.menus.map(menu=>menu.id),["tarea-list"]);
-await policy("ensayo.usuario",[{applicationId:"ensayo",menuId:"configuracion-group",mode:"default"}]);
-console.log("✓ Menús por grupo: persistencia/restauración, herencia, dropdowns, bypass admin, permisos intactos, revisión y rollback de lotes inválidos.");
-
 await prisma.accessModelOverride.create({ data: { groupId: "ensayo.usuario", model: "ensayo.tarea", read: true, create: false, write: false, unlink: false } });
 const readonlyAccess = await snapshot(reader);
 const readonlyConfig = modelClientConfig("ensayo.tarea", readonlyAccess);
@@ -99,17 +67,4 @@ await prisma.user.update({ where: { id: manager.id }, data: { sessionVersion: { 
 await assert.rejects(snapshot(manager), /sesión/);
 await prisma.user.update({ where: { id: reader.id }, data: { active: false } });
 await assert.rejects(snapshot(reader), /sesión/);
-// Read-only catalogue: data comes from registered declarations, authorization from this transaction.
-const { listAccessModels, readAccessModel, listAccessFields } = await import("./src/lib/access/model-catalogue");
-const catalogue = await listAccessModels(prisma, admin, { ...state, sort: "label" });
-assert.ok(catalogue.ok);
-assert.ok(catalogue.data.rows.some(model => model.id === "ensayo.tarea"));
-const taskModel = await readAccessModel(prisma, admin, "ensayo.tarea");assert.ok(taskModel.ok);
-const taskFields = await listAccessFields(prisma, admin, { id: "ensayo.tarea", state: { ...state, sort: "name" } });
-assert.ok(taskFields.ok);assert.ok(taskFields.data.rows.some(field => field.name === "name"));
-assert.ok(taskFields.data.rows.some(field => field.origin === "Calculado"));
-await assert.rejects(listAccessModels(prisma, { ...admin, sessionVersion: admin.sessionVersion + 1 }, { ...state, sort: "label" }));
-await assert.rejects(readAccessModel(prisma, reader, "ensayo.tarea"));
-await assert.rejects(listAccessFields(prisma, manager, { id: "ensayo.tarea", state: { ...state, sort: "name" } }));
-console.log("✓ Catálogo de modelos/Fields: metadatos declarados y calculados, autorización admin y sesión vigente; sin consultas a registros de negocio.");
 await prisma.$disconnect();

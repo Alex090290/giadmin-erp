@@ -143,13 +143,3 @@ test("servicio revalida admin/sesión antes de leer fuentes y parametriza el sch
   }
   assert.equal(queries, 1);
 }));
-
-
-test("native icon-free definitions remain inspectable without evaluating code, overrides or foreign imports",()=>{
-  const wrapper='import { nativeDefinition } from "./definition"; export const nativeManifest=defineApplication({...nativeDefinition,icon:Icon});';
-  const definition='throw new Error("Must not execute"); export const nativeDefinition={id:"native",name:"Native",description:"Test",version:"1.0.0",access:"admin",models:[],depends:[]} satisfies Metadata;';
-  assert.equal(inspectManifest(wrapper,"native","manual",definition).name,"Native");
-  assert.throws(()=>inspectManifest(wrapper.replace('icon:Icon','icon:Icon,id:"other"'),"native","manual",definition));
-  assert.throws(()=>inspectManifest(wrapper.replace('./definition','../definition'),"native","manual",definition));
-  assert.throws(()=>inspectManifest(wrapper,"native","manual",definition.replace('id:"native"','...unknown,id:"native"')));
-});
