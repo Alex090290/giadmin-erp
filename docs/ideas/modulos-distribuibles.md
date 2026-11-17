@@ -46,5 +46,5 @@ diseñar; no existen ahora ni se presentan como API disponible.
 No transporta registros de desarrollo ni instala selectivamente módulos por base
 en producción. Ese gestor y Exportar a Excel tienen alcances separados.
 
-Referencias: [Módulos declarativos](../modulos-declarativos.md),
-[Entornos y bases](../entornos-y-bases.md).
+Referencias: [Módulos declarativos](../modulos-declarativos.md). La estrategia de
+entornos/bases se revirtió el 2026-11-17 y está pendiente de replantear.

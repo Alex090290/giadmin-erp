@@ -10,8 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Entornos y base de datos
 
-- Configuración local separada el 2026-11-15: .env.development.local → localhost:5433/liteerp4_dev (contenedor/volumen liteerp4_dev/liteerp4_dev_data); .env.production.local → 127.0.0.1:5434/lite_erp4_production (liteerp4_production/liteerp4_production_data). Producción vacía por petición expresa, sin migraciones/seed. No reutilizar ni borrar postgres18 o volúmenes anteriores. Compose de producción en docker/compose.production-db.yml; secretos en archivos ignorados. La rama observada es staging_v1; verificar Git al retomar, no asumir codex/flota.
-- Rama no selecciona DB automáticamente: npm run dev y orm:sync usan desarrollo; comandos explícitos db:deploy:production/build:production/start:production exigen main. db:check y db:check:production son de lectura. Mantener DATABASE_URL legacy de .env.local alineada con desarrollo; no poner producción allí. Las variables exportadas tienen precedencia; el wrapper explícito rechaza URLs exportadas distintas al archivo. Guía docs/entornos-y-bases.md. No desplegar ni sincronizar producción como parte de pruebas; fixtures siempre en esquema/proyecto propios. Al cambiar de máquina/worktree preparar archivos privados que Git no transporta.
+- La separación por ambientes (.env.development.local/.env.production.local, comandos db:check/*:production y compose de producción) se revirtió el 2026-11-17 a petición del usuario; la estrategia nueva está pendiente de planear. Vigente: una sola `.env.local` con la base de desarrollo, que leen Next, Prisma (prisma7.config.ts) y los scripts. No crear otros `.env.*` ni desplegar a producción hasta acordar la estrategia. Las bases/contenedores existentes de cada máquina no se borraron; no tocarlos sin aprobación.
 
 ## Continuidad entre agentes y máquinas
 

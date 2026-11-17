@@ -6,6 +6,36 @@ Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
+## Entornos: separación revertida (2026-11-17)
+
+A petición del usuario se revirtió la separación por ambientes del 2026-11-15
+(commits cdb164b y 89513f6) para planear otra estrategia. Motivo: en la máquina
+Windows, `.env.local` apuntaba a la base de producción y varios scripts lo leen
+directamente (module:manage, prisma/seed.ts, integraciones). Además `npm run build`/`start`
+no tenían guarda de rama, ambas bases compartían servidor y rol superusuario, y la
+guía describía la configuración de la Mac.
+
+- Código: prisma7.config.ts vuelve a `.env.local`. Se retiraron los scripts
+  db:check, db:check:production, db:status:production, db:deploy:production,
+  build:production, start:production y test:database-environment, además de
+  scripts/database-environment.ts, src/lib/database-environment(.test).ts,
+  docker/compose.production-db.yml y docs/entornos-y-bases.md. AGENTS.md y README
+  se actualizaron. Se conserva la entrada `/.environment-backups/` de .gitignore.
+- Archivos privados (Windows): respaldados en
+  `.environment-backups/revert-2026-11-17T15-24-56-386Z/`; `.env.local` usa ahora
+  la URL de desarrollo (localhost:5433/lite-erp4); `.env.development.local` y
+  `.env.production.local` se retiraron de la raíz.
+- No se borró ninguna base ni contenedor: `lite-erp4-production` (vacía, 0 tablas)
+  sigue en el servidor local; en la Mac, los contenedores/volúmenes de producción y
+  sus archivos privados siguen como estaban. **Al abrir la Mac hay que aplicar el
+  mismo ajuste en sus archivos privados** (`.env.local` hacia la base de desarrollo
+  y retirar los dos `.env.*.local`), porque Git no los transporta.
+- Verificado: `prisma migrate status` contra lite-erp4 (40 migraciones, al día),
+  tsc, lint y `npm run build` con Next 16.4.6 (tres avisos de trazado conocidos).
+  Sin SQL, sin cambios de datos, sin commit.
+- Siguiente: planear la nueva estrategia de entornos con el usuario antes de
+  crear archivos o comandos.
+
 ## Cierre de Flota y siguiente ejercicio pendiente (2026-11-17)
 
 Usuario pidió guardar el progreso y dejar el próximo ejercicio sin implementar.
