@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Entornos y base de datos
 
-- La separación por ambientes (.env.development.local/.env.production.local, comandos db:check/*:production y compose de producción) se revirtió el 2026-11-17 a petición del usuario; la estrategia nueva está pendiente de planear. Vigente: una sola `.env.local` con la base de desarrollo, que leen Next, Prisma (prisma7.config.ts) y los scripts. No crear otros `.env.*` ni desplegar a producción hasta acordar la estrategia. Planeación pendiente (problemas, preguntas y criterios) en [Estrategia de entornos](docs/ideas/entornos-bases.md). Las bases/contenedores existentes de cada máquina no se borraron; no tocarlos sin aprobación.
+- La separación por ambientes (.env.development.local/.env.production.local, comandos db:check/*:production y compose de producción) se revirtió el 2026-11-17 a petición del usuario; la estrategia nueva se acordó el 2026-11-17 y está pendiente de implementar: bases por entorno (no por rama), producción en Docker Compose sólo en la máquina Windows (carpeta aparte con `main`), Mac sólo desarrollo, `APP_ENV` y helper único de configuración, sin credenciales de producción en carpetas de trabajo. Vigente: una sola `.env.local` con la base de desarrollo, que leen Next, Prisma (prisma7.config.ts) y los scripts. No crear otros `.env.*` ni desplegar a producción hasta acordar la estrategia. Estrategia, implementación propuesta y criterios en [Estrategia de entornos](docs/ideas/entornos-bases.md). Las bases/contenedores existentes de cada máquina no se borraron; no tocarlos sin aprobación.
 
 ## Continuidad entre agentes y máquinas
 
@@ -90,7 +90,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Rutas relacionales en reads (2026-11-17): **sugerencia condicionada, no pendiente activo**. El flujo vigente usa consultas explícitas con tx/select en los métodos (idiomático JS/Prisma); conservarlo. Reconsiderar sólo si hay evidencia de mucha repetición o errores por consultas manuales al escalar, presentándola al usuario antes de diseñar. Nunca acceso perezoso tipo Odoo. [Sugerencia](docs/ideas/rutas-reads.md).
 
-- Estrategia de entornos y bases: pendiente solicitado el 2026-11-17 tras revertir la separación anterior. Sólo planeación con el usuario; sin archivos, comandos ni despliegues por anticipación. [Pendiente](docs/ideas/entornos-bases.md).
+- Estrategia de entornos y bases: acordada el 2026-11-17 (producción en Docker sólo en Windows; desarrollo en Windows y Mac). Implementación pendiente de autorización; sin archivos, comandos ni despliegues por anticipación. [Estrategia](docs/ideas/entornos-bases.md).
 
 - «Módulos distribuibles»: pendiente solicitado el 2026-11-15. ZIP de fuentes del módulo, descompresión en src/modules/<id>, comando de validación/reconocimiento y registro explícito, sincronización/pruebas en desarrollo, luego merge/build/deploy/migraciones normales. No instalación dinámica ni carga de ZIP desde producción. Comandos/compatibilidad/dependencias/colisiones por diseñar; no exportar secretos, datos o historial global de migraciones sin reconciliación. Sólo anotar, sin implementación anticipada. Alcance docs/ideas/modulos-distribuibles.md.
 

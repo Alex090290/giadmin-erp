@@ -33,8 +33,10 @@ guía describía la configuración de la Mac.
 - Verificado: `prisma migrate status` contra lite-erp4 (40 migraciones, al día),
   tsc, lint y `npm run build` con Next 16.4.6 (tres avisos de trazado conocidos).
   Sin SQL, sin cambios de datos, sin commit.
-- Pendiente anotado: planear la nueva estrategia de entornos con el usuario antes
-  de crear archivos o comandos. [Problemas, preguntas y criterios](ideas/entornos-bases.md).
+- Estrategia acordada el 2026-11-17: bases por entorno, producción con Docker
+  Compose sólo en la máquina Windows (carpeta aparte con `main`), Mac sólo
+  desarrollo, `APP_ENV` y helper único de configuración. Implementación pendiente
+  de autorización. [Estrategia y plan](ideas/entornos-bases.md).
 
 ## Relaciones con reglas del destino (2026-11-17)
 
