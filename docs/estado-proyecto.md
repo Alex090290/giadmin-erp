@@ -110,6 +110,14 @@ Date, acciones con parámetros, Many2many, reglas por rol y, al final, avisos y
 adjuntos. Varias piezas no existen en el framework: se diseñan e implementan con
 aprobación cuando el ejercicio las requiera. [Plan](ideas/tickets-servicio.md).
 
+## Pendiente de diseño: herencia de modelos entre módulos (2026-11-17)
+
+Equivalente al `_inherit` de Odoo, adaptado a TS/Prisma: mixin `extendModel` con
+`super`, composición en el registro, tabla compañera 1:1 del módulo extensor,
+`<ModelExtensions />` en vistas y accesos del modelo base; nativos en una fase
+posterior. Ligado a la guía de Tickets; sólo documentación, sin código.
+[Propuesta y criterios](ideas/herencia-modelos.md).
+
 ## Flota: intervalo recomendado con @onchange (2026-11-17)
 
 Ejercicio completado por el usuario: Modelo.intervaloServicioKm (migración
