@@ -1,0 +1,234 @@
+# Partner/User nativos (`core`) y app Ajustes
+
+**Fase 0 (inventario y plan), 2026-11-18.** Prioridad elegida por el usuario tras pausar
+Tickets. Sin código hasta aprobar este plan; rama propuesta `codex/core`.
+
+## Decisiones del usuario
+
+- `core`: módulo declarativo **nativo** con Partner y User; sin icono en el cajón,
+  siempre instalado, no desinstalable desde Módulos.
+- App **Ajustes** en el cajón con los menús **Usuarios**, **Accesos** y **Módulos**; las
+  apps Usuarios, Control de accesos y Módulos dejan de aparecer por separado.
+- **Contactos** se rehace en una etapa posterior como app propia sobre `core.partner`,
+  añadiendo sus campos con `extendModel(Partner, ...)`. Partner vive en `core` (no en
+  Contactos) porque nombre/avatar de los usuarios dependen de él.
+- Al crear un usuario se crea su contacto automáticamente, en la misma transacción
+  (hook del modelo User en `core`, no una `@action`).
+- Perfil se queda en el menú del avatar.
+
+## Inventario (estado actual)
+
+**Esquema** (`prisma/models/user.prisma`, `partner.prisma`, escritos a mano):
+- `User`: login único, password, lastLogin, active, isAdmin, darkMode, sessionVersion,
+  `partnerId` opcional y único (Restrict); relaciones con RecordActivity y
+  AccessUserGroup; inversas `<modelo>CreatedRecords` que el instalador inserta con
+  marcadores por cada módulo.
+- `Partner`: name, email, phone, avatarUrl; inversa `user`.
+- Ambos con `created_at`/`updated_at` **TIMESTAMP(3) sin zona** (los modelos declarativos
+  usan TIMESTAMPTZ(3)) y **sin `create_by`**. Nombres Prisma `User`/`Partner`, tablas
+  `users`/`partners`, distintos de la convención `<Módulo><Clave>`/`<módulo>_<clave>`.
+
+**Código que consulta User/Partner (22 archivos):**
+- Autenticación: `src/auth.ts` (login, JWT con `sessionVersion`), `lib/auth/*`
+  (perfil, tema, contraseña, política `assertUserChange`), `prisma/seed.ts`.
+- Usuarios: `lib/users/service.ts` (alta con `partner: { create }`, revisión doble
+  usuario/contacto, revocación de sesión, último admin), `UserEditor.tsx`, rutas
+  `/erp/usuarios`.
+- Contactos: `contactos/models/contact.service.ts`, vistas y rutas `/erp/contactos`.
+- Proveedores legacy: `lib/list/registry.ts`, `lib/list/delete*.ts`,
+  `lib/many2one/registry.ts` (listas/lookups `user`/`partner`).
+- Accesos y gestor: `lib/access/engine.ts`/`admin.ts` (isAdmin, grupos),
+  `module-manager/*` (autorización admin), `lib/modules/registry.ts`, `lib/orm/service.ts`
+  (actor, auditoría `createByUser.partner`).
+- Integraciones: auth, contacts, framework, modules, theme.
+
+**Rutas a mover:** `/erp/usuarios`, `/erp/accesos`, `/erp/modulos` aparecen en ~35
+referencias (OperationPanel, ModuleDetail/List, UserEditor, layout, registro de apps,
+pruebas de manifest/auth/legacy y `outputFileTracingIncludes` de next.config).
+
+## Decisión técnica principal: cómo se vuelve declarativo el esquema
+
+| | **A. Adaptador nativo (recomendado)** | B. Adopción completa por el generador |
+| --- | --- | --- |
+| Esquema | `user.prisma`/`partner.prisma` siguen escritos a mano, propiedad `@core` | El generador produce y posee el esquema de User/Partner |
+| Clases `Model` | Sí: `Partner`/`User` con Fields, hooks, displayName, permisos | Sí |
+| Repositorio | Adaptador explícito sobre `users`/`partners` (selects mínimos, `password`/`sessionVersion` nunca publicados) | Repositorio genérico |
+| Migraciones | Ninguna obligatoria (opcional: `create_by` nullable) | TIMESTAMP→TIMESTAMPTZ en tablas con datos reales, nombres de modelo/tablas no convencionales, relaciones de infraestructura que el generador no conoce |
+| Riesgo | Bajo: las tablas y la autenticación no cambian | Alto: DDL sobre cuentas reales y reescritura del generador |
+| Lo que habilita | Many2one a `Partner`/`User` desde módulos, lookup/etiquetas/filtros/agrupación, `createBy` como Many2one legible, `extendModel(Partner)` con tabla compañera, ModelForm/ModelCollection en Ajustes y Contactos | Lo mismo |
+
+Con A, «declarativo» significa que el **contrato** (modelo, permisos, servicio, vistas,
+relaciones, herencia) es el del framework, y sólo el **esquema** sigue siendo
+infraestructura. Puede evolucionar a B más adelante si hace falta.
+
+## Fase 1 implementada (2026-11-18, rama `codex/core`)
+
+Enfoque A aprobado por el usuario. Decisiones provisionales (pueden cambiarse): todo
+usuario autenticado lee contactos (nombre, correo, teléfono, avatar); sólo admin escribe;
+las altas de usuario crearán su contacto (fase 2).
+
+- `src/lib/core/manifest.ts`: módulo nativo `core` (`native: true`) con
+  `core.partner` = `Partner`/`partners` (`src/lib/core/models/partner.ts`: name,
+  email con `@constraint`, phone, avatarUrl Image `avatars`). Grupo implícito
+  `core.internal` «Usuario interno» (toda cuenta activa, en `userGroups`) con lectura.
+- `src/lib/modules/installed.ts`: única lista registrada `[core, ...src/modules]` para
+  registro, motor y administración de accesos. El cajón excluye módulos nativos; la ruta
+  `/erp/core/...` responde 404.
+- `defineModule`: `native`, y en modelos nativos `name`/`route`; `core` es dependencia
+  implícita (declararlo en `depends` es error) y su ID está reservado. Extensiones de
+  `core.partner` enlazan a `Partner` (`nativeModelNames`).
+- Generador: `Partner` es destino nativo (`@core`) sin `depends`; el instalador escribe
+  la inversa marcada en `partner.prisma`. Repositorio con `creator: false` para tablas
+  sin `create_by` (auditoría sólo con fechas).
+- Sin cambios en `partners`/`users` ni migraciones del ERP. Contactos, Usuarios, Perfil y
+  autenticación siguen con su código manual.
+- Verificado: test:modules 46 (5 nuevas en native.test.ts), test:orm 108/109 (EPERM),
+  test:access 5, tsc, lint y test:core:integration (proyecto/esquema temporales: módulo
+  `ventas` con Many2one a Partner y `crm` que extiende `core.partner`; SQL sin ALTER de
+  partners/users; contacto previo con extensión vacía; guardado/creación/constraint;
+  usuario interno lee/lista/busca pero no escribe; etiquetas Many2one; borrado Restrict).
+  Regresión aprobada: test:capabilities, test:extensions, test:one2many y
+  test:legacy:integration (auth, Contactos y tema con build en proyecto/esquema temporales).
+  Se corrigió en legacy.integration.ts la comprobación obsoleta del trace que exigía
+  `src/modules/demo` (retirado); ahora exige el manifest de cada módulo presente.
+  Nota: `test:auth:integration` y `test:contacts:integration` ejecutados directamente usan
+  `.env.local` (y el servidor en :3000); usar siempre el wrapper `test:legacy:integration`.
+  Una ejecución directa de contacts el 2026-11-18 creó y borró cuentas temporales en la base
+  de desarrollo; comprobado sin residuos.
+- Conocido: Accesos lista el grupo «Usuario interno» como cualquier grupo; su membresía
+  es implícita (se revisará al mover Accesos a Ajustes).
+
+## Fase 2 implementada (2026-11-18, rama `codex/core`)
+
+- `core.user` = `User`/`users` (`src/lib/core/models/user.ts`): login (único, normalizado
+  a minúsculas, patrón validado), nombre/correo/teléfono/avatar **delegados** a su Partner
+  (`inherits`, Odoo `_inherits`), contraseña `writeOnly`, activo, administrador y
+  `lastLogin` de sistema. Sin grant: sólo admin (superusuario) abre cuentas.
+- Alta: crea el contacto en la misma sentencia (`partner: { create }`) y exige contraseña
+  (política 8–72 bytes). Edición: contraseña vacía conserva el hash; contacto con
+  `upsert` (una cuenta antigua sin contacto lo recibe al guardar). Cambiar contraseña,
+  login, estado o rol incrementa `sessionVersion` (revoca sesiones); sólo contacto, no.
+- Reglas: `assertUserChange` en `beforeSave` (propia cuenta, último admin activo) y nuevo
+  hook `beforeRemove` (no eliminarse ni al último admin).
+- Framework: `Fields.Text({ writeOnly: true })` (implica sensitive; nunca seleccionado ni
+  publicado; el repositorio exige su transformación o no arranca), `beforeRemove(record,
+  {tx, actor, id})` en modelos, opciones nativas del repositorio (`writeOnly`, `readOnly`,
+  `beforeUpdate`) e `inherits` en modelos nativos (reutiliza la relación 1:1 de las
+  extensiones: lectura, búsqueda, orden y filtros por el contacto; sin agrupación).
+  `ModelForm` y `eject:view` presentan writeOnly con `widget="password"`.
+- `User` es destino nativo: `Fields.Many2one("User")` desde cualquier módulo, con etiqueta
+  del nombre del contacto vía lookup autorizado (sólo admin hoy).
+- Autenticación, Perfil, la app Usuarios y su servicio manual siguen sin cambios; la app se
+  sustituirá en la fase 3 (Ajustes).
+- Conocido: la revisión es la del usuario; editar el contacto desde Contactos no la avanza,
+  así que entre Ajustes y Contactos gana la última escritura de los campos delegados.
+- Verificado: test:modules 48 (7 en native.test.ts), test:orm 108/109 (EPERM), tsc y
+  test:core:integration en proyecto/esquema temporales (alta con contacto y hash verificado,
+  hash nunca publicado, alta sin contraseña y login duplicado rechazados, edición sin
+  contraseña, revocación por rol y no por contacto, lastLogin no escribible, cuenta sin
+  contacto completada, propia cuenta y último admin, lector interno sin acceso, búsqueda
+  por nombre del contacto, Many2one a User con etiqueta). Regresión aprobada: lint,
+  test:legacy (auth/Contactos/tema con build), capabilities, extensions y one2many.
+
+## Fase 3 implementada (2026-11-18, rama `codex/core`)
+
+- App **Ajustes** (`src/app/(auth)/erp/ajustes`, admin, icono Settings) con menús
+  Usuarios, Accesos y Módulos; `/erp/ajustes` abre Usuarios. Sustituye en el cajón a las
+  apps Usuarios, Control de accesos y Módulos.
+- `Ajustes → Usuarios` presenta `core.user` con las vistas del framework mediante
+  `ModelRoute` (`src/components/modules/ModelRoute.tsx`), extraído de la ruta
+  `/erp/<módulo>/<modelo>` y compartido por ambas. `core.user` usa la ruta
+  `/erp/ajustes/usuarios`.
+- Accesos y Módulos se movieron con `git mv` a `ajustes/accesos` y `ajustes/modulos`
+  (breadcrumbs Aplicaciones › Ajustes › …); se retiraron sus manifests/layouts, la app
+  Usuarios manual y `UserEditor`. `lib/users/service.ts` y `user.schema` siguen porque las
+  integraciones de auth/contactos los usan; retirarlos cuando no queden consumidores.
+- `next.config`: redirecciones temporales `/erp/{usuarios,accesos,modulos}[/*]` → Ajustes y
+  trace del gestor en `/erp/ajustes/modulos`. Apps protegidas del gestor: ajustes,
+  contactos y core.
+- Accesos: «Usuario interno» (`core.internal`) se presenta como implícito: cuenta a los
+  usuarios activos y no admite asignar miembros (también rechazado en el servidor).
+- Verificado: tsc, lint, test:modules 48, test:orm 108/109 (EPERM), test:applications 10,
+  test:auth 9, test:access 5, test:core:integration, test:legacy:integration (build temporal;
+  rutas nuevas, redirecciones de las antiguas, acceso admin y denegación al usuario normal) y
+  test:modules:integration completo (catálogo con Ajustes como app manual y protegida, ciclo
+  de instalación/retirada). Sin revisión visual en navegador.
+
+## Fase 4 implementada (2026-11-18, rama `codex/core`)
+
+- `createBy` es la columna «Creado por» por defecto de `audit: true`: Many2one de lectura
+  con etiqueta del nombre del contacto, filtro con selector de creadores y agrupación por
+  creador. `createByUser.partner.name` queda como columna opcional (avatar, orden por nombre).
+- `creatorLookup(modelo, actor, request)` en el registro y la Server Action fija
+  `modelCreators`: creadores de registros **legibles** del modelo (scope de reglas en
+  `<modelo>CreatedRecords: { some }`), búsqueda por nombre del contacto, sólo ID y nombre.
+  Lo usan las etiquetas de lista/grupos (`relations.createBy`) y el filtro de
+  `ModelCollection`. Los modelos nativos no tienen creador.
+- Verificado: test:modules 48, test:orm 108/109 (EPERM), tsc, lint y
+  test:capabilities:integration (filtro eq/vacío por creador, etiqueta, agrupación con
+  conteo, selector por nombre, rechazo sin lectura del modelo, sin login ni credenciales).
+  Regresión aprobada: lint, test:core, test:legacy (build) y test:extensions.
+- Nota: las etiquetas de lista (Many2one y ahora `createBy`) usan el actor de la operación
+  (`withActor`), como hacen las Server Actions `modelList`/`modelKanban`. Llamar
+  `service.list` directamente sin `withActor` hace fallar la resolución de etiquetas; las
+  pruebas siguen el mismo camino que la acción.
+
+## Corrección tras revisión en navegador (2026-11-18)
+
+Al abrir un usuario en Ajustes, el formulario fallaba con «Contrato incompatible: password
+(text)»: `useModelField` rechaza todo campo `sensitive` y la copia cliente de Fields
+(`lib/modules/fields.ts`) perdía `writeOnly`. Ahora un `writeOnly` se enlaza (siempre llega
+vacío y sólo transporta un valor nuevo); el resto de `sensitive` sigue rechazado. Prueba en
+`modelFields.test.tsx` (test:form-model 13). Las pruebas previas no renderizaban el formulario.
+
+## Plan por fases (con A)
+
+1. **Framework para modelos nativos.**
+   - `defineModule` con `native: true`: sin icono/app en el cajón, siempre registrado,
+     no instalable/desinstalable, ID `core` reservado.
+   - Nombre Prisma/tabla explícitos para modelos nativos (`User`/`users`) y repositorio
+     adaptador; el instalador los trata como destinos `@core` válidos para Many2one e
+     inversas (como hoy con `createByUser`).
+   - Rutas de modelo configurables (los modelos de `core` no tienen ruta propia; Ajustes
+     y Contactos montan sus vistas).
+   - Menús que apuntan a modelos de otro módulo con `depends` (Ajustes → `core.user`).
+2. **`core.partner` y `core.user`.**
+   - Partner: name, email, phone, avatarUrl (Image), displayName `name`.
+   - User: login, active, isAdmin, lastLogin (lectura), `partnerId` obligatorio para altas
+     nuevas; nombre/avatar vía related de Partner o grupo propio; contraseña como campo
+     de escritura nunca leído (hash en el servidor), `sessionVersion`/`darkMode` no
+     publicados. Hook: crear Partner al crear User en la misma transacción; conservar
+     revocación de sesión, protección del último admin y autoedición.
+   - Permisos: admin para escribir; regla explícita de quién puede **buscar personas**
+     (lookup de User/Partner desde otros módulos) — decisión pendiente del usuario.
+3. **App Ajustes.** Manifest nativo `ajustes` con menús Usuarios (ModelCollection/ModelForm
+   sobre `core.user`), Accesos y Módulos; mover rutas a `/erp/ajustes/usuarios`,
+   `/erp/ajustes/accesos`, `/erp/ajustes/modulos` (con redirección de las antiguas);
+   retirar los manifests de Usuarios, Control de accesos y Módulos del cajón.
+4. **Auditoría legible.** `createBy` como Many2one de lectura a `core.user` (etiqueta,
+   filtro «soy yo»/vacío, agrupación por creador), sustituyendo la ruta
+   `createByUser.partner.name` cuando el modelo lo publique.
+5. **Contactos (etapa siguiente).** App sobre `core.partner` con `extendModel` para sus
+   campos; retirar proveedores legacy `user`/`partner` cuando no queden consumidores.
+
+## Criterios de aceptación
+
+- Autenticación intacta: login, JWT/`sessionVersion`, revocación, perfil, tema y
+  contraseña; `test:auth:integration`, `test:theme:integration`, `test:legacy:integration`.
+- Sin cambios de datos ni DDL sobre `users`/`partners` en las fases 1–3 (diff de esquema
+  vacío); cualquier migración opcional se presenta con su SQL antes de aplicarse.
+- `password`, `sessionVersion` y campos de seguridad nunca en `ModelClientConfig`,
+  listas, lookups, historial ni related.
+- Módulos de prueba con Many2one a `Partner`/`User` y `extendModel(Partner)` en
+  proyecto/esquema temporales; regresión de `test:modules:integration`,
+  `test:one2many:integration`, `test:extensions:integration`, `test:contacts:integration`.
+- Cajón: Ajustes visible sólo para quien tenga acceso; `core` nunca visible.
+
+## Preguntas abiertas
+
+1. Aprobar el enfoque **A (adaptador nativo)** frente a B.
+2. ¿Quién puede buscar/seleccionar personas en un Many2one a User/Partner desde otros
+   módulos? Propuesta: cualquier usuario autenticado ve nombre y avatar de contactos
+   activos; sólo admin ve login y datos de cuenta.
+3. ¿Las altas nuevas de usuario exigen siempre contacto? (hoy `partnerId` es opcional en
+   el esquema; los usuarios existentes ya lo tienen).

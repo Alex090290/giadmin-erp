@@ -1,9 +1,16 @@
 # Tickets: aprender el framework desde cero
 
-Guía preparada el 2026-11-17. **Estado: recorrido diseñado, ejercicios aún no
-iniciados.** No existe un módulo Tickets creado por esta guía. El usuario escribe
-sus archivos y ejecuta los pasos; el agente explica, revisa y acompaña un ejercicio
-a la vez. Preparar esta guía no autoriza crear la aplicación por adelantado.
+> **Pausada y retirada el 2026-11-18.** El usuario desinstaló Tickets con «Eliminar
+> datos» (migración `20261118165807_uninstall_tickets`, commit `71d3358`) para dar
+> prioridad a convertir Partner/User en un módulo nativo `core` y crear la app
+> «Ajustes». El avance (ejercicios 0–6 parciales) quedó en Git en `68a31d5`. La guía
+> se retomará desde cero sobre la base nueva; el ejercicio 6 podrá usar Partner/User.
+
+Guía preparada el 2026-11-17. **Estado al 2026-11-18: ejercicios 0–5 completados;
+ejercicio 6 en curso, selector y columna de categoría conectados; sigue filtro.** El módulo Tickets ya está creado e
+instalado. El usuario escribe sus archivos y ejecuta los pasos; el agente explica,
+revisa y acompaña un ejercicio a la vez, sin editar su aplicación por adelantado.
+El punto de continuación al final de esta guía prevalece sobre los pasos iniciales.
 
 El objetivo es construir una mesa de ayuda interna: registrar un problema,
 clasificarlo, asignarlo, documentar las intervenciones y cerrarlo con una solución.
@@ -544,8 +551,53 @@ a afterCommit. No inventar APIs para completar esa lista.
 
 ## Punto de continuación para el siguiente agente
 
-**Siguiente paso: ejercicio 0.** Revisar rama, cambios y estado de migraciones de la
-máquina actual; explicar el modelo mental. Después proponer únicamente el plan
-`npm run create:module -- tickets --dry-run`. No hay ejercicios confirmados todavía.
-Actualizar aquí el punto de continuación y en [estado-proyecto.md](estado-proyecto.md)
-la evidencia de cada fase, sin convertir la guía en un historial de mensajes.
+**Auditoría en colecciones implementada el 2026-11-18** en el framework (`audit: true`
+por modelo en el manifest). Siguiente paso del usuario: añadir `audit: true` a
+`ticket` y usar `{field:"createByUser.partner.name"}` (y `createdAt`/`updatedAt` si
+los quiere) en TicketList en lugar de `createBy`. Contrato en
+[Auditoría](auditoria-modelos.md#colecciones-de-módulos-declarativos-audit-true-2026-11-18).
+Después continuar con filtro de Categoría y relación con Técnico.
+
+**Actualización 2026-11-18:** compromisoAt ya está declarado (opcional/tracking),
+en Prisma y en la migración 20261118145412_sync_tickets; el usuario confirmó
+terminar orm:sync tras revisar el plan y las pruebas de guardar/reabrir con
+fecha/hora y después con el campo vacío. Ejercicio 4 completado por confirmación
+del usuario. Ejercicio 5 también completado: displayName folio · asunto con
+dependencias name/asunto, confirmado por el usuario y revisado en fuentes.
+Ejercicio 6: Categoria completada con name/active y minutosRecomendados Integer
+min 0/default 0; registro, Prisma y migración 20261118155543_sync_tickets revisados.
+Usuario confirmó sincronización y pruebas de persistencia/límites. Tecnico ya está
+creado, registrado e instalado: Prisma y migración 20261118155906_sync_tickets
+revisados; usuario confirmó guardar/reabrir. Menú Tickets/Configuración con
+Categorías/Técnicos declarado y confirmado. categoriaId opcional a TicketsCategoria
+sincronizado por el usuario; clase/Prisma/SQL 20261118160359_sync_tickets revisados.
+FieldMany2One en TicketForm conectado y selección/limpieza/persistencia confirmadas
+por el usuario; columna categoriaId ya añadida en TicketList, revisada en fuentes.
+Sigue probar etiqueta y filtro de categoría en lista; aún no crear tecnicoId.
+Hay vistas locales expulsadas y un cambio del manifest; no regenerarlas.
+Este punto sustituye el siguiente paso del resumen histórico de abajo.
+
+**Avance guardado a petición del usuario (2026-11-17).** Rama `codex/tickets`.
+Ejercicios 0–3 completados; ejercicio 4 en curso. Tickets está registrado e instalado,
+con formulario/lista por convención. No hay vistas expulsadas ni negocio propio.
+
+Campos completados: name/folio (prefijo elegido TCK/{year}/), asunto, descripcion,
+prioridad, estado, estimacionMinutos, presupuestoMinutos, requiereVisita y active.
+El usuario confirmó las pruebas propuestas de persistencia, defaults y límites;
+el agente verificó fuentes/esquema/migraciones, sin repetir esas pruebas en navegador.
+Última migración revisada: 20261118052359_sync_tickets, sólo requiere_visita BOOLEAN
+NOT NULL DEFAULT false. Última confirmación: marcar visita, guardar y reabrir.
+
+La retirada local de Flota y la infraestructura de folios se aplicaron con
+aprobación del usuario. Las menciones iniciales a esas migraciones pendientes son
+el procedimiento de arranque; no describen una tarea aún pendiente en esta Mac.
+Revisar siempre el estado de la máquina al retomar. No asumir procesos dev activos.
+
+**Siguiente ejercicio: compromisoAt**, DateTime opcional para fecha/hora de compromiso.
+Explicar primero que representa un instante UTC y no Date sin hora. El usuario
+escribe el campo, ejecuta orm:sync -- tickets --plan y comparte la salida antes de
+aplicar. No avanzar automáticamente a otros campos ni modificar sus archivos.
+
+Detalle de migraciones y evidencia en [estado-proyecto.md](estado-proyecto.md).
+Progreso documentado localmente, sin commit/push. Retomar sólo cuando el usuario
+lo indique y actualizar este resumen al cerrar el siguiente ejercicio.

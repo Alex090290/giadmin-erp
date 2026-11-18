@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { formViewSource, listViewSource, manifestModel, registerView } from "./eject";
 import { sourceFile } from "../scaffold/source-edit";
 import demo from "./module.fixture";
+import { Fields } from "../orm/fields";
 
 const manifest = (models: string) => `import "server-only";
 import { defineModule } from "@/lib/modules/define";
@@ -65,6 +66,15 @@ test("registerView rechaza manifests ambiguos o modelos inexistentes", () => {
   assert.throws(() => registerView(manifest(`    tarea: Tarea,`), "otra", "form"), /no está declarado/);
   assert.throws(() => registerView(manifest(`    ...extra,`), "tarea", "form"), /sin spreads/);
   assert.throws(() => registerView(`export const x = 1;`, "tarea", "form"), /defineModule/);
+});
+
+test("sequence fields are ejected as headers while ordinary text stays editable", () => {
+  const form = formViewSource({ key: "ticket", className: "Ticket", classImport: "./models/ticket",
+    fields: { name: Fields.Text({ sequence: { prefix: "TCK-" } }).metadata, asunto: Fields.Text().metadata },
+    preview: {}, listFields: ["name", "asunto"], lookups: [] });
+  sourceFile(form, "TicketForm.tsx");
+  assert.match(form, /<FieldText<Values> name="name" widget="header" direction="inline" \/>/);
+  assert.match(form, /<FieldText<Values> name="asunto" direction="inline" \/>/);
 });
 
 test("las plantillas usan los mismos controles que la vista por defecto y tipan con FormValues", () => {

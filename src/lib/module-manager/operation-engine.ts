@@ -146,7 +146,7 @@ async function buildPlan(root: string, actor: ModelActor, input: z.output<typeof
   let recordCounts: ModuleOperationPlan["recordCounts"];
   let sql = "";
   if (descriptor.kind === "manual" || descriptor.kind === "unknown") blockers.push("Esta aplicación requiere un adaptador específico; el motor genérico no puede modificar entidades compartidas.");
-  if (["modulos", "usuarios", "contactos", "accesos"].includes(input.module)) blockers.push("Aplicación de infraestructura protegida.");
+  if (["ajustes", "contactos", "core"].includes(input.module)) blockers.push("Aplicación de infraestructura protegida.");
   if (input.operation !== "uninstall") {
     if (retained && input.operation !== "install") blockers.push("Para recuperar una aplicación retirada, usa Instalar antes de actualizarla.");
     if (record?.missingDependencies.length) blockers.push(`Dependencias no disponibles: ${record.missingDependencies.join(", ")}.`);

@@ -1,6 +1,6 @@
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { modules as declared } from "@/modules";
+import { registeredModules } from "./installed";
 import { AccessError } from "../auth/policy";
 import type { ModelActor } from "../orm/context";
 import { prisma } from "../prisma";
@@ -9,16 +9,15 @@ import { authorizeModel, userGroups } from "../access/engine";
 import { allowsActionGroups, type CapabilityActor } from "../access/capabilities";
 import { projectModelAccess } from "./access";
 import { createModelImageSigner } from "../uploads/model-image.server";
-import type { Many2OneLoader } from "../many2one/model-lookup";
+import { modelLookupSchema, type Many2OneLoader } from "../many2one/model-lookup";
+import type { Many2OneResult } from "../many2one/types";
 import type { FieldMetadata } from "../orm/fields";
 import type { ModelAction } from "../orm/model";
 import { createRepository } from "./repository";
 import { modelIdPattern, type ModelClientConfig } from "./config";
 import type { ModuleDefinition, ModuleModel } from "./define";
-import { composeModules } from "./compose";
 
-// Extensions declared by other modules are composed onto their base models once, at load.
-const modules = composeModules(declared);
+const modules = registeredModules;
 
 const byModule = new Map<string, ModuleDefinition>();
 const byModel = new Map<string, { module: ModuleDefinition; entry: ModuleModel }>();
@@ -43,6 +42,34 @@ export function getModuleModel(id: unknown) {
 }
 
 type Service = ReturnType<typeof createModelService<Record<string, unknown>>>;
+
+/**
+ * «Creado por» of a model: accounts that created records the actor may read in it, searched by
+ * contact name. Publishes only the user id and the contact name — never login, roles or any
+ * other account field — so readers of the model can label, filter and group by creator without
+ * read access to core.user. Native models have no creator column.
+ */
+export async function creatorLookup(id: string, actor: ModelActor, input: unknown): Promise<Many2OneResult> {
+  const found = getModuleModel(id);
+  if (!found || found.module.native) throw new Error("MODEL_NOT_FOUND");
+  const parsed = modelLookupSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "La búsqueda no es válida." };
+  const request = parsed.data;
+  return prisma.$transaction(async tx => {
+    const scope = await authorizeModel(tx, actor, found.entry.id, "read");
+    const inverse = `${found.entry.contract.name[0].toLowerCase()}${found.entry.contract.name.slice(1)}CreatedRecords`;
+    const ids = request.id ? [request.id] : request.ids;
+    const where = {
+      [inverse]: { some: scope ?? {} },
+      ...(ids ? { id: { in: ids } } : request.query.trim() ? { partner: { name: { contains: request.query.trim(), mode: "insensitive" as const } } } : {}),
+    };
+    const [total, rows] = await Promise.all([
+      tx.user.count({ where }),
+      tx.user.findMany({ where, select: { id: true, partner: { select: { name: true } } }, orderBy: [{ partner: { name: "asc" } }, { id: "asc" }], skip: ids ? 0 : (request.page - 1) * request.pageSize, take: ids ? ids.length : request.pageSize }),
+    ]);
+    return { ok: true as const, items: rows.map(row => ({ value: row.id, label: row.partner?.name || "Usuario sin contacto", record: { id: row.id } })), total, page: ids ? 1 : request.page, pageSize: ids ? ids.length : request.pageSize };
+  }, { isolationLevel: "RepeatableRead" });
+}
 const services = new Map<string, Service>();
 const operationActor = new AsyncLocalStorage<ModelActor>();
 
@@ -66,11 +93,16 @@ export function modelService(id: string): Service {
       return modelService(target).lookup(prisma, actor, request);
     };
   }
+  if (!module.native && entry.list.fields.includes("createBy")) relations.createBy = async request => {
+    const actor = operationActor.getStore();
+    if (!actor) throw new AccessError("UNAUTHENTICATED");
+    return creatorLookup(entry.id, actor, request);
+  };
   // Runtime projection uses composed contracts across installed modules; generation still
   // uses each owner's uncomposed profile so extension columns stay in companion tables.
   const runtimeModels = modules.flatMap(definition => definition.models);
   const runtimeProfile = { ...module.profile.module, models: runtimeModels.map(model => ({ model: model.contract, clientFields: model.clientFields })) };
-  const service = createModelService(entry.contract, createRepository(entry, runtimeProfile, runtimeModels), {
+  const service = createModelService(entry.contract, createRepository(entry, runtimeProfile, runtimeModels, { creator: !module.native, ...(module.native ? entry.declaration.repository : {}) }), {
     lines: Object.fromEntries(Object.entries(entry.contract.one2manyFields).map(([name, field]) => {
       const child = module.models.find(model => model.contract.name === field.one2many.target)!;
       return [name, { metadata: field.one2many, child: () => modelService(child.id).transaction }];
@@ -80,6 +112,18 @@ export function modelService(id: string): Service {
     collectionNullable: entry.extensions.flatMap(extension => extension.fields),
     // Group access and record rules, revalidated inside each service transaction.
     authorize: (tx, actor, operation) => authorizeModel(tx, actor, entry.id, operation),
+    activityLabels: async (tx, actor, target, ids) => {
+      const related = byPrismaName.get(target);
+      // Unregistered/manual targets have no declarative read contract. Do not query them.
+      if (!related) return new Map<string, string>();
+      try {
+        const result = await modelService(related.id).lookupInTransaction(tx, actor, { ids });
+        return new Map(result.items.map(item => [item.value, item.label]));
+      } catch (error) {
+        if (error instanceof AccessError && error.code === "DENIED") return new Map<string, string>();
+        throw error;
+      }
+    },
     // Related records shown through displayName/related paths obey the target's read access and rules.
     relationAccess: (tx, actor) => async (target, ids) => {
       const related = byPrismaName.get(target);
@@ -180,6 +224,7 @@ export function modelClientConfig(id: string, access?: CapabilityActor): ModelCl
     ...(entry.kanban ? { kanban: entry.kanban } : {}),
     ...(entry.kanbanTransitions !== undefined ? {kanbanTransitions:entry.kanbanTransitions.map(({from,to})=>({from,to}))} : {}),
     ...(entry.defaultSort ? { defaultSort: entry.defaultSort } : {}),
+    ...(entry.declaration.audit ? { audit: true as const } : {}),
     // Fields added by other modules, presented in their own group (names only).
     ...(entry.extensions.length ? { extensions: entry.extensions.map(extension => ({ module: extension.module, label: extension.label, fields: [...extension.fields, ...extension.computed] })) } : {}),
   };

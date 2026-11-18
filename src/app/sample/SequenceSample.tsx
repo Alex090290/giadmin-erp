@@ -24,7 +24,7 @@ export default function SequenceSample() {
       if (!result.ok) { setError(result.error); return; }
       methods.reset(result.values); setSaved(true);
     }}>
-      <FormGroup><FieldText<SequenceSampleValues> name="name" direction="inline" /><FieldText<SequenceSampleValues> name="descripcion" direction="inline" /></FormGroup>
+      <FormGroup><FieldText<SequenceSampleValues> name="name" widget="header" /><FieldText<SequenceSampleValues> name="descripcion" direction="inline" /></FormGroup>
       <div className="col-span-full flex gap-2">
         <button type="submit" className="btn btn-primary" disabled={saved || methods.formState.isSubmitting}>Simular creación</button>
         <button type="button" className="btn btn-ghost" onClick={() => { methods.reset(defaults); setSaved(false); setError(null); }}>Nuevo ejemplo</button>

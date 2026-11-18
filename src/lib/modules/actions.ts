@@ -13,7 +13,7 @@ import type { ActivityNoteResult, ActivityResult } from "@/lib/orm/activity";
 import type { Many2OneResult } from "@/lib/many2one/types";
 import type { ReactionResult } from "@/lib/orm/reactions.types";
 import type { CloudinaryImageSignatureResult } from "@/lib/uploads/cloudinary-signature";
-import { getModuleModel, imageSigner, modelService, withActor } from "./registry";
+import { creatorLookup, getModuleModel, imageSigner, modelService, withActor } from "./registry";
 
 /*
  * Single entry point for declarative module models. Every export is a public endpoint:
@@ -72,6 +72,12 @@ export async function modelDelete(model: string, selection: unknown): Promise<Li
 export async function modelLookup(model: string, request: unknown): Promise<Many2OneResult> {
   try { const { service } = resolve(model); return await service.lookup(prisma, await requireUser(), request); }
   catch (error) { return { ok: false, error: failure(error, "No se pudo consultar los registros.") }; }
+}
+
+/** «Creado por» filter: creators of readable records of this model (id and contact name). */
+export async function modelCreators(model: string, request: unknown): Promise<Many2OneResult> {
+  try { const { entry } = resolve(model); return await creatorLookup(entry.id, await requireUser(), request); }
+  catch (error) { return { ok: false, error: failure(error, "No se pudo consultar los creadores.") }; }
 }
 
 export async function modelKanban(model: string, request: unknown): Promise<ListResult> {

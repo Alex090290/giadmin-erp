@@ -1,9 +1,9 @@
 import "server-only";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
-import { modules } from "@/modules";
+import { registeredModules as modules } from "../modules/installed";
 import { AccessError } from "../auth/policy";
 import type { ModelActor } from "../orm/context";
-import { accessCatalog } from "./engine";
+import { accessCatalog, internalGroup } from "./engine";
 import { accessOperations, type AccessPerms } from "./declare";
 
 /** Administration of access control. Every function revalidates an active superuser inside its transaction. */
@@ -23,12 +23,15 @@ export async function accessOverview(prisma: PrismaClient, actor: ModelActor) {
   return prisma.$transaction(async tx => {
     await assertAdmin(tx, actor);
     const counts = await tx.accessUserGroup.groupBy({ by: ["groupId"], _count: { _all: true } });
+    // The internal group includes every active account implicitly (no stored memberships).
+    const activeUsers = await tx.user.count({ where: { active: true } });
     return modules.filter(definition => definition.access.groups.length).map(definition => ({
       id: definition.id, name: definition.application.name,
       groups: definition.access.groups.map(group => ({
         id: group.id, label: group.label,
         implies: group.implies.map(id => accessCatalog().groups.get(id)?.label ?? id),
-        members: counts.find(row => row.groupId === group.id)?._count._all ?? 0,
+        members: group.id === internalGroup ? activeUsers : counts.find(row => row.groupId === group.id)?._count._all ?? 0,
+        implicit: group.id === internalGroup,
       })),
     }));
   }, { isolationLevel: "RepeatableRead" });
@@ -59,15 +62,15 @@ export async function groupDetail(prisma: PrismaClient, actor: ModelActor, group
       .filter(rule => rule.groups ? rule.groups.includes(groupId) : rule.models.some(model => reachable.has(model)))
       .map(rule => ({ id: rule.id, label: rule.label, scope: rule.groups ? "grupo" as const : "global" as const, models: rule.models, operations: rule.operations, active: states.find(state => state.ruleId === rule.id)?.active ?? true }));
     return {
-      group: { id: group.id, label: group.label, module: group.module, implies: group.implies.map(id => catalog.groups.get(id)?.label ?? id) },
-      users: users.map(user => ({ id: user.id, login: user.login, name: user.partner?.name ?? user.login, active: user.active, isAdmin: user.isAdmin, member: memberIds.has(user.id) })),
+      group: { id: group.id, label: group.label, module: group.module, implies: group.implies.map(id => catalog.groups.get(id)?.label ?? id), implicit: group.id === internalGroup },
+      users: users.map(user => ({ id: user.id, login: user.login, name: user.partner?.name ?? user.login, active: user.active, isAdmin: user.isAdmin, member: group.id === internalGroup ? user.active : memberIds.has(user.id) })),
       models, rules,
     };
   }, { isolationLevel: "RepeatableRead" });
 }
 
 export async function setGroupMembers(prisma: PrismaClient, actor: ModelActor, groupId: string, userIds: readonly string[]) {
-  if (!knownGroup(groupId)) throw new AccessError("DENIED");
+  if (!knownGroup(groupId) || groupId === internalGroup) throw new AccessError("DENIED");
   const wanted = new Set(userIds);
   await prisma.$transaction(async tx => {
     await assertAdmin(tx, actor);

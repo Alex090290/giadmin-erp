@@ -3,6 +3,7 @@ import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { useForm, FormProvider } from "react-hook-form";
 import { Fields } from "@/lib/orm/fields";
+import { fieldFromMetadata } from "@/lib/modules/fields";
 import { FormModelContext, useModelField } from "./modelFields";
 import FieldText from "./FieldText";
 import FieldSelect from "./FieldSelect";
@@ -150,15 +151,30 @@ test("Many2many tags inherit provider, bounds, label and visibility with explici
 });
 
 
-test("sequence text inherits readonly Nuevo presentation even when editable props are requested", () => {
+test("sequence text keeps Nuevo and lets FieldText choose readonly explicitly", () => {
   const name = Fields.Text({ label: "Folio", sequence: { prefix: "TCK-" } });
-  function SequenceFixture() {
+  function SequenceFixture({ readOnly }: { readOnly?: boolean }) {
     const methods = useForm({ defaultValues: { name: "" } });
-    return <FormProvider {...methods}><FormModelContext.Provider value={{ fields: { name } }}><FieldText name="name" readOnly={false} required /></FormModelContext.Provider></FormProvider>;
+    return <FormProvider {...methods}><FormModelContext.Provider value={{ fields: { name } }}><FieldText name="name" readOnly={readOnly} required /></FormModelContext.Provider></FormProvider>;
   }
   const html = renderToStaticMarkup(<SequenceFixture />);
-  assert.match(html, /readOnly=""/i);
+  assert.doesNotMatch(html, /readOnly=""/i);
+  assert.doesNotMatch(renderToStaticMarkup(<SequenceFixture readOnly={false} />), /readOnly=""/i);
+  assert.match(renderToStaticMarkup(<SequenceFixture readOnly />), /readOnly=""/i);
   assert.match(html, /placeholder="Nuevo"/);
   assert.match(html, /autoComplete="off"/i);
   assert.doesNotMatch(html, / required=""/);
+});
+
+test("write-only secrets bind as an empty password input; other sensitive fields stay rejected", () => {
+  const password = fieldFromMetadata(Fields.Text({ label: "Contraseña", writeOnly: true, trim: false }).metadata);
+  assert.equal(password.metadata.kind === "text" && password.metadata.writeOnly, true, "the browser mirror keeps writeOnly");
+  function SecretFixture({ field }: { field: typeof password }) {
+    const methods = useForm({ defaultValues: { secret: "" } });
+    return <FormProvider {...methods}><FormModelContext.Provider value={{ fields: { secret: field } }}><FieldText name="secret" widget="password" /></FormModelContext.Provider></FormProvider>;
+  }
+  const html = renderToStaticMarkup(<SecretFixture field={password} />);
+  assert.match(html, /type="password"/);
+  assert.match(html, /Contraseña/);
+  assert.throws(() => renderToStaticMarkup(<SecretFixture field={Fields.Text({ label: "Token", sensitive: true })} />), /Contrato incompatible/);
 });

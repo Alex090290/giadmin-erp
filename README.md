@@ -31,7 +31,9 @@ revalida cada operación. El [catálogo y gestor ampliado de Accesos](docs/ideas
 El siguiente módulo piloto es **Tickets**. La [guía paso a paso](docs/tutorial-tickets.md)
 comienza por el entorno y un modelo sencillo, y recorre formularios, colecciones,
 negocio, folios, relaciones, accesos y extensiones. Incluye comandos, comprobaciones
-y límites actuales. Los ejercicios todavía no han comenzado; se harán uno a uno.
+y límites actuales. Ejercicios 0–3 completados; ejercicio 4 hasta `requiereVisita`.
+El siguiente paso es `compromisoAt` (DateTime opcional), al retomar la tutoría;
+se avanza un cambio a la vez. [Punto de continuación](docs/estado-proyecto.md#tickets-punto-de-continuación-guardado-2026-11-17).
 
 ## Comandos del scaffold anterior, en orden
 
@@ -133,7 +135,7 @@ permisos, concurrencia y eliminación con cuentas y un esquema PostgreSQL tempor
 
 ## Otras guías
 
-- [Gestor de Módulos](docs/gestor-modulos.md): catálogo administrativo en `/erp/modulos`, planes e instalación/actualización/desinstalación en desarrollo.
+- [Gestor de Módulos](docs/gestor-modulos.md): catálogo administrativo en `Ajustes → Módulos` (`/erp/ajustes/modulos`), planes e instalación/actualización/desinstalación en desarrollo.
 - [Estado actual y continuidad entre agentes](docs/estado-proyecto.md). Leer junto con [AGENTS.md](AGENTS.md) al retomar el proyecto.
 - [Módulos declarativos](docs/modulos-declarativos.md) (prototipo: `defineModule`, opciones de Field y `eject:view`).
 - [Aplicaciones y navegación](docs/desarrollo-aplicaciones.md).

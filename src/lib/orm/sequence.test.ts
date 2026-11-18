@@ -10,9 +10,9 @@ const sequence = sequenceConfig({ prefix: "TCK-{year}-", padding: 6, reset: "yea
 class Ticket extends Model { name = Fields.Text({ label: "Folio", sequence }); description = Fields.Text({ required: true }); }
 const contract = defineModel(Ticket, { name: "SupportTicket", table: "support_ticket" });
 
-test("sequence is required/unique in storage, readonly in metadata and empty only in drafts", () => {
+test("sequence is required/unique in storage, leaves readonly to the view and allows empty only in drafts", () => {
   const field = contract.fields.name;
-  assert.equal(field.metadata.required, true); assert.equal(field.metadata.unique, true); assert.equal(field.metadata.readOnly, true);
+  assert.equal(field.metadata.required, true); assert.equal(field.metadata.unique, true); assert.equal(field.metadata.readOnly, undefined);
   assert.equal(field.schema.safeParse("").success, false);
   assert.equal(fieldInputSchema(field).safeParse("").success, true);
   assert.equal(contract.formSchema.safeParse({ name: "", description: "Repair" }).success, true);

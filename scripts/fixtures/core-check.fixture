@@ -1,0 +1,102 @@
+import assert from "node:assert/strict";
+import { config } from "dotenv";
+config({ path: ".env.local", quiet: true });
+const { prisma } = await import("./src/lib/prisma");
+const { modelService, modelClientConfig, getModule, withActor } = await import("./src/lib/modules/registry");
+const { hashPassword, verifyPassword } = await import("./src/lib/auth/password");
+
+// Disposable accounts in the temporary schema only.
+const password = await hashPassword("core-test-only");
+const admin = await prisma.user.create({ data: { login: "core-admin", password, isAdmin: true, partner: { create: { name: "Admin de prueba" } } } });
+const reader = await prisma.user.create({ data: { login: "core-reader", password, partner: { create: { name: "Lectora" } } } });
+const actor = { id: admin.id, sessionVersion: admin.sessionVersion }, lector = { id: reader.id, sessionVersion: reader.sessionVersion };
+type Saved = Record<string, unknown> & { id: string; revision: string };
+const ok = <T extends { ok: boolean }>(result: T, step: string) => { assert.ok(result.ok, `${step}: ${JSON.stringify(result)}`); return result as T & { values: Saved }; };
+const state = { query: "", sort: "name", direction: "asc" as const, page: 1, pageSize: 10, filters: [] };
+const partners = modelService("core.partner");
+
+// core: registered and native, never an application in the drawer.
+assert.equal(getModule("core")?.native, true);
+// The app drawer lists installed modules with models that are not native (applications/registry.ts).
+assert.deepEqual(getModule("core")?.application.menus, []);
+assert.deepEqual(Object.keys(modelClientConfig("core.partner").fields), ["name", "email", "phone", "avatarUrl", "empresa"]);
+
+// A contact created before CRM shows its extension field empty (no companion row yet).
+const legacy = await prisma.partner.create({ data: { name: "Contacto previo", email: "previo@example.com" } });
+const before = ok(await partners.read(prisma, actor, legacy.id), "leer contacto previo");
+assert.equal(before.values.name, "Contacto previo");
+assert.equal(before.values.empresa, null);
+
+// Admin edits through the declarative service: table and columns are the hand-written ones.
+const saved = ok(await partners.save(prisma, actor, { ...before.values, phone: "555", empresa: "ACME" }), "guardar contacto");
+assert.notEqual(saved.values.revision, before.values.revision);
+const row = await prisma.partner.findUniqueOrThrow({ where: { id: legacy.id } });
+assert.equal(row.phone, "555");
+assert.equal((await prisma.$queryRawUnsafe<{ empresa: string }[]>(`SELECT empresa FROM "${new URL(process.env.DATABASE_URL!).searchParams.get("schema")}".crm_core_partner WHERE record_id = $1`, legacy.id))[0].empresa, "ACME");
+const invalid = await partners.save(prisma, actor, { ...saved.values, email: "no-es-correo" });
+assert.ok(!invalid.ok && "fieldErrors" in invalid && invalid.fieldErrors?.email, JSON.stringify(invalid));
+const created = ok(await partners.save(prisma, actor, { name: "Nuevo contacto", email: "", phone: "", avatarUrl: null, empresa: null }), "crear contacto");
+assert.equal((await prisma.partner.findUniqueOrThrow({ where: { id: created.values.id } })).email, null);
+
+// Every account is an internal user: it reads, lists and searches contacts but cannot write.
+ok(await partners.read(prisma, lector, legacy.id), "lectura del usuario interno");
+const listed = ok(await withActor(lector, () => partners.list(prisma, lector, state)), "lista del usuario interno") as unknown as { data: { total: number } };
+assert.ok(listed.data.total >= 4);
+const found = ok(await partners.lookup(prisma, lector, { query: "previo" }), "búsqueda del usuario interno") as unknown as { items: { label: string }[] };
+assert.deepEqual(found.items.map(item => item.label), ["Contacto previo"]);
+assert.equal((await partners.save(prisma, lector, { ...saved.values, phone: "1" })).ok, false, "el usuario interno no edita contactos");
+assert.equal(JSON.stringify(modelClientConfig("core.partner")).includes("password"), false);
+
+// Another module relates to Partner with labels from the native lookup.
+const clientes = modelService("ventas.cliente");
+ok(await clientes.save(prisma, actor, { name: "Cliente 1", contactoId: legacy.id, responsableId: reader.id }), "cliente con contacto y responsable");
+const page = ok(await withActor(actor, () => clientes.list(prisma, actor, state)), "lista de clientes") as unknown as { data: { rows: { $labels?: Record<string, { label: string }> }[] } };
+assert.equal(page.data.rows[0].$labels?.contactoId.label, "Contacto previo");
+assert.equal((page.data.rows[0].$labels as Record<string, { label: string }>).responsableId.label, "Lectora");
+assert.deepEqual(modelClientConfig("ventas.cliente").lookups, { contactoId: "core.partner", responsableId: "core.user" });
+
+// A contact referenced by a user cannot be deleted (users.partner_id is Restrict).
+const adminPartner = ok(await partners.read(prisma, actor, admin.partnerId!), "contacto del admin");
+assert.equal((await partners.remove(prisma, actor, [{ id: adminPartner.values.id, revision: adminPartner.values.revision }])).ok, false);
+// core.user: accounts with their contact (Odoo _inherits), write-only password, admin only.
+const users = modelService("core.user");
+const nuevo = ok(await users.save(prisma, actor, { login: "  Nueva.Cuenta ", name: "Nueva cuenta", email: "nueva@example.com", phone: "", avatarUrl: null, password: "secreta-123", active: true, isAdmin: false, lastLogin: null }), "crear usuario");
+assert.equal(nuevo.values.login, "nueva.cuenta");
+assert.equal(nuevo.values.password, null, "el hash no se publica");
+const stored = await prisma.user.findUniqueOrThrow({ where: { id: nuevo.values.id }, include: { partner: true } });
+assert.equal(await verifyPassword("secreta-123", stored.password), true);
+assert.equal(stored.partner?.name, "Nueva cuenta", "el contacto se creó con el usuario");
+assert.equal(stored.lastLogin, null);
+assert.equal((await users.save(prisma, actor, { login: "otra", name: "Otra", email: "", phone: "", avatarUrl: null, password: "", active: true, isAdmin: false, lastLogin: null })).ok, false, "alta sin contraseña");
+assert.equal((await users.save(prisma, actor, { login: "core-admin", name: "Duplicado", email: "", phone: "", avatarUrl: null, password: "secreta-123", active: true, isAdmin: false, lastLogin: null })).ok, false, "login único");
+// Editing without password keeps the hash; a role change revokes sessions; contact edited in place.
+const edited = ok(await users.save(prisma, actor, { ...nuevo.values, password: "", isAdmin: true, name: "Cuenta editada", lastLogin: "2000-01-01T00:00:00.000Z" }), "editar usuario");
+const afterEdit = await prisma.user.findUniqueOrThrow({ where: { id: nuevo.values.id }, include: { partner: true } });
+assert.equal(afterEdit.password, stored.password);
+assert.equal(afterEdit.sessionVersion, stored.sessionVersion + 1);
+assert.equal(afterEdit.lastLogin, null, "lastLogin no se escribe desde el servicio");
+assert.equal(afterEdit.partnerId, stored.partnerId);
+assert.equal(afterEdit.partner?.name, "Cuenta editada");
+const same = ok(await users.save(prisma, actor, { ...edited.values, phone: "777" }), "editar sólo el contacto");
+assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: nuevo.values.id } })).sessionVersion, afterEdit.sessionVersion, "cambiar sólo el contacto no revoca sesiones");
+// A legacy account without contact gets one on its next save.
+const lone = await prisma.user.create({ data: { login: "sin-contacto", password } });
+const loneRead = ok(await users.read(prisma, actor, lone.id), "usuario sin contacto");
+assert.equal(loneRead.values.name, null);
+ok(await users.save(prisma, actor, { ...loneRead.values, name: "Con contacto", password: "" }), "completar contacto");
+assert.ok((await prisma.user.findUniqueOrThrow({ where: { id: lone.id } })).partnerId);
+// Protections: own account, last active admin; readers (internal users) cannot open accounts.
+const self = ok(await users.read(prisma, actor, admin.id), "leer propia cuenta");
+assert.equal((await users.save(prisma, actor, { ...self.values, isAdmin: false, password: "" })).ok, false, "no quitarse el admin");
+assert.equal((await users.remove(prisma, actor, [{ id: admin.id, revision: self.values.revision }])).ok, false, "no eliminarse");
+ok(await users.save(prisma, actor, { ...same.values, isAdmin: false, password: "" }), "quitar admin a otra cuenta");
+const denied = await users.read(prisma, lector, admin.id);
+assert.equal(denied.ok, false, "el usuario interno no lee cuentas");
+assert.equal(JSON.stringify(modelClientConfig("core.user").list).includes("password"), false);
+const accounts = ok(await withActor(actor, () => users.list(prisma, actor, { ...state, sort: "name" })), "lista de cuentas") as unknown as { data: { rows: Record<string, unknown>[] } };
+assert.ok(accounts.data.rows.every(row => !Object.hasOwn(row, "password") && !Object.hasOwn(row, "sessionVersion")));
+const search = ok(await withActor(actor, () => users.list(prisma, actor, { ...state, query: "editada" })), "buscar por nombre del contacto") as unknown as { data: { total: number } };
+assert.equal(search.data.total, 1);
+await prisma.$disconnect();
+console.log("✓ core.user: alta con contacto en la misma sentencia, contraseña hasheada y nunca publicada, revocación de sesión, lastLogin de sistema, último admin/propia cuenta y acceso sólo admin.");
+console.log("✓ core.partner: tabla partners sin cambios, servicio declarativo, usuario interno de sólo lectura, Many2one desde otro módulo y extensión CRM en tabla compañera.");

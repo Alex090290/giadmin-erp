@@ -1,6 +1,6 @@
 # Retirar aplicaciones: alcance actual
 
-Desde el 2026-11-13, `/erp/modulos` y `npm run module:manage` comparten un flujo
+Desde el 2026-11-13, el gestor (hoy `Ajustes → Módulos`, `/erp/ajustes/modulos`) y `npm run module:manage` comparten un flujo
 de revisión y ejecución **sólo en desarrollo** para módulos declarativos y
 aplicaciones del scaffold anterior. Conserva datos por defecto; la purga exige
 confirmación expresa, SQL revisado y un respaldo restaurado antes del borrado.

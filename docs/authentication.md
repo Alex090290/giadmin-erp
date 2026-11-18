@@ -38,7 +38,7 @@ hashes ni contraseñas existentes.
 
 - `/auth`: login; conserva el destino solicitado dentro de `/erp`.
 - `/erp/**`: requiere una cuenta activa.
-- `/erp/usuarios`: listado, alta y edición, disponible sólo para administradores.
+- `Ajustes → Usuarios` (`/erp/ajustes/usuarios`; `/erp/usuarios` redirige): listado, alta y edición de `core.user`, sólo administradores. Contraseña de sólo escritura (hash en el servidor), contacto delegado a Partner y revocación de sesiones; ver [core-ajustes](ideas/core-ajustes.md).
 - `/erp/perfil`: datos del Partner de la cuenta actual, para cualquier usuario activo.
 - `/erp/perfil/contrasena`: contraseña actual, nueva y confirmación; disponible con sesión activa.
 - `/api/auth/[...nextauth]`: endpoints de NextAuth, incluidos CSRF, sesión y logout.

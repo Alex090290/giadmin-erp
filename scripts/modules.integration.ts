@@ -119,6 +119,33 @@ try {
     console.log(tsx(join(root, "one2many-check.ts"), [], "One2many service check").trim());
     command("next", ["typegen"], "Next route types");
     command("tsc", ["--noEmit", "--incremental", "false"], "One2many fixture types");
+  } else if (process.argv.includes("--core-only")) {
+    // Native core: modules relate to and extend Partner without touching the partners table.
+    const fixture = join(project, "scripts/fixtures/modules-core");
+    const partnerBefore = await readFile(join(root, "prisma/models/partner.prisma"), "utf8");
+    for (const id of ["ventas", "crm"]) {
+      await mkdir(join(root, "src/modules", id), { recursive: true });
+      await cp(join(fixture, `${id}.manifest.fixture`), join(root, "src/modules", id, "manifest.ts"));
+      tsx(join(root, "scripts/orm-install.ts"), [id, "--write"], `orm:install ${id}`);
+    }
+    const partnerAfter = await readFile(join(root, "prisma/models/partner.prisma"), "utf8");
+    assert.match(partnerAfter, /BEGIN lite-erp:ventas:Partner[\s\S]*ventasClienteContactoIdRecords VentasCliente\[\]/);
+    assert.match(partnerAfter, /BEGIN lite-erp:crm:Partner[\s\S]*crmCorePartnerRecordIdRecords CrmCorePartner\?/);
+    assert.equal(partnerAfter.replace(/\n  \/\/ BEGIN lite-erp:(ventas|crm):Partner[\s\S]*?\/\/ END lite-erp:\1:Partner\n/g, ""), partnerBefore, "partner.prisma sólo recibe inversas marcadas");
+    const sql = command("prisma", ["migrate", "diff", "--from-config-datasource", "--to-schema", join(root, "prisma/models"), "--script", "--config", join(root, "prisma7.config.ts")], "core migration diff");
+    assert.match(sql, /CREATE TABLE "ventas_cliente"/);
+    assert.match(sql, /CREATE TABLE "crm_core_partner"/);
+    assert.match(sql, /REFERENCES "partners"\("id"\) ON DELETE CASCADE/);
+    assert.doesNotMatch(sql, /ALTER TABLE "partners"|ALTER TABLE "users"|\bDROP\b|\bTRUNCATE\b/i);
+    await mkdir(join(root, "prisma/migrations/20990204000000_core_fixture"));
+    await writeFile(join(root, "prisma/migrations/20990204000000_core_fixture/migration.sql"), sql);
+    prisma(["migrate", "deploy"]); prisma(["generate"]);
+    await writeFile(join(root, "src/modules/index.ts"), `import "server-only";\nimport type { ModuleDefinition } from "@/lib/modules/define";\nimport ventas from "./ventas/manifest";\nimport crm from "./crm/manifest";\nexport const modules: readonly ModuleDefinition[] = [ventas, crm];\n`);
+    console.log("✓ Módulos sobre core instalados: sólo tablas propias; partners/users sin ALTER y con inversas marcadas.");
+    command("next", ["typegen"], "Next route types");
+    command("tsc", ["--noEmit", "--incremental", "false"], "core fixture types");
+    await cp(join(project, "scripts/fixtures/core-check.fixture"), join(root, "core-check.ts"));
+    console.log(tsx(join(root, "core-check.ts"), [], "core service check").trim());
   } else if (process.argv.includes("--extensions-only")) {
     // Model inheritance: soporte extends taller.equipo through a companion table it owns.
     const fixture = join(project, "scripts/fixtures/modules-extension");

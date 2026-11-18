@@ -53,6 +53,7 @@ type Contract<T extends Record<string, unknown>> = CollectionComputed & {
   formSchema?: z.ZodType<T>;
   prepareSave?(values: T, context: ModelContext<T>): Promise<T>;
   constrain?(values: Readonly<Record<string, unknown>>, context: ModelContext<T>): Promise<void>;
+  beforeRemove?(record: Readonly<Record<string, unknown>>, context: import("./context").RemoveContext): Promise<void>;
   readonly relatedFields?:Readonly<Record<string,Field>>;
   reactionRules?:readonly ReactionRule[];
   react?(field:string,values:Readonly<Record<string,unknown>>,context:ReactionContext):Promise<{patch:Record<string,unknown>;preview:Record<string,string|number|boolean|null>}>;
@@ -126,6 +127,8 @@ type ServicePresentation = {
   owners?: readonly OwnerRelation[];
   defaultSort?: ListViewConfig["defaultSort"]; kanban?: KanbanConfig; audit?: boolean;
   relations?: Readonly<Record<string, Many2OneLoader>>;
+  /** Resolve historical Many2one IDs with current target read access, in the same transaction. */
+  activityLabels?: (tx: Prisma.TransactionClient, actor: ModelActor, target: string, ids: readonly string[]) => Promise<ReadonlyMap<string, string>>;
   authorize?: ServiceAuthorizer;
   /**
    * Read access to related records projected by displayName/related paths (record rules of the
@@ -165,7 +168,9 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     searchFields: policy?.searchFields ?? presentation.searchFields!,
   };
   for (const [name, loader] of Object.entries(presentation.relations ?? {})) {
-    if (model.metadata[name]?.kind !== "many2one" || model.metadata[name].sensitive || typeof loader !== "function" || !config.columns.some(column => column.field === name)) throw new Error("Las etiquetas requieren una relación publicada y un lookup autorizado.");
+    // createBy (audit) is the creator Many2one to User, labelled by a fixed server provider.
+    const creator = name === "createBy" && presentation.audit === true;
+    if ((!creator && (model.metadata[name]?.kind !== "many2one" || model.metadata[name].sensitive)) || typeof loader !== "function" || !config.columns.some(column => column.field === name)) throw new Error("Las etiquetas requieren una relación publicada y un lookup autorizado.");
   }
   const allowed = new Set(["id", ...Object.keys(collectionMetadata)]);
   if (presentation.audit) for (const field of ["createdAt", "updatedAt", "createBy", "createByUser.login", "createByUser.partner.name"]) allowed.add(field);
@@ -488,7 +493,8 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
       if (!parsed.success) throw new ModelValidationError("La consulta de actividad no es válida.");
       const data = await prisma.$transaction(async tx => {
         await assertActivityRecord(tx, actor, parsed.data.id, "read");
-        return readActivity(tx, model.name, model.metadata, parsed.data);
+        return readActivity(tx, model.name, model.metadata, parsed.data, presentation.activityLabels
+          ? (target, ids) => presentation.activityLabels!(tx, actor, target, ids) : undefined);
       }, { isolationLevel: "RepeatableRead" });
       return { ok: true, data };
     } catch (error) { return { ok: false, error: messageFor(error) }; }
@@ -516,31 +522,35 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
   async function lookup(prisma: PrismaClient, actor: ModelActor, input: unknown): Promise<Many2OneResult> {
     try {
       const request = modelLookupSchema.parse(input);
-      return await prisma.$transaction(async tx => {
-        const scope = await authorize(tx, actor, "read");
-        if (!repository.lookup) throw new Error("MODEL_NOT_BOUND");
-        const fields = displayProjectionPaths(model.metadata, model.displayFields);
-        if (fields.some(field => field.includes(".") && !repository.lookupPaths?.includes(field))) throw new Error("MODEL_NOT_BOUND");
-        const search = config.searchFields.filter(field => model.metadata[field]?.kind === "text" && !model.metadata[field].sensitive);
-        const predicates: Record<string, unknown>[] = scope ? [scope] : [];
-        if (request.id) predicates.push({ id: request.id });
-        if (request.ids) predicates.push({ id: { in: request.ids } });
-        for (const word of request.query.trim().split(/\s+/).filter(Boolean)) {
-          predicates.push(search.length ? { OR: search.map(field => ({ [field]: { contains: word.replace(/[\\%_]/g, "\\$&"), mode: "insensitive" } })) } : { id: { in: [] } });
-        }
-        const where = { AND: predicates };
-        const total = await repository.count(tx, where);
-        const pageSize = request.ids?.length ?? request.pageSize;
-        const page = request.ids ? 1 : Math.min(request.page, Math.max(1, Math.ceil(total / pageSize)));
-        const records = total ? await repository.lookup(tx, { fields, where, skip: (page - 1) * pageSize, take: pageSize, ...(presentation.relationAccess ? { access: relationAccessFor(tx, actor) } : {}) }) : [];
-        return { ok: true as const, total, page, pageSize, items: records.map(row => {
-          if (typeof row.id !== "string") throw new Error("Invalid lookup record");
-          // Only the label and ID leave this service, never the inputs used to construct it.
-          const label = modelDisplayName(model, row);
-          return { value: row.id, label, record: { id: row.id } };
-        }) };
-      }, { isolationLevel: "RepeatableRead" });
+      return await prisma.$transaction(tx => lookupInTransaction(tx, actor, request), { isolationLevel: "RepeatableRead" });
     } catch (error) { return { ok: false, error: messageFor(error) }; }
+  }
+
+  /** Server-only nested lookup: keeps authorization and projections in the caller's transaction. */
+  async function lookupInTransaction(tx: Prisma.TransactionClient, actor: ModelActor, input: unknown) {
+    const request = modelLookupSchema.parse(input);
+    const scope = await authorize(tx, actor, "read");
+    if (!repository.lookup) throw new Error("MODEL_NOT_BOUND");
+    const fields = displayProjectionPaths(model.metadata, model.displayFields);
+    if (fields.some(field => field.includes(".") && !repository.lookupPaths?.includes(field))) throw new Error("MODEL_NOT_BOUND");
+    const search = config.searchFields.filter(field => model.metadata[field]?.kind === "text" && !model.metadata[field].sensitive);
+    const predicates: Record<string, unknown>[] = scope ? [scope] : [];
+    if (request.id) predicates.push({ id: request.id });
+    if (request.ids) predicates.push({ id: { in: request.ids } });
+    for (const word of request.query.trim().split(/\s+/).filter(Boolean)) {
+      predicates.push(search.length ? { OR: search.map(field => ({ [field]: { contains: word.replace(/[\\%_]/g, "\\$&"), mode: "insensitive" } })) } : { id: { in: [] } });
+    }
+    const where = { AND: predicates };
+    const total = await repository.count(tx, where);
+    const pageSize = request.ids?.length ?? request.pageSize;
+    const page = request.ids ? 1 : Math.min(request.page, Math.max(1, Math.ceil(total / pageSize)));
+    const records = total ? await repository.lookup(tx, { fields, where, skip: (page - 1) * pageSize, take: pageSize, ...(presentation.relationAccess ? { access: relationAccessFor(tx, actor) } : {}) }) : [];
+    return { ok: true as const, total, page, pageSize, items: records.map(row => {
+      if (typeof row.id !== "string") throw new Error("Invalid lookup record");
+      // Only the label and ID leave this service, never the inputs used to construct it.
+      const label = modelDisplayName(model, row);
+      return { value: row.id, label, record: { id: row.id } };
+    }) };
   }
 
   async function react(prisma:PrismaClient,actor:ModelActor,input:unknown):Promise<ReactionResult> {
@@ -590,6 +600,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
       if (!current || current.revision !== revision) throw new ModelValidationError(conflict);
       const owners = await captureOwners(tx, actor, current, current, presentation.owners ?? [], options);
       if (!repository.remove) throw new Error("MODEL_NOT_BOUND");
+      await model.beforeRemove?.(current as Readonly<Record<string, unknown>>, { tx, actor, id });
       await repository.remove(tx, id, revision);
       for (const owner of owners) await owner.parent.refresh(tx, actor, owner.previous);
     },
@@ -599,5 +610,5 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
       await persist(tx, actor, current, "Líneas actualizadas", { previous });
     },
   };
-  return { transaction, react, read, save, action, actions: model.actions ?? [], remove, activity, addNote, lookup, list: (prisma: PrismaClient, actor: ModelActor, input: unknown) => list(prisma, actor, input), defineListAction, kanban, move };
+  return { transaction, react, read, save, action, actions: model.actions ?? [], remove, activity, addNote, lookup, lookupInTransaction, list: (prisma: PrismaClient, actor: ModelActor, input: unknown) => list(prisma, actor, input), defineListAction, kanban, move };
 }

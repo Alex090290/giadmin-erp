@@ -36,6 +36,55 @@ test("tracking is explicit, retains false/zero/null, and never captures untracke
   assert.throws(() => Fields.Text({ tracking: "yes" } as never), /booleano/);
 });
 
+test("historical Many2one changes resolve current labels in batches and hide inaccessible IDs and stale labels", async () => {
+  const metadata = {
+    categoryId: Fields.Many2one("Category", { tracking: true }).metadata,
+    otherId: Fields.Many2one("Category", { tracking: true }).metadata,
+    privateId: Fields.Many2one("Private", { tracking: false }).metadata,
+  };
+  const changes = [
+    { field: "categoryId", label: "Categoría", type: "many2one", before: "old", after: "current", beforeLabel: "Restricted old label" },
+    { field: "otherId", label: "Otra", type: "many2one", before: null, after: "current" },
+    { field: "privateId", label: "Privado", type: "many2one", before: null, after: "private" },
+  ];
+  const tx = { recordActivity: { findMany: async () => [{ id: "event", kind: "update", createdAt: new Date("2026-11-18T00:00:00.000Z"), body: null, changes, actor: { id: "author", login: "demo", partner: null } }] } } as unknown as Prisma.TransactionClient;
+  let name = "Soporte", readable = true, calls = 0;
+  const resolve = async (target: string, ids: readonly string[]) => {
+    calls++;
+    assert.equal(target, "Category");
+    assert.deepEqual(ids, ["old", "current"], "deduplicates both sides and fields, never resolves untracked fields");
+    return readable ? new Map([["current", name]]) : new Map<string, string>();
+  };
+  const page = await readActivity(tx, "Ticket", metadata, { id: "record" }, resolve);
+  assert.equal(calls, 1);
+  assert.equal(page.entries[0].changes[0].afterLabel, "Soporte");
+  assert.equal(page.entries[0].changes[0].before, "Registro no disponible");
+  assert.equal(page.entries[0].changes[1].before, null);
+  assert.equal(page.entries[0].changes.length, 2);
+  assert.doesNotMatch(JSON.stringify(page), /Restricted old label|"old"|"private"/);
+  assert.equal(changes[0].before, "old", "does not rewrite stored history");
+  name = "Soporte renombrado";
+  assert.equal((await readActivity(tx, "Ticket", metadata, { id: "record" }, resolve)).entries[0].changes[0].afterLabel, name);
+  readable = false;
+  assert.doesNotMatch(JSON.stringify(await readActivity(tx, "Ticket", metadata, { id: "record" }, resolve)), /Soporte|"current"/);
+  await assert.rejects(readActivity(tx, "Ticket", metadata, { id: "record" }, async () => { throw new Error("database unavailable"); }), /database unavailable/);
+});
+
+test("activity resolves at most 100 IDs per batch and does not resolve creation snapshots", async () => {
+  const metadata = Object.fromEntries(Array.from({ length: 101 }, (_, i) => [`field${i}`, Fields.Many2one("Category", { tracking: true }).metadata]));
+  const changes = Object.keys(metadata).map((field, i) => ({ field, label: field, type: "many2one", before: null, after: `id${i}` }));
+  const common = { createdAt: new Date("2026-11-18T00:00:00.000Z"), body: null, changes, actor: { id: "author", login: "demo", partner: null } };
+  const tx = { recordActivity: { findMany: async () => [{ ...common, id: "create", kind: "create" }, { ...common, id: "update", kind: "update" }] } } as unknown as Prisma.TransactionClient;
+  const batches: number[] = [];
+  const page = await readActivity(tx, "Ticket", metadata, { id: "record" }, async (_target, ids) => {
+    batches.push(ids.length);
+    return new Map(ids.map(id => [id, `Label ${id}`]));
+  });
+  assert.deepEqual(batches, [100, 1]);
+  assert.deepEqual(page.entries[0].changes, []);
+  assert.equal(page.entries[1].changes[100].afterLabel, "Label id100");
+});
+
 test("selection labels are snapshots and the generator preserves tracking declarations", () => {
   const field = Fields.Selection([{ value: "draft", label: "Borrador" }, { value: "done", label: "Terminado" }], { tracking: true });
   const [change] = trackedChanges({ status: field.metadata }, { status: "draft" }, { status: "done" });

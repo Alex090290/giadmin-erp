@@ -69,6 +69,8 @@ export type ModelClientConfig = {
   /** UI routes only; action dispatch remains fixed in the server registry. */
   readonly kanbanTransitions?: readonly KanbanRoute[];
   readonly defaultSort?: ListViewConfig["defaultSort"];
+  /** Audit columns published by the server list policy (`audit: true` in the manifest). */
+  readonly audit?: true;
   /** Fields added by modules that extend this model, grouped by extending module. */
   readonly extensions?: readonly { readonly module: string; readonly label: string; readonly fields: readonly string[] }[];
 };

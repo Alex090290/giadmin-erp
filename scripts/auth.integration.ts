@@ -35,9 +35,14 @@ class Client {
 let fixtureId: string | undefined, fixturePartnerId: string | null | undefined;
 try {
   const anonymous = new Client();
-  for (const path of ["/erp", "/erp/usuarios", "/erp/usuarios/nuevo"]) {
+  for (const path of ["/erp", "/erp/ajustes/usuarios", "/erp/ajustes/usuarios/nuevo"]) {
     const response = await anonymous.request(path);
     assert.equal(response.status, 307); assert.ok(response.headers.get("location")?.startsWith("/auth?"));
+  }
+  // Usuarios, Accesos y Módulos moved to Ajustes: old addresses redirect to their new route.
+  for (const [old, next] of [["/erp/usuarios/nuevo", "/erp/ajustes/usuarios/nuevo"], ["/erp/accesos", "/erp/ajustes/accesos"], ["/erp/modulos", "/erp/ajustes/modulos"]]) {
+    const moved = await anonymous.request(old);
+    assert.equal(moved.status, 307); assert.equal(new URL(moved.headers.get("location") ?? "", base).pathname, next);
   }
   const admin = await prisma.user.findUniqueOrThrow({ where: { login: "admin" } });
   assert.equal(admin.active && admin.isAdmin, true);
@@ -55,9 +60,9 @@ try {
   const session = await adminClient.session();
   assert.equal(session.user.id, admin.id); assert.equal(session.user.isAdmin, true);
   assert.equal(JSON.stringify(session).includes("password"), false);
-  const authenticated = await adminClient.request("/erp/usuarios");
+  const authenticated = await adminClient.request("/erp/ajustes/usuarios");
   assert.equal(authenticated.status, 200); await authenticated.text();
-  for (const path of ["/erp/modulos", "/erp/modulos/demo"]) {
+  for (const path of ["/erp/ajustes/modulos", "/erp/ajustes/modulos/demo"]) {
     const page = await adminClient.request(path);
     assert.equal(page.status, 200); assert.ok((await page.text()).includes("Módulos"));
   }
@@ -100,9 +105,9 @@ try {
   await prisma.partner.update({ where: { id: fixturePartnerId! }, data: { phone: "5557654321", updatedAt: new Date(Date.parse(partnerSnapshot.values.partnerRevision!) + 1000) } });
   assert.equal((await saveOwnProfile(prisma, ownActor, partnerSnapshot.values)).ok, false);
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: fixture.id } })).isAdmin, false);
-  const forbiddenPage = await regular.request("/erp/usuarios");
+  const forbiddenPage = await regular.request("/erp/ajustes/usuarios");
   assert.ok((await forbiddenPage.text()).includes("Necesitas permisos de administrador"));
-  const deniedModules = await regular.request("/erp/modulos");
+  const deniedModules = await regular.request("/erp/ajustes/modulos");
   assert.ok((await deniedModules.text()).includes("Necesitas permisos de administrador"));
   const denied = await saveUserRecord(prisma, { id: fixture.id, sessionVersion: fixture.sessionVersion }, { ...newUserDefaults, login: `${login}_evil`, name: "No autorizado", password: "test1234", isAdmin: true });
   assert.equal(denied.ok, false);

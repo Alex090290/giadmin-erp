@@ -39,12 +39,15 @@ export function useModelField<P extends { name: string; direction?: FieldDirecti
   const fields = line?.fields ?? model?.fields;
   if (!fields || !Object.hasOwn(fields, key)) return layoutProps;
   const metadata = fields[key].metadata;
-  if (metadata.sensitive || metadata.kind !== kind) throw new Error(`Contrato incompatible: ${props.name} (${kind}).`);
+  // Sensitive values never reach the form; a write-only secret is the exception: it is always
+  // received empty and only carries a new value typed by the user (e.g. a password).
+  const secret = metadata.kind === "text" && metadata.writeOnly === true;
+  if ((metadata.sensitive && !secret) || metadata.kind !== kind) throw new Error(`Contrato incompatible: ${props.name} (${kind}).`);
   const defaults: Record<string, unknown> = { label: metadata.label, required: metadata.kind === "boolean" ? undefined : metadata.required };
   if (metadata.kind === "text") { defaults.maxLength = metadata.maxLength; defaults.minLength = metadata.minLength; }
   if (metadata.kind === "selection") defaults.options = metadata.choices;
   if (metadata.kind === "many2one" && !("model" in props && props.model !== undefined)) defaults.load = (line?.lookups ?? model?.lookups)?.[key];
   if (metadata.kind === "image") defaults.upload = (line?.uploads ?? model?.uploads)?.[key];
   if (metadata.kind === "integer") defaults.allowNegative = (metadata.min ?? -2147483648) < 0;
-  return { ...defaults, ...Object.fromEntries(Object.entries(layoutProps).filter(([, value]) => value !== undefined)), ...(metadata.sequence ? { readOnly: true, required: false, placeholder: (props as { placeholder?: string }).placeholder ?? "Nuevo" } : {}) } as P;
+  return { ...defaults, ...Object.fromEntries(Object.entries(layoutProps).filter(([, value]) => value !== undefined)), ...(metadata.sequence ? { required: false, placeholder: (props as { placeholder?: string }).placeholder ?? "Nuevo" } : {}) } as P;
 }

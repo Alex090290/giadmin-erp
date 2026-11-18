@@ -153,6 +153,41 @@ y no se envían metadatos adicionales.
 Ejemplo local, RHF/Zod, guardado simulado y listado: `/sample#record-audit`.
 Los modelos manuales necesitan su propio proveedor autorizado de auditoría.
 
+### Colecciones de módulos declarativos (`audit: true`, 2026-11-18)
+
+En `src/modules`, cada modelo publica la auditoría en sus colecciones con una opción
+explícita del manifest; sin ella no se publica nada:
+
+```ts
+models: {
+  ticket: { model: Ticket, audit: true, views: { list: () => import("./views/TicketList") } },
+}
+```
+
+- Publica por defecto tres columnas fijas (desde 2026-11-18, fase 4 de core):
+  - `createBy` «Creado por»: Many2one de lectura al usuario creador. La celda muestra el
+    nombre de su contacto; se **filtra** (selector de creadores, igual/distinto, vacío) y se
+    **agrupa** por creador; no se ordena ni se busca.
+  - `createdAt` «Creado el» y `updatedAt` «Actualizado el»: se ordenan y filtran.
+  - Opcional en `list.fields`: `createByUser.partner.name` «Nombre del creador» (avatar y
+    orden por nombre).
+- Etiquetas, grupos y el selector del filtro usan un proveedor fijo del servidor
+  (`creatorLookup`): sólo creadores de registros que el actor puede **leer** en ese modelo
+  (reglas incluidas), buscados por nombre del contacto, publicando sólo el ID de usuario y
+  ese nombre. No requiere lectura de `core.user` ni expone login, roles ni otros campos.
+- Ocupan 3 de las 12 columnas publicadas: sin `list.fields`, el manifest publica hasta 9
+  campos del modelo más las tres de auditoría. Con `list.fields` explícito decides cuáles
+  y en qué orden (sólo con `audit: true`).
+- En una vista expulsada se usan como cualquier columna publicada:
+  `{ field: "createBy" }`, `{ field: "createdAt", label: "Alta" }`.
+  Sólo se cambian label, ancho y orden; tipo, widget y avatar los fija el framework.
+- Las columnas TSX no conceden acceso: el servidor valida la política de lista, y los
+  registros siguen sujetos a permisos y reglas del modelo.
+- Registros sin autor (anteriores a la auditoría) muestran la celda vacía.
+
+Pruebas: `test:modules` (colecciones) y `test:capabilities:integration`/
+`test:modules:integration` (orden, filtro y proyección sin ID ni credenciales).
+
 ## Actualizar un módulo ya instalado
 
 La actualización es aditiva y mantiene las protecciones de propiedad y hashes:

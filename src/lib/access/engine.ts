@@ -1,7 +1,6 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
-import { modules } from "@/modules";
-import { composeModules } from "../modules/compose";
+import { registeredModules } from "../modules/installed";
 import { extensionWhere } from "../modules/storage";
 import { AccessError } from "../auth/policy";
 import type { ModelActor } from "../orm/context";
@@ -14,7 +13,7 @@ type Predicate = Record<string, unknown>;
 export type AccessCatalog = { owners?: Map<string, { model: string; relation: string }>; groups: Map<string, AccessGroup>; grants: Map<string, AccessGrant[]>; rules: Map<string, AccessRule[]>; models: Map<string, Readonly<Record<string, FieldMetadata>>> };
 type Catalog = AccessCatalog;
 let catalog: Catalog | undefined;
-const installed = composeModules(modules);
+const installed = registeredModules;
 const entries = new Map(installed.flatMap(module => module.models.map(model => [model.id, model] as const)));
 
 /** Declarations of every installed module, indexed once. Code is the source of truth. */
@@ -53,9 +52,13 @@ export function closeGroups(direct: Iterable<string>, groups = accessCatalog().g
   return result;
 }
 
+/** Implicit group of every active account (Odoo base.group_user); declared by the native core. */
+export const internalGroup = "core.internal";
+
 export async function userGroups(tx: Prisma.TransactionClient, userId: string, catalogGroups = accessCatalog().groups) {
   const rows = await tx.accessUserGroup.findMany({ where: { userId }, select: { groupId: true } });
-  return closeGroups(rows.map(row => row.groupId), catalogGroups);
+  // Callers revalidate that the account is active before asking for its groups.
+  return closeGroups([...rows.map(row => row.groupId), ...(catalogGroups.has(internalGroup) ? [internalGroup] : [])], catalogGroups);
 }
 
 /** Effective permissions of a set of groups on a model: database overrides replace code defaults per group. */

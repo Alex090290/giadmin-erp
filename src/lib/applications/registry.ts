@@ -2,9 +2,7 @@ import "server-only";
 
 import { icons, type LucideIcon } from "lucide-react";
 import { contactsManifest } from "@/app/(auth)/erp/contactos/manifest";
-import { usersManifest } from "@/app/(auth)/erp/usuarios/manifest";
-import { accessManifest } from "@/app/(auth)/erp/accesos/manifest";
-import { modulesManifest } from "@/app/(auth)/erp/modulos/manifest";
+import { settingsManifest } from "@/app/(auth)/erp/ajustes/manifest";
 import { createApplicationRegistry, type ApplicationManifest } from "./manifest";
 import { scaffoldApplications } from "./scaffolded/registry";
 import { installedModules } from "../modules/registry";
@@ -15,14 +13,12 @@ function moduleIcon(name: string): LucideIcon {
   if (!icon) throw new Error(`Icono Lucide desconocido: ${name}.`);
   return icon;
 }
-const moduleApplications: ApplicationManifest[] = installedModules().filter(definition => definition.models.length > 0).map(definition => ({ ...definition.application, icon: moduleIcon(definition.icon) }));
+const moduleApplications: ApplicationManifest[] = installedModules().filter(definition => definition.models.length > 0 && !definition.native).map(definition => ({ ...definition.application, icon: moduleIcon(definition.icon) }));
 
 /** Explicit imports keep modules reviewable and avoid filesystem discovery at runtime. */
 export const applications = createApplicationRegistry([
   contactsManifest,
-  usersManifest,
-  accessManifest,
-  modulesManifest,
+  settingsManifest,
   ...scaffoldApplications,
   ...moduleApplications,
 ]);

@@ -12,6 +12,8 @@ import type { ListViewConfig } from "../list/types";
 import { declareAccess, readGroups, type AccessSpec, type ModuleAccess } from "../access/declare";
 import { compileKanbanConfig } from "../kanban/config";
 import type { KanbanConfig, KanbanTransition } from "../kanban/types";
+import { auditCollectionFields, defaultAuditFields } from "../orm/audit";
+import type { NativeRepositoryOptions } from "./repository";
 import { declaredNames, extensionFields, isModelExtension, type ModelExtension } from "./extend";
 import { relationFieldName } from "../orm/display";
 
@@ -20,11 +22,31 @@ export type ModuleModelSpec = ModelClass | {
   readonly model: ModelClass;
   /** Snake-case table override; defaults to `<module>_<key>`. */
   readonly table?: string;
+  /**
+   * Native modules only: existing Prisma model name (`Partner`) instead of `<Module><Key>`.
+   * Its schema stays hand-written infrastructure; the framework adapts to it.
+   */
+  readonly name?: string;
+  /** Native modules only: route of the application that presents the model (e.g. Ajustes). */
+  readonly route?: `/erp/${string}`;
+  /**
+   * Native modules only (Odoo _inherits): fields stored in a 1:1 related record of another
+   * native model, read and written in the same statement (User → its Partner).
+   */
+  readonly inherits?: { readonly relation: string; readonly label: string; readonly fields: readonly string[] };
+  /** Native modules only: secrets, system columns and update side effects of the adapter. */
+  readonly repository?: NativeRepositoryOptions;
   /** Override of the list policy derived from Field metadata. */
   readonly list?: Partial<ModelListPolicy>;
   readonly kanban?: string | KanbanConfig;
   readonly view?: CollectionView;
   readonly defaultSort?: ListViewConfig["defaultSort"];
+  /**
+   * Publish audit columns in collections: «Creado por» (createBy: name label, filter and
+   * grouping by creator), «Creado el» and «Actualizado el» (sortable, filterable). They take 3 of
+   * the 12 published columns; `createByUser.partner.name` may be added to sort by name.
+   */
+  readonly audit?: boolean;
   /** Custom views (eject). Without them the default list/form are used. */
   readonly views?: ModelViews;
 };
@@ -60,6 +82,11 @@ export type ModuleSpec = {
   /** Models of other modules extended by this one: `{ "flota.vehicle": extendModel(Vehicle, ...) }`. */
   readonly extends?: Readonly<Record<string, ModuleExtensionSpec>>;
   readonly menu?: ModuleMenu;
+  /**
+   * Framework infrastructure (`core`): always registered, never listed in the app drawer,
+   * never installed/uninstalled by the module manager, over hand-written schema files.
+   */
+  readonly native?: boolean;
 } & AccessSpec;
 
 /** Server-side compiled extension; modelClientConfig publishes only its names and label. */
@@ -73,6 +100,8 @@ export type ModelExtensionInfo = {
   readonly views?: { readonly form?: () => Promise<{ default: ModelListView }> };
   /** Prisma relation (on the base model) to the companion row; absent without persistent fields. */
   readonly relation?: string;
+  /** Delegated storage of a native model (no creator column; the foreign key is on the base). */
+  readonly inherits?: true;
   readonly delegate?: string;
 };
 
@@ -123,9 +152,15 @@ export type ModuleDefinition = {
   readonly profile: GenerationProfile;
   readonly access: ModuleAccess;
   readonly extensions: readonly ModuleExtension[];
+  /** Infrastructure module over hand-written schema (no app tile, no install, no creator column). */
+  readonly native: boolean;
 };
 
 const key = /^[a-z][a-z0-9]*$/;
+/** Native framework module (Partner/User): always present, an implicit dependency of every module. */
+export const nativeModule = "core";
+/** Prisma names of the native models (hand-written schema), for links from other modules. */
+export const nativeModelNames: Readonly<Record<string, string>> = { "core.partner": "Partner", "core.user": "User" };
 const pascal = (value: string) => value.split("-").map(part => part[0].toUpperCase() + part.slice(1)).join("");
 const lowerFirst = (value: string) => value[0].toLowerCase() + value.slice(1);
 const scalar = (field: FieldMetadata) => field.kind !== "image";
@@ -138,9 +173,9 @@ const reservedExtensionNames = new Set([companionLink, "record", "id", "revision
  * with conventions for undeclared options. A manifest `list` override still wins. The server
  * service validates and fixes the result; nothing here comes from the browser.
  */
-export function derivedListPolicy(metadata: Readonly<Record<string, FieldMetadata>>, override: Partial<ModelListPolicy> = {}): ModelListPolicy {
+export function derivedListPolicy(metadata: Readonly<Record<string, FieldMetadata>>, override: Partial<ModelListPolicy> = {}, limit = 12): ModelListPolicy {
   const visible = Object.entries(metadata).filter(([, field]) => !field.sensitive);
-  const fields = override.fields ?? visible.filter(([, field]) => field.list ?? true).slice(0, 12).map(([name]) => name);
+  const fields = override.fields ?? visible.filter(([, field]) => field.list ?? true).slice(0, limit).map(([name]) => name);
   const published = (name: string) => fields.includes(name);
   for (const [name, field] of visible) {
     if (!published(name) && (field.searchable || field.sortable || field.filterable || field.groupable)) throw new Error(`${name}: un campo fuera de la lista no puede buscarse, ordenarse, filtrarse ni agruparse. Quita list: false o esas opciones.`);
@@ -169,19 +204,53 @@ function menuLabel(menu: ModuleMenu | undefined, modelKey: string) {
 }
 
 /**
+ * List policy with the opt-in audit columns. Without `list.fields`, the derived fields leave
+ * room for them (9 + 3); an explicit `list.fields` may place them, only with `audit: true`.
+ */
+function auditListPolicy(model: string, metadata: Readonly<Record<string, FieldMetadata>>, options: ModuleModelOptions): ModelListPolicy {
+  const override = options.list ?? {};
+  const named = [override.fields, override.searchFields, override.sortable, override.filterable, override.groupable].flatMap(names => names ?? []);
+  if (!options.audit) {
+    if (named.some(name => auditCollectionFields.includes(name))) throw new Error(`${model}: las columnas de auditoría requieren audit: true en el manifest.`);
+    return derivedListPolicy(metadata, override);
+  }
+  if (override.searchFields?.some(name => auditCollectionFields.includes(name)) || override.groupable?.some(name => auditCollectionFields.includes(name) && name !== "createBy")) throw new Error(`${model}: la auditoría no se busca; sólo «Creado por» (createBy) se agrupa.`);
+  if (override.sortable?.includes("createBy")) throw new Error(`${model}: createBy se ordena con la columna createByUser.partner.name.`);
+  const base = derivedListPolicy(metadata, Object.fromEntries(Object.entries(override).map(([key, names]) => [key, (names as readonly string[]).filter(name => !auditCollectionFields.includes(name))])), 12 - defaultAuditFields.length);
+  const fields = override.fields ?? [...base.fields, ...defaultAuditFields];
+  const audit = auditCollectionFields.filter(name => fields.includes(name));
+  return {
+    ...base, fields,
+    sortable: override.sortable ?? [...(base.sortable ?? []), ...audit.filter(name => name !== "createBy")],
+    filterable: override.filterable ?? [...(base.filterable ?? []), ...audit],
+    groupable: override.groupable ?? [...(base.groupable ?? []), ...audit.filter(name => name === "createBy")],
+  };
+}
+
+/**
  * Compile one manifest model. The registry calls it again with the composed class when other
  * modules extend the model; collection capabilities still come only from server metadata.
  */
-export function compileModuleModel(id: string, modelKey: string, options: ModuleModelOptions, label: string, extensions: readonly ModelExtensionInfo[] = []): ModuleModel {
-  const name = `${pascal(id)}${pascal(modelKey)}`;
+export function compileModuleModel(id: string, modelKey: string, options: ModuleModelOptions, label: string, extensions: readonly ModelExtensionInfo[] = [], native = false): ModuleModel {
+  if (!native && (options.name !== undefined || options.route !== undefined || options.inherits !== undefined || options.repository !== undefined)) throw new Error(`${id}.${modelKey}: name, route, inherits y repository sólo se declaran en módulos nativos.`);
+  if (options.name !== undefined && !/^[A-Z][A-Za-z0-9]*$/.test(options.name)) throw new Error(`${id}.${modelKey}: name debe ser un modelo Prisma PascalCase.`);
+  if (options.route !== undefined && !/^\/erp(?:\/[a-z][a-z0-9-]*)+$/.test(options.route)) throw new Error(`${id}.${modelKey}: route debe ser /erp/<ruta>.`);
+  const name = options.name ?? `${pascal(id)}${pascal(modelKey)}`;
   const contract = defineModel(options.model, { name, table: options.table ?? `${id}_${modelKey}` });
   const clientFields = Object.keys(contract.metadata);
+  if (options.inherits) {
+    const { relation, label, fields } = options.inherits;
+    if (!/^[a-z][A-Za-z0-9]*$/.test(relation) || !fields.length || fields.some(field => !Object.hasOwn(contract.metadata, field))) throw new Error(`${id}.${modelKey}: inherits necesita una relación y campos declarados en el modelo.`);
+    if (fields.some(field => (contract.metadata as Readonly<Record<string, FieldMetadata>>)[field].groupable)) throw new Error(`${id}.${modelKey}: los campos delegados no se agrupan.`);
+    // The delegated record comes first: later module extensions are composed after it.
+    extensions = [Object.freeze({ module: id, label, fields: Object.freeze([...fields]), computed: Object.freeze([]), relation, inherits: true as const }), ...extensions];
+  }
   const collectionMetadata = collectionFieldMetadata({
     fields: contract.metadata as Readonly<Record<string, FieldMetadata>>,
     preview: Object.fromEntries(Object.entries({ ...contract.relatedFields, ...contract.computedFields }).map(([field, value]) => [field, value.metadata])),
     related: Object.keys(contract.relatedFields),
   });
-  const list = derivedListPolicy(collectionMetadata, options.list);
+  const list = auditListPolicy(`${id}.${modelKey}`, collectionMetadata, options);
   validateCollectionComputed(contract, list.fields.filter(field => Object.hasOwn(contract.computedFields, field)), list.fields);
   const kanban = compileKanbanConfig(options.kanban, contract.metadata, contract.actions, list.fields);
   const view = options.view ?? "list";
@@ -192,7 +261,7 @@ export function compileModuleModel(id: string, modelKey: string, options: Module
   }
   const presentations = availableCollectionViews(view, options.views ?? {}, Boolean(kanban));
   return Object.freeze({
-    id: `${id}.${modelKey}`, key: modelKey, module: id, route: `/erp/${id}/${modelKey}` as const,
+    id: `${id}.${modelKey}`, key: modelKey, module: id, route: options.route ?? `/erp/${id}/${modelKey}` as const,
     label, delegate: lowerFirst(name),
     contract, metadata: contract.metadata as Readonly<Record<string, FieldMetadata>>, clientFields, list, kanban: kanban?.field,
     ...(kanban?.transitions !== undefined ? {kanbanTransitions:kanban.transitions} : {}),
@@ -217,7 +286,7 @@ function compileExtensions(spec: ModuleSpec): { extensions: ModuleExtension[]; c
     if (!modelIdPattern.test(target)) throw new Error(`${id}: extends usa identificadores <módulo>.<modelo>: ${target}.`);
     const [baseModule, baseKey] = target.split(".");
     if (baseModule === id) throw new Error(`${id}: un módulo no extiende sus propios modelos; decláralos directamente.`);
-    if (!(spec.depends ?? []).includes(baseModule)) throw new Error(`${id}: declara depends: ["${baseModule}"] para extender ${target}.`);
+    if (baseModule !== nativeModule && !(spec.depends ?? []).includes(baseModule)) throw new Error(`${id}: declara depends: ["${baseModule}"] para extender ${target}.`);
     if (!isModelExtension(extension)) throw new Error(`${id}: ${target} debe declararse con extendModel(...).`);
     const fields = extensionFields(extension);
     const baseNames = declaredNames(extension.base);
@@ -238,7 +307,7 @@ function compileExtensions(spec: ModuleSpec): { extensions: ModuleExtension[]; c
     {
       const name = `${pascal(id)}${pascal(baseModule)}${pascal(baseKey)}`;
       const table = `${id}_${baseModule}_${baseKey}`;
-      const link = Fields.Many2one(`${pascal(baseModule)}${pascal(baseKey)}`, { label: "Registro", required: true, unique: true });
+      const link = Fields.Many2one(nativeModelNames[target] ?? `${pascal(baseModule)}${pascal(baseKey)}`, { label: "Registro", required: true, unique: true });
       // Internal policy: the companion row belongs to its base record and goes with it.
       const cascade = Object.freeze({ ...link, metadata: Object.freeze({ ...link.metadata, onDelete: "Cascade" as const }) }) as Field;
       const own = Object.fromEntries([[companionLink, cascade], ...persistent.map(field => [field, fields[field]])]);
@@ -255,12 +324,15 @@ function compileExtensions(spec: ModuleSpec): { extensions: ModuleExtension[]; c
 /** Trusted static declaration of a module: models, menu and conventions. Never exposed to the browser. */
 export function defineModule(spec: ModuleSpec): ModuleDefinition {
   const id = spec.id;
+  if (!spec.native && id === nativeModule) throw new Error(`${nativeModule} es el módulo nativo del framework; elige otro identificador.`);
+  if ((spec.depends ?? []).includes(nativeModule)) throw new Error(`${id}: ${nativeModule} es implícito; no lo declares en depends.`);
   if (!/^[a-z][a-z0-9]*$/.test(id)) throw new Error(`Identificador de módulo inválido: ${id}. Usa minúsculas sin guiones.`);
   const entries = Object.entries(spec.models);
   const models: ModuleModel[] = entries.map(([modelKey, declaration]) => {
     if (!key.test(modelKey) || modelKey === "nuevo") throw new Error(`${id}: clave de modelo inválida o reservada: ${modelKey}.`);
-    return compileModuleModel(id, modelKey, typeof declaration === "function" ? { model: declaration } : declaration, menuLabel(spec.menu, modelKey));
+    return compileModuleModel(id, modelKey, typeof declaration === "function" ? { model: declaration } : declaration, menuLabel(spec.menu, modelKey), [], spec.native === true);
   });
+  if (spec.native && (spec.menu || spec.extends)) throw new Error(`${id}: un módulo nativo no declara menús ni extensiones; lo presentan otras aplicaciones.`);
   const { extensions, companions } = compileExtensions(spec);
   const inverses = new Set<string>();
   const children = new Set<string>();
@@ -294,7 +366,7 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
     if (!model) throw new Error(`${id}: el menú «${label}» apunta a un modelo inexistente: ${target}.`);
     return { id: `${target}-list`, label, href: model.route, model: model.id, ...visibility(readGroups(access, model.id)) };
   };
-  const menus: ApplicationMenu[] = Object.entries(spec.menu ?? Object.fromEntries(models.map(model => [model.label, model.key])))
+  const menus: ApplicationMenu[] = Object.entries(spec.native ? {} : spec.menu ?? Object.fromEntries(models.map(model => [model.label, model.key])))
     .map(([label, value]) => {
       if (typeof value === "string") return link(label, value);
       const items = Object.entries(value).map(([child, target]) => link(child, target));
@@ -312,5 +384,5 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
     module: { id, depends: spec.depends ?? [], models: [...models.map(model => ({ model: model.contract, clientFields: model.clientFields })), ...companions] },
     externalOwners: {}, runtime: true,
   };
-  return Object.freeze({ id, application, icon: spec.icon, models: Object.freeze(models), profile, access, extensions: Object.freeze(extensions) });
+  return Object.freeze({ id, application, icon: spec.icon, models: Object.freeze(models), profile, access, extensions: Object.freeze(extensions), native: spec.native === true });
 }

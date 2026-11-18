@@ -7,7 +7,9 @@ type Props = { children: ReactNode; params: Promise<{ module: string }> };
 
 async function ModuleLayout({ children, params }: Props) {
   const { module } = await params;
-  if (!getModule(module)) notFound();
+  // The native core has no application of its own: Ajustes/Contactos present its models.
+  const definition = getModule(module);
+  if (!definition || definition.native) notFound();
   return <ApplicationLayout applicationId={module}>{children}</ApplicationLayout>;
 }
 

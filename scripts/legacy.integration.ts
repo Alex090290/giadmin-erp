@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { cp, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -71,8 +71,10 @@ try {
   await command([join(root, "node_modules/prisma/build/index.js"), "generate", "--config", "prisma7.config.ts"], "Cliente Prisma temporal");
   await tsx("prisma/seed.ts");
   await command([join(root, "node_modules/next/dist/bin/next"), "build"], "Build del servidor temporal");
-  const trace = JSON.parse(await readFile(join(root, ".next/server/app/(auth)/erp/modulos/page.js.nft.json"), "utf8")) as { files: string[] };
-  for (const suffix of ["src/modules/demo/manifest.ts", "src/app/(auth)/erp/contactos/manifest.ts", "prisma/.orm-installations.json"]) assert.ok(trace.files.some(file => file.replaceAll("\\", "/").endsWith(suffix)), `El trace de Módulos debe incluir ${suffix}`);
+  const trace = JSON.parse(await readFile(join(root, ".next/server/app/(auth)/erp/ajustes/modulos/page.js.nft.json"), "utf8")) as { files: string[] };
+  // A declarative manifest is required only when the project has modules (src/modules may be empty).
+  const declared = (await readdir(join(root, "src/modules"), { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => `src/modules/${entry.name}/manifest.ts`);
+  for (const suffix of [...declared, "src/app/(auth)/erp/contactos/manifest.ts", "prisma/.orm-installations.json"]) assert.ok(trace.files.some(file => file.replaceAll("\\", "/").endsWith(suffix)), `El trace de Módulos debe incluir ${suffix}`);
   assert.ok(!trace.files.some(file => /(?:^|\/)\.env[^/]*$|(?:^|\/)\.module-operations\//.test(file.replaceAll("\\", "/"))), "El trace no debe distribuir configuración privada ni respaldos");
   console.log("✓ Trace de Módulos incluye manifests y propiedad para el catálogo en producción.");
   // Default cookie names are required by auth's tampering test. A random dedicated

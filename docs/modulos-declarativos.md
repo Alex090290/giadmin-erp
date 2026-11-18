@@ -221,7 +221,7 @@ rules: [
   puede leer todavía no se rechaza al guardar.
 - **Superusuario**: `isAdmin` tiene acceso total. Un módulo sin `groups` sigue
   siendo sólo para administradores.
-- La app **Control de accesos** (`/erp/accesos`, sólo administradores) asigna
+- `Ajustes → Accesos` (`/erp/ajustes/accesos`, sólo administradores) asigna
   usuarios a grupos, ajusta permisos por modelo (se guardan sólo las diferencias
   con el manifest) y activa o desactiva reglas. Los cambios se aplican en la
   siguiente operación: los permisos se leen dentro de cada transacción.
