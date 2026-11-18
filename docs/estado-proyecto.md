@@ -16,25 +16,50 @@ Al iniciar esta revisión, la siguiente prioridad registrada era diseñar y pres
 la distribución de módulos entre proyectos. Después el usuario autorizó la fase 2
 de herencia, cuyo avance se registra abajo. Distribución, entornos y fase 3 siguen pendientes.
 
-## Guía de Tickets preparada (2026-11-17)
+## Tickets: punto de continuación guardado (2026-11-17)
 
-Por petición del usuario, [tutorial-tickets.md](tutorial-tickets.md) prepara el
-siguiente piloto desde cero, con ejercicios progresivos, archivos, comandos,
-comprobaciones y matriz de cobertura del framework actual. Flujo declarativo,
-modelo mínimo con name/folio desde su primera instalación y asunto separado;
-después campos, catálogos, negocio, reacciones, TSX, colecciones, acciones con
-parámetros, actividad, líneas, etiquetas, accesos, dominios y Recursos como módulo
-auxiliar para dependencias/imágenes/extensiones. Sin restaurar Flota.
+El usuario pidió guardar el avance para continuar después. Rama revisada:
+`codex/tickets`. No crear más campos ni avanzar ejercicios hasta que retome.
+Guía vigente: [Tickets desde cero](tutorial-tickets.md).
 
-Estado: sólo documentación, ningún ejercicio confirmado ni módulo creado.
-Siguiente paso: ejercicio 0, revisar Git/entorno y migraciones pendientes en la
-máquina actual antes de proponer create:module -- tickets --dry-run. No aplicar
-migraciones pendientes de Flota/folios por efecto colateral. El usuario ejecuta
-y escribe los pasos, con explicación y revisión uno a uno. Distinguidos Date,
-store, permisos por campo, adjuntos/avisos y otros pendientes de las APIs actuales.
-README, AGENTS y la idea original enlazan al recorrido vigente. Verificación de
-esta tarea: enlaces locales de los documentos afectados y git diff --check; sin
-suites, SQL ni cambios funcionales.
+**Completado:** ejercicios 0–3 y parte del 4. El usuario creó el módulo y Ticket;
+manifest/import/registro verificados. El modelo contiene name (folio
+TCK/{year}/, padding 6, reset anual), asunto obligatorio/maxLength 160/tracking,
+descripcion opcional/maxLength 4000/list false, prioridad baja/normal/alta
+(default normal), estado nuevo/enProceso/enEspera/resuelto/cerrado (default nuevo),
+estimacionMinutos (min 0/default 0), presupuestoMinutos (min 0/default 120),
+requiereVisita (Boolean/default false) y active (default true). Los campos de
+prioridad, estado, minutos, visita y activo llevan tracking. displayName devuelve
+name; todavía no se expulsaron vistas ni se añadieron reglas de negocio propias.
+
+**Base y migraciones:** el usuario autorizó explícitamente eliminar Flota local.
+El agente aplicó las tres pendientes de Flota/core de folios con db:deploy,
+regeneró Prisma Client y comprobó entonces migrate status sin pendientes.
+Después, el usuario ejecutó los planes y sincronizaciones de Tickets. Verificados
+clase, esquema y SQL de estas migraciones (creación o adición aislada esperada):
+
+- 20261118045907_sync_tickets: tabla Ticket, índice único name, creador y FK.
+- 20261118050452_sync_tickets: descripcion opcional.
+- 20261118051154_sync_tickets: enum/columna prioridad, default normal.
+- 20261118051444_sync_tickets: enum/columna estado, default nuevo.
+- 20261118051747_sync_tickets: estimacion_minutos, default 0.
+- 20261118052138_sync_tickets: presupuesto_minutos, default 120.
+- 20261118052359_sync_tickets: requiere_visita, default false.
+
+**Evidencia:** usuario confirmó altas/reapertura y folio, descripción fuera de lista,
+persistencia de prioridad/estado, límites de minutos y última prueba de visita.
+El agente revisó fuentes/esquemas/SQL; no repitió esas pruebas en navegador ni
+consultó nuevamente migrate status tras cada sincronización. Última revisión:
+requiereVisita coincide en clase, Prisma y SQL. git diff --check aprobado.
+No se crearon registros de práctica desde el agente ni se ejecutaron suites nuevas.
+
+**Siguiente paso al retomar:** continuar ejercicio 4 con `compromisoAt`, DateTime
+opcional (fecha y hora de compromiso, instante UTC). Explicar el concepto, pedir
+al usuario añadir sólo ese campo y compartir `orm:sync -- tickets --plan`; revisar
+antes de aplicar. Después probar guardar/reabrir. No introducir Date sin hora.
+Revisar Git y estado real de la máquina al retomar; no asumir que dev sigue activo.
+Los cambios de código, esquemas y migraciones siguen locales, sin commit ni push.
+El resto del recorrido y los pendientes están en la guía. Flota no se restaura.
 
 ## Acciones con parámetros implementadas (2026-11-17)
 

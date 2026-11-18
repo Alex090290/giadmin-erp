@@ -1,9 +1,10 @@
 # Tickets: aprender el framework desde cero
 
-Guía preparada el 2026-11-17. **Estado: recorrido diseñado, ejercicios aún no
-iniciados.** No existe un módulo Tickets creado por esta guía. El usuario escribe
-sus archivos y ejecuta los pasos; el agente explica, revisa y acompaña un ejercicio
-a la vez. Preparar esta guía no autoriza crear la aplicación por adelantado.
+Guía preparada el 2026-11-17. **Estado: ejercicios 0–3 completados; ejercicio 4
+en curso, hasta requiereVisita incluido.** El módulo Tickets ya está creado e
+instalado. El usuario escribe sus archivos y ejecuta los pasos; el agente explica,
+revisa y acompaña un ejercicio a la vez, sin editar su aplicación por adelantado.
+El punto de continuación al final de esta guía prevalece sobre los pasos iniciales.
 
 El objetivo es construir una mesa de ayuda interna: registrar un problema,
 clasificarlo, asignarlo, documentar las intervenciones y cerrarlo con una solución.
@@ -544,8 +545,27 @@ a afterCommit. No inventar APIs para completar esa lista.
 
 ## Punto de continuación para el siguiente agente
 
-**Siguiente paso: ejercicio 0.** Revisar rama, cambios y estado de migraciones de la
-máquina actual; explicar el modelo mental. Después proponer únicamente el plan
-`npm run create:module -- tickets --dry-run`. No hay ejercicios confirmados todavía.
-Actualizar aquí el punto de continuación y en [estado-proyecto.md](estado-proyecto.md)
-la evidencia de cada fase, sin convertir la guía en un historial de mensajes.
+**Avance guardado a petición del usuario (2026-11-17).** Rama `codex/tickets`.
+Ejercicios 0–3 completados; ejercicio 4 en curso. Tickets está registrado e instalado,
+con formulario/lista por convención. No hay vistas expulsadas ni negocio propio.
+
+Campos completados: name/folio (prefijo elegido TCK/{year}/), asunto, descripcion,
+prioridad, estado, estimacionMinutos, presupuestoMinutos, requiereVisita y active.
+El usuario confirmó las pruebas propuestas de persistencia, defaults y límites;
+el agente verificó fuentes/esquema/migraciones, sin repetir esas pruebas en navegador.
+Última migración revisada: 20261118052359_sync_tickets, sólo requiere_visita BOOLEAN
+NOT NULL DEFAULT false. Última confirmación: marcar visita, guardar y reabrir.
+
+La retirada local de Flota y la infraestructura de folios se aplicaron con
+aprobación del usuario. Las menciones iniciales a esas migraciones pendientes son
+el procedimiento de arranque; no describen una tarea aún pendiente en esta Mac.
+Revisar siempre el estado de la máquina al retomar. No asumir procesos dev activos.
+
+**Siguiente ejercicio: compromisoAt**, DateTime opcional para fecha/hora de compromiso.
+Explicar primero que representa un instante UTC y no Date sin hora. El usuario
+escribe el campo, ejecuta orm:sync -- tickets --plan y comparte la salida antes de
+aplicar. No avanzar automáticamente a otros campos ni modificar sus archivos.
+
+Detalle de migraciones y evidencia en [estado-proyecto.md](estado-proyecto.md).
+Progreso documentado localmente, sin commit/push. Retomar sólo cuando el usuario
+lo indique y actualizar este resumen al cerrar el siguiente ejercicio.

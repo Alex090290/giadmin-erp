@@ -1,4 +1,16 @@
 {
   "version": 1,
-  "modules": {}
+  "modules": {
+    "tickets": {
+      "file": "orm-tickets.prisma",
+      "hash": "c6b7e667cb94f264d0dfa1f884faae08fcddd0491aff7038f5bed870cf6c5da1",
+      "inverses": [
+        {
+          "file": "user.prisma",
+          "target": "User",
+          "text": "\n  // BEGIN lite-erp:tickets:User\n  ticketsTicketCreatedRecords TicketsTicket[] @relation(\"TicketsTicket_createBy\")\n  // END lite-erp:tickets:User\n"
+        }
+      ]
+    }
+  }
 }
