@@ -29,6 +29,21 @@ for (const [name, metadata] of Object.entries(clientConfig.fields)) assert.deepE
 // Create through the runtime repository: createBy, revision and display name.
 const hogar = ok(await categorias.save(prisma, actor, { name: "Hogar", active: true }), "crear categoría");
 const trabajo = ok(await categorias.save(prisma, actor, { name: "Trabajo", active: true }), "crear categoría 2");
+
+// Audit columns (audit: true): readable creator and dates, sorted and filtered in SQL.
+const categoryConfig = modelClientConfig("ensayo.categoria");
+assert.equal(categoryConfig.audit, true);
+assert.deepEqual(categoryConfig.list.fields.slice(-3), ["createByUser.partner.name", "createdAt", "updatedAt"]);
+assert.equal(clientConfig.audit, undefined, "sin audit: true no se publica");
+const audited = ok(await withActor(actor, () => categorias.list(prisma, actor, { ...state, sort: "createdAt", direction: "desc", filters: [{ field: "createByUser.partner.name", operator: "contains", value: "prueba" }] })), "auditoría en colección");
+assert.deepEqual(audited.data.rows.map(row => row.name), ["Trabajo", "Hogar"]);
+const auditRow = audited.data.rows[0] as Record<string, unknown> & { createByUser?: { partner?: { name?: string } } };
+assert.equal(auditRow.createByUser?.partner?.name, "Administrador de prueba");
+assert.match(String(auditRow.createdAt), /^\d{4}-\d{2}-\d{2}T/);
+assert.equal(Object.hasOwn(auditRow, "createBy"), false, "no se publica el ID de User");
+assert.equal(JSON.stringify(auditRow).includes("password"), false);
+assert.equal(ok(await withActor(actor, () => categorias.list(prisma, actor, { ...state, filters: [{ field: "createByUser.partner.name", operator: "contains", value: "nadie" }] })), "filtro de creador").data.total, 0);
+assert.equal((await withActor(actor, () => tareas.list(prisma, actor, { ...state, sort: "createdAt" }))).ok, false, "un modelo sin audit: true no ordena por auditoría");
 assert.equal(hogar.displayName, "Hogar");
 assert.equal(hogar.audit?.createBy?.login, "modules-admin");
 assert.equal((await prisma.ensayoCategoria.findUniqueOrThrow({ where: { id: hogar.values.id } })).createBy, admin.id);
@@ -305,5 +320,40 @@ assert.equal(anaOwn?.categoriaNombre, "Trabajo", "readable related values stay v
 assert.equal(jefaRow?.categoriaNombre, "Archivada");
 assert.equal(jefaRow?.$labels?.categoria?.label, "Archivada");
 assert.equal(ok(await tareas.read(prisma, ana, enArchivada.id), "la tarea sigue legible").values.categoria, archivada.id, "the stored ID is kept");
+// Historical relation labels use current displayName and target permissions, in the activity transaction.
+const historyOld = ok(await categorias.save(prisma, actor, { name: "Historial anterior", active: true }), "categoría anterior de historial").values;
+const historyNew = ok(await categorias.save(prisma, actor, { name: "Historial nuevo", active: true }), "categoría nueva de historial").values;
+const historyTask = ok(await tareas.save(prisma, ana, { ...base, categoria: historyOld.id, name: "Historial Many2one" }), "tarea para historial").values;
+const historySaved = ok(await tareas.save(prisma, ana, { ...historyTask, categoria: historyNew.id }), "cambiar categoría").values;
+const relationHistory = async (who: typeof ana) => {
+  const result = ok(await tareas.activity(prisma, who, { id: historyTask.id }), "historial relacional");
+  const change = result.data.entries.flatMap(entry => entry.changes).find(change => change.field === "categoria");
+  assert.ok(change);
+  return change;
+};
+assert.equal((await relationHistory(ana)).beforeLabel, "Historial anterior");
+assert.equal((await relationHistory(ana)).afterLabel, "Historial nuevo");
+const renamedHistory = ok(await categorias.save(prisma, actor, { ...historyNew, name: "Historial renombrado" }), "renombrar categoría").values;
+assert.equal((await relationHistory(ana)).afterLabel, "Historial renombrado", "old ID-only events use the current label");
+ok(await categorias.save(prisma, actor, { ...renamedHistory, active: false }), "ocultar categoría por regla");
+const hiddenHistory = await relationHistory(ana);
+assert.equal(hiddenHistory.beforeLabel, "Historial anterior");
+assert.equal(hiddenHistory.afterLabel, "Registro no disponible");
+assert.ok(!JSON.stringify(hiddenHistory).includes(historyNew.id!), "unreadable target ID is not published");
+assert.equal((await relationHistory(jefa)).afterLabel, "Historial renombrado");
+await prisma.accessModelOverride.create({ data: { groupId: "ensayo.usuario", model: "ensayo.categoria", read: false, create: false, write: false, unlink: false } });
+try {
+  const deniedHistory = await relationHistory(ana);
+  assert.equal(deniedHistory.beforeLabel, "Registro no disponible");
+  assert.equal(deniedHistory.afterLabel, "Registro no disponible");
+} finally {
+  await prisma.accessModelOverride.delete({ where: { groupId_model: { groupId: "ensayo.usuario", model: "ensayo.categoria" } } });
+}
+ok(await categorias.remove(prisma, actor, [{ id: historyOld.id!, revision: historyOld.revision! }]), "eliminar destino anterior");
+assert.equal((await relationHistory(jefa)).beforeLabel, "Registro no disponible");
+assert.equal(ok(await tareas.read(prisma, actor, historyTask.id), "revisión tras leer historial").values.revision, historySaved.revision);
+ok(await tareas.remove(prisma, actor, [{ id: historySaved.id!, revision: historySaved.revision! }]), "limpiar tarea de historial");
+const historyNewNow = ok(await categorias.read(prisma, actor, historyNew.id), "leer categoría para limpieza").values;
+ok(await categorias.remove(prisma, actor, [{ id: historyNewNow.id!, revision: historyNewNow.revision! }]), "limpiar categoría de historial");
 await prisma.$disconnect();
 console.log("modules-check ok");

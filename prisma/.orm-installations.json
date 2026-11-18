@@ -3,12 +3,12 @@
   "modules": {
     "tickets": {
       "file": "orm-tickets.prisma",
-      "hash": "c6b7e667cb94f264d0dfa1f884faae08fcddd0491aff7038f5bed870cf6c5da1",
+      "hash": "061d320313a6e3d1d675462f73053ca752479bf13327e003d867a82fdb5a8e0b",
       "inverses": [
         {
           "file": "user.prisma",
           "target": "User",
-          "text": "\n  // BEGIN lite-erp:tickets:User\n  ticketsTicketCreatedRecords TicketsTicket[] @relation(\"TicketsTicket_createBy\")\n  // END lite-erp:tickets:User\n"
+          "text": "\n  // BEGIN lite-erp:tickets:User\n  ticketsTicketCreatedRecords TicketsTicket[] @relation(\"TicketsTicket_createBy\")\n  ticketsCategoriaCreatedRecords TicketsCategoria[] @relation(\"TicketsCategoria_createBy\")\n  ticketsTecnicoCreatedRecords TicketsTecnico[] @relation(\"TicketsTecnico_createBy\")\n  // END lite-erp:tickets:User\n"
         }
       ]
     }

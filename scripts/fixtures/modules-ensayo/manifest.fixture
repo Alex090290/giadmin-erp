@@ -22,7 +22,8 @@ export default defineModule({
         list: () => import("./views/TareaList"),
       },
     },
-    categoria: Categoria,
+    // Audit columns («Creado por», «Creado el», «Actualizado el») published to collections.
+    categoria: { model: Categoria, audit: true },
   },
   menu: {
     Tareas: "tarea",

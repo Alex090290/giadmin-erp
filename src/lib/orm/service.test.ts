@@ -8,9 +8,38 @@ import { recordAuditColumns } from "./audit";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { ListState } from "../list/types";
 import type { ListActionOptions } from "./domain";
+import { AccessError } from "../auth/policy";
 
 const model = defineModel(class Example extends Model { name = Fields.Text({ required: true }); }, { name: "AuditExample", table: "audit_examples" });
 const repository = unboundRepository<{ name: string }>();
+
+test("nested lookup revalidates read scope and projects displayName within the supplied transaction", async () => {
+  const category = defineModel(class Category extends Model {
+    name = Fields.Text({ required: true });
+    displayName(record: { name: string }) { return `Categoría · ${record.name}`; }
+  }, { name: "HistoryCategory", table: "history_categories" });
+  const tx = {} as Prisma.TransactionClient, actor = { id: "actor", sessionVersion: 0 };
+  let allowed = true, queries = 0;
+  const scope = { active: true };
+  const service = createModelService(category, {
+    ...unboundRepository<ReturnType<typeof category.parse>>(),
+    count: async (received, where) => { assert.equal(received, tx); assert.deepEqual(where, { AND: [scope, { id: { in: ["visible", "hidden"] } }] }); return 1; },
+    lookup: async (received, query) => {
+      queries++; assert.equal(received, tx); assert.deepEqual(query.fields, ["id", "name"]);
+      return [{ id: "visible", name: "Soporte", secret: "never publish" }];
+    },
+  }, { list: { fields: ["name"], searchFields: ["name"] }, authorize: async (received, who, operation) => {
+    assert.equal(received, tx); assert.equal(who, actor); assert.equal(operation, "read");
+    if (!allowed) throw new AccessError("DENIED");
+    return scope;
+  } });
+  const result = await service.lookupInTransaction(tx, actor, { ids: ["visible", "hidden"] });
+  assert.deepEqual(result.items, [{ value: "visible", label: "Categoría · Soporte", record: { id: "visible" } }]);
+  assert.doesNotMatch(JSON.stringify(result), /secret|never publish/);
+  allowed = false;
+  await assert.rejects(service.lookupInTransaction(tx, actor, { ids: ["visible", "hidden"] }), AccessError);
+  assert.equal(queries, 1, "denied readers never execute the projection");
+});
 
 test("relation presentation requires a non-sensitive Many2one scalar", () => {
   const related = defineModel(class extends Model {

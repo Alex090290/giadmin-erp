@@ -54,8 +54,30 @@ snapshots; no se reescriben ni borran esos datos históricos en la base.
 
 Cada cambio de edición guarda campo, etiqueta, tipo, valor anterior y nuevo. Se conservan
 `false`, cero, `null` y cadenas. Selection guarda también sus etiquetas; las fechas
-son ISO UTC y se presentan en la zona del navegador. Many2one registra IDs, sin
-consultar etiquetas de relaciones no autorizadas. El autor se referencia por ID
+son ISO UTC y se presentan en la zona del navegador. Many2one registra IDs.
+Desde el 2026-11-18, los módulos declarativos resuelven sus etiquetas al leer el
+historial, mediante el lookup autorizado del destino en la misma transacción
+RepeatableRead. Se reutiliza displayName (incluidas sus dependencias relacionadas
+y reglas), con IDs deduplicados por destino y lotes de hasta 100 por página.
+Funciona también con eventos antiguos que sólo almacenan IDs, sin reescribirlos.
+
+Las etiquetas Many2one son **nombres actuales**, no snapshots: renombrar una
+categoría cambia su presentación en eventos anteriores. Los nulos permanecen
+«Sin valor». Destinos eliminados, fuera de las reglas de lectura, sin permiso
+de lectura del modelo o sin contrato declarativo se muestran como «Registro no
+disponible», sin publicar su ID ni una etiqueta histórica. Un fallo de consulta
+o de sesión se conserva como error de actividad; no se oculta con ese mensaje.
+La lectura no cambia revisión, valores ni historial almacenado. No hay consultas
+de relaciones desde React ni caché de permisos entre peticiones.
+
+Los servicios manuales/legacy conservan su comportamiento salvo que integren
+`activityLabels(tx, actor, target, ids)` explícitamente, con autorización propia.
+Este resolver debe devolver sólo IDs/etiquetas legibles. El lookup compartido
+`lookupInTransaction` es exclusivamente servidor: revalida lectura y proyección
+dentro de la transacción proporcionada, sin abrir otra ni aceptar destinos desde
+el navegador.
+
+El autor se referencia por ID
 de User; la lectura muestra login/nombre/avatar actuales con un select limitado.
 Los autores no se pueden eliminar mientras tengan actividad (FK Restrict).
 

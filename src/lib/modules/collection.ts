@@ -1,6 +1,7 @@
 import type { Many2OneLoader } from "../many2one/model-lookup";
 import { collectionFieldMetadata, type ModelClientConfig } from "./config";
 import { modelColumns } from "../orm/presentation";
+import { auditCollectionColumns } from "../orm/audit";
 import type { ListColumn } from "../list/types";
 import type { ListResult, ListState } from "../list/types";
 import type { KanbanLoader, KanbanMover } from "../kanban/types";
@@ -20,15 +21,22 @@ export type CollectionSource = {
 export function modelCollection(config: ModelClientConfig, declared?: readonly ModelColumn[]) {
   const metadata = collectionFieldMetadata(config);
   const fields = Object.fromEntries(Object.entries(metadata).map(([name, metadata]) => [name, { metadata }]));
-  const project = (columns: readonly ModelColumn[]) => modelColumns(fields, columns.map(column => {
-    if (!config.list.fields.includes(column.field) || !Object.hasOwn(fields, column.field)) throw new Error(`${config.id}: la columna ${column.field} no está publicada en la política de lista del servidor.`);
-    return {
-      ...column,
+  // Audit columns have fixed descriptors (readable creator and dates), never a User field chosen here.
+  const audit: Readonly<Record<string, ListColumn>> = config.audit ? Object.fromEntries(auditCollectionColumns.map(column => [column.field, column])) : {};
+  const project = (columns: readonly ModelColumn[]) => columns.map(column => {
+    if (column.field === "createBy") throw new Error(`${config.id}: createBy es el ID de User; publica la auditoría con audit: true y usa la columna createByUser.partner.name («Creado por»).`);
+    const isAudit = Object.hasOwn(audit, column.field);
+    if (!config.list.fields.includes(column.field) || (!Object.hasOwn(fields, column.field) && !isAudit)) throw new Error(`${config.id}: la columna ${column.field} no está publicada en la política de lista del servidor.`);
+    const capabilities = {
       sortable: config.list.sortable.includes(column.field) && column.sortable !== false,
       filterable: config.list.filterable.includes(column.field) && column.filterable !== false,
       groupable: config.list.groupable.includes(column.field) && column.groupable !== false,
     };
-  }));
+    if (!isAudit) return modelColumns(fields, [{ ...column, ...capabilities }])[0];
+    const fixed = audit[column.field];
+    if ((column.widget !== undefined && column.widget !== fixed.widget) || (column.avatarField !== undefined && column.avatarField !== fixed.avatarField) || (column.type !== undefined && column.type !== fixed.type)) throw new Error(`${config.id}: la columna de auditoría ${column.field} sólo admite cambiar label, ancho y orden.`);
+    return { ...fixed, ...column, widget: fixed.widget, avatarField: fixed.avatarField, type: fixed.type, ...capabilities } as ListColumn;
+  });
   const publishedColumns = project(config.list.fields.map(field => ({ field })));
   const columns = declared ? project(declared) : publishedColumns;
   // Keep query support for omitted fields, while honoring explicit presentation restrictions.

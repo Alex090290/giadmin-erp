@@ -1,5 +1,5 @@
 import "server-only";
-import { Fields, Model, type DisplayRecord } from "@/lib/orm";
+import { displayName, Fields, Model, type DisplayRecord } from "@/lib/orm";
 
 export class Ticket extends Model {
   name = Fields.Text({
@@ -68,9 +68,19 @@ export class Ticket extends Model {
     default: false,
     tracking: true,
   });
+  compromisoAt = Fields.DateTime({
+    label: "Fecha de compromiso",
+    tracking: true,
+  });
+  categoriaId = Fields.Many2one("TicketsCategoria", {
+    label: "Categoría",
+    tracking: true,
+  });
   active = Fields.Boolean({ label: "Activo", default: true, tracking: true });
-  displayName(record: DisplayRecord<Ticket, "name">): string {
-    return record.name;
+
+  @displayName("name", "asunto")
+  displayName(record: DisplayRecord<Ticket, "name" | "asunto">): string {
+    return `${record.name} · ${record.asunto}`;
   }
   // Define aquí normalize, beforeSave y afterSave cuando tu negocio lo necesite.
 }

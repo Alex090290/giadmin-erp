@@ -80,6 +80,18 @@ export function modelService(id: string): Service {
     collectionNullable: entry.extensions.flatMap(extension => extension.fields),
     // Group access and record rules, revalidated inside each service transaction.
     authorize: (tx, actor, operation) => authorizeModel(tx, actor, entry.id, operation),
+    activityLabels: async (tx, actor, target, ids) => {
+      const related = byPrismaName.get(target);
+      // Unregistered/manual targets have no declarative read contract. Do not query them.
+      if (!related) return new Map<string, string>();
+      try {
+        const result = await modelService(related.id).lookupInTransaction(tx, actor, { ids });
+        return new Map(result.items.map(item => [item.value, item.label]));
+      } catch (error) {
+        if (error instanceof AccessError && error.code === "DENIED") return new Map<string, string>();
+        throw error;
+      }
+    },
     // Related records shown through displayName/related paths obey the target's read access and rules.
     relationAccess: (tx, actor) => async (target, ids) => {
       const related = byPrismaName.get(target);
@@ -180,6 +192,7 @@ export function modelClientConfig(id: string, access?: CapabilityActor): ModelCl
     ...(entry.kanban ? { kanban: entry.kanban } : {}),
     ...(entry.kanbanTransitions !== undefined ? {kanbanTransitions:entry.kanbanTransitions.map(({from,to})=>({from,to}))} : {}),
     ...(entry.defaultSort ? { defaultSort: entry.defaultSort } : {}),
+    ...(entry.declaration.audit ? { audit: true as const } : {}),
     // Fields added by other modules, presented in their own group (names only).
     ...(entry.extensions.length ? { extensions: entry.extensions.map(extension => ({ module: extension.module, label: extension.label, fields: [...extension.fields, ...extension.computed] })) } : {}),
   };

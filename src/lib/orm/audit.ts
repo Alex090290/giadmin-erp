@@ -29,3 +29,15 @@ export const recordAuditColumns = [
   { field: "createdAt", label: "Creado el", type: "datetime", sortable: true },
   { field: "updatedAt", label: "Actualizado el", type: "datetime", sortable: true },
 ] as const satisfies readonly ListColumn[];
+
+/**
+ * Audit columns a declarative model publishes to its collections with `audit: true` in the
+ * manifest. Readable creator (contact name with avatar) and dates; never the raw User ID or
+ * other User fields. The server list policy still decides what is queried.
+ */
+export const auditCollectionColumns = [
+  { field: "createByUser.partner.name", label: "Creado por", type: "text", widget: "partner", avatarField: "createByUser.partner.avatarUrl" },
+  { field: "createdAt", label: "Creado el", type: "datetime" },
+  { field: "updatedAt", label: "Actualizado el", type: "datetime" },
+] as const satisfies readonly ListColumn[];
+export const auditCollectionFields: readonly string[] = auditCollectionColumns.map(column => column.field);

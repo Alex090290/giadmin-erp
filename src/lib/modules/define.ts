@@ -12,6 +12,7 @@ import type { ListViewConfig } from "../list/types";
 import { declareAccess, readGroups, type AccessSpec, type ModuleAccess } from "../access/declare";
 import { compileKanbanConfig } from "../kanban/config";
 import type { KanbanConfig, KanbanTransition } from "../kanban/types";
+import { auditCollectionFields } from "../orm/audit";
 import { declaredNames, extensionFields, isModelExtension, type ModelExtension } from "./extend";
 import { relationFieldName } from "../orm/display";
 
@@ -25,6 +26,11 @@ export type ModuleModelSpec = ModelClass | {
   readonly kanban?: string | KanbanConfig;
   readonly view?: CollectionView;
   readonly defaultSort?: ListViewConfig["defaultSort"];
+  /**
+   * Publish audit columns in collections: «Creado por» (contact name), «Creado el» and
+   * «Actualizado el», sortable and filterable. They take 3 of the 12 published columns.
+   */
+  readonly audit?: boolean;
   /** Custom views (eject). Without them the default list/form are used. */
   readonly views?: ModelViews;
 };
@@ -138,9 +144,9 @@ const reservedExtensionNames = new Set([companionLink, "record", "id", "revision
  * with conventions for undeclared options. A manifest `list` override still wins. The server
  * service validates and fixes the result; nothing here comes from the browser.
  */
-export function derivedListPolicy(metadata: Readonly<Record<string, FieldMetadata>>, override: Partial<ModelListPolicy> = {}): ModelListPolicy {
+export function derivedListPolicy(metadata: Readonly<Record<string, FieldMetadata>>, override: Partial<ModelListPolicy> = {}, limit = 12): ModelListPolicy {
   const visible = Object.entries(metadata).filter(([, field]) => !field.sensitive);
-  const fields = override.fields ?? visible.filter(([, field]) => field.list ?? true).slice(0, 12).map(([name]) => name);
+  const fields = override.fields ?? visible.filter(([, field]) => field.list ?? true).slice(0, limit).map(([name]) => name);
   const published = (name: string) => fields.includes(name);
   for (const [name, field] of visible) {
     if (!published(name) && (field.searchable || field.sortable || field.filterable || field.groupable)) throw new Error(`${name}: un campo fuera de la lista no puede buscarse, ordenarse, filtrarse ni agruparse. Quita list: false o esas opciones.`);
@@ -169,6 +175,29 @@ function menuLabel(menu: ModuleMenu | undefined, modelKey: string) {
 }
 
 /**
+ * List policy with the opt-in audit columns. Without `list.fields`, the derived fields leave
+ * room for them (9 + 3); an explicit `list.fields` may place them, only with `audit: true`.
+ */
+function auditListPolicy(model: string, metadata: Readonly<Record<string, FieldMetadata>>, options: ModuleModelOptions): ModelListPolicy {
+  const override = options.list ?? {};
+  const named = [override.fields, override.searchFields, override.sortable, override.filterable, override.groupable].flatMap(names => names ?? []);
+  if (named.includes("createBy")) throw new Error(`${model}: createBy es el ID de User; usa audit: true y la columna createByUser.partner.name («Creado por»).`);
+  if (!options.audit) {
+    if (named.some(name => auditCollectionFields.includes(name))) throw new Error(`${model}: las columnas de auditoría requieren audit: true en el manifest.`);
+    return derivedListPolicy(metadata, override);
+  }
+  if ([override.searchFields, override.groupable].some(names => names?.some(name => auditCollectionFields.includes(name)))) throw new Error(`${model}: la auditoría se ordena y filtra; no se busca ni agrupa.`);
+  const base = derivedListPolicy(metadata, Object.fromEntries(Object.entries(override).map(([key, names]) => [key, (names as readonly string[]).filter(name => !auditCollectionFields.includes(name))])), 12 - auditCollectionFields.length);
+  const fields = override.fields ?? [...base.fields, ...auditCollectionFields];
+  const audit = auditCollectionFields.filter(name => fields.includes(name));
+  return {
+    ...base, fields,
+    sortable: override.sortable ?? [...(base.sortable ?? []), ...audit],
+    filterable: override.filterable ?? [...(base.filterable ?? []), ...audit],
+  };
+}
+
+/**
  * Compile one manifest model. The registry calls it again with the composed class when other
  * modules extend the model; collection capabilities still come only from server metadata.
  */
@@ -181,7 +210,7 @@ export function compileModuleModel(id: string, modelKey: string, options: Module
     preview: Object.fromEntries(Object.entries({ ...contract.relatedFields, ...contract.computedFields }).map(([field, value]) => [field, value.metadata])),
     related: Object.keys(contract.relatedFields),
   });
-  const list = derivedListPolicy(collectionMetadata, options.list);
+  const list = auditListPolicy(`${id}.${modelKey}`, collectionMetadata, options);
   validateCollectionComputed(contract, list.fields.filter(field => Object.hasOwn(contract.computedFields, field)), list.fields);
   const kanban = compileKanbanConfig(options.kanban, contract.metadata, contract.actions, list.fields);
   const view = options.view ?? "list";

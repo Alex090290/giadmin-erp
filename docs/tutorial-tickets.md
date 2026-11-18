@@ -1,7 +1,7 @@
 # Tickets: aprender el framework desde cero
 
-Guía preparada el 2026-11-17. **Estado: ejercicios 0–3 completados; ejercicio 4
-en curso, hasta requiereVisita incluido.** El módulo Tickets ya está creado e
+Guía preparada el 2026-11-17. **Estado al 2026-11-18: ejercicios 0–5 completados;
+ejercicio 6 en curso, selector y columna de categoría conectados; sigue filtro.** El módulo Tickets ya está creado e
 instalado. El usuario escribe sus archivos y ejecuta los pasos; el agente explica,
 revisa y acompaña un ejercicio a la vez, sin editar su aplicación por adelantado.
 El punto de continuación al final de esta guía prevalece sobre los pasos iniciales.
@@ -544,6 +544,32 @@ multiempresa. Una imagen no equivale a un sistema de adjuntos. Un hook no equiva
 a afterCommit. No inventar APIs para completar esa lista.
 
 ## Punto de continuación para el siguiente agente
+
+**Auditoría en colecciones implementada el 2026-11-18** en el framework (`audit: true`
+por modelo en el manifest). Siguiente paso del usuario: añadir `audit: true` a
+`ticket` y usar `{field:"createByUser.partner.name"}` (y `createdAt`/`updatedAt` si
+los quiere) en TicketList en lugar de `createBy`. Contrato en
+[Auditoría](auditoria-modelos.md#colecciones-de-módulos-declarativos-audit-true-2026-11-18).
+Después continuar con filtro de Categoría y relación con Técnico.
+
+**Actualización 2026-11-18:** compromisoAt ya está declarado (opcional/tracking),
+en Prisma y en la migración 20261118145412_sync_tickets; el usuario confirmó
+terminar orm:sync tras revisar el plan y las pruebas de guardar/reabrir con
+fecha/hora y después con el campo vacío. Ejercicio 4 completado por confirmación
+del usuario. Ejercicio 5 también completado: displayName folio · asunto con
+dependencias name/asunto, confirmado por el usuario y revisado en fuentes.
+Ejercicio 6: Categoria completada con name/active y minutosRecomendados Integer
+min 0/default 0; registro, Prisma y migración 20261118155543_sync_tickets revisados.
+Usuario confirmó sincronización y pruebas de persistencia/límites. Tecnico ya está
+creado, registrado e instalado: Prisma y migración 20261118155906_sync_tickets
+revisados; usuario confirmó guardar/reabrir. Menú Tickets/Configuración con
+Categorías/Técnicos declarado y confirmado. categoriaId opcional a TicketsCategoria
+sincronizado por el usuario; clase/Prisma/SQL 20261118160359_sync_tickets revisados.
+FieldMany2One en TicketForm conectado y selección/limpieza/persistencia confirmadas
+por el usuario; columna categoriaId ya añadida en TicketList, revisada en fuentes.
+Sigue probar etiqueta y filtro de categoría en lista; aún no crear tecnicoId.
+Hay vistas locales expulsadas y un cambio del manifest; no regenerarlas.
+Este punto sustituye el siguiente paso del resumen histórico de abajo.
 
 **Avance guardado a petición del usuario (2026-11-17).** Rama `codex/tickets`.
 Ejercicios 0–3 completados; ejercicio 4 en curso. Tickets está registrado e instalado,

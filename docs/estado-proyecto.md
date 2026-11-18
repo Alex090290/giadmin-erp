@@ -21,6 +21,135 @@ generación ni migraciones; no se confirmó disponibilidad de dev o PostgreSQL.
 Distribución de módulos, estrategia de entornos, permisos por campo, compute
 persistido y fase 3 de herencia siguen pendientes, sin implementación anticipada.
 
+## Auditoría en ModelCollection: implementada (2026-11-18)
+
+Implementada a petición del usuario antes de retomar Tickets. Caso real:
+`{field:"createBy"}` en TicketList se rechazaba por no estar publicado.
+
+- Opción explícita por modelo en el manifest: `{ model, audit: true }`. Publica en la
+  política de lista del servidor tres columnas fijas: `createByUser.partner.name`
+  («Creado por», contacto con avatar), `createdAt` y `updatedAt`, ordenables y
+  filtrables, no buscables ni agrupables. Sin `list.fields`: 9 campos + 3 de
+  auditoría (límite 12); con `list.fields` explícito se ubican a mano.
+- `ModelClientConfig.audit`; `modelCollection` usa descriptores fijos
+  (`auditCollectionColumns` en `src/lib/orm/audit.ts`): sólo label/ancho/orden
+  personalizables. `createBy` (ID de User) se rechaza en manifest y vista con mensaje
+  que indica la columna legible. Sin `audit: true` no se publica nada.
+- El servicio y el repositorio ya soportaban la auditoría (`audit: true` del registro);
+  no hubo cambios de SQL, esquema ni migraciones.
+- Verificado: test:modules 41/41 (prueba nueva de publicación, columnas fijas, rechazos y
+  ubicación explícita), tsc, ESLint y test:capabilities:integration en proyecto/esquema
+  temporales con `ensayo.categoria` (`audit: true` en el fixture): orden por
+  `createdAt`, filtro por creador, proyección con nombre y fecha sin `createBy` ni
+  credenciales, y rechazo de orden por auditoría en un modelo sin la opción. Sin
+  navegador ni cambios en archivos de Tickets.
+- Siguiente en la tutoría: el usuario añade `audit: true` a `ticket` en su manifest y
+  cambia `{field:"createBy"}` por `{field:"createByUser.partner.name"}` en TicketList
+  (más fechas si las quiere); después, filtro de Categoría y relación con Técnico.
+  Contrato en [Auditoría](auditoria-modelos.md#colecciones-de-módulos-declarativos-audit-true-2026-11-18).
+
+## Historial Many2one: etiquetas autorizadas (2026-11-18)
+
+Corrección autorizada por el usuario tras ver el ID de Categoría en historial.
+readActivity resuelve displayName actual por destino/lotes <=100 en la misma
+transacción RepeatableRead. Registry usa el lookup del servicio destino con
+autorización y reglas vigentes mediante lookupInTransaction, compartido con lookup.
+Incluye eventos antiguos sin reescribirlos. Nulos conservan Sin valor; destinos
+eliminados/restringidos/no declarativos muestran Registro no disponible sin ID ni
+etiqueta antigua. Errores de sesión/consulta conservan el fallo de actividad.
+No se modificaron vistas/modelos de Tickets, SQL ni datos del ERP para este fix.
+Servicios manuales requieren activityLabels autorizado explícito. Contrato y
+semántica de nombres actuales en [Actividad](actividad-registros.md).
+
+Verificación focalizada: 22 pruebas de actividad/servicio/presentación, TypeScript
+y ESLint de los archivos modificados aprobados. Incluye deduplicación/lotes,
+renombrados, valores vacíos, destinos no disponibles, no reescritura de eventos,
+errores y lookup bajo autorización en la transacción proporcionada. test:modules
+40/40 aprobado fuera del sandbox (la primera ejecución falló por EPERM de fixtures
+temporales). test:capabilities:integration aprobado con PostgreSQL: cambios,
+renombrado, regla por registro, denegación CRUD, borrado del destino previo y
+revisión intacta. Incluye compilación de rutas/vistas/fixture; proyecto y esquema
+temporales eliminados. El intento inicial quedó bloqueado por red del sandbox;
+fuera de él, la primera pasada detectó un tipo opcional en una aserción nueva,
+corregida, y la repetición completó todas las comprobaciones. Sin comprobación
+visual nueva ni build de producción. git diff --check del alcance aprobado.
+
+Simplificación aplicada: lookup y lookupInTransaction comparten autorización,
+proyección y displayName; el historial evita duplicar reglas o abrir una transacción
+por relación. El avance de tutoría sigue pendiente en el filtro de Categoría.
+
+## Tickets: selector y columna de categoría conectados; sigue filtro (2026-11-18)
+
+El usuario creó Categoria y se verificó su clase generada con name/active y
+displayName(name), import y registro categoria en el manifest, conservando las
+vistas de Ticket. Siguiente paso del ejercicio 6: añadir minutosRecomendados
+Integer obligatorio/min 0/default 0/tracking. Campo ya añadido y revisado: el
+primer plan compartido tenía minutosRecomendado en singular; el usuario lo corrigió
+a minutosRecomendados y se confirmó en fuentes. Categoria ya aparece en Prisma
+y en 20261118155543_sync_tickets: CREATE TABLE con minutos_recomendados,
+defaults, índice y FK de creador esperados. El usuario confirmó sincronización y
+pruebas propuestas de guardar/reabrir y rechazo de minutos negativos. El agente
+revisó esquema/SQL, sin navegador ni consulta de migrate status. El usuario creó
+Tecnico: revisados clase con name obligatorio/maxLength 120/tracking,
+active default true/tracking y displayName(name), import y registro en manifest.
+Tecnico ya aparece en Prisma y la migración 20261118155906_sync_tickets crea
+tickets_tecnico con defaults/índice/FK de creador esperados. El usuario confirmó
+sincronización y prueba de guardar/reabrir un técnico. Agente revisó esquema/SQL,
+sin repetir navegador ni consultar BD. Menú ya declarado con Tickets y grupo
+Configuración (Categorías/Técnicos), verificado en fuentes y confirmado por el
+usuario. categoriaId Many2one opcional a TicketsCategoria con label Categoría/
+tracking true ya añadido y sincronizado según confirmación del usuario. Revisados
+clase, Prisma y 20261118160359_sync_tickets: columna nullable, índice y FK Restrict.
+El usuario conectó FieldMany2One en TicketForm y confirmó las pruebas propuestas
+de búsqueda, selección, guardar/reabrir y limpiar. Fuentes revisadas: selector
+categoriaId y columna `{field:"categoriaId"}` ya presentes en TicketList.
+Sigue comprobar etiqueta legible en lista y filtro de categoría (seleccionar,
+ver resultados, quitar filtro); no crear tecnicoId antes de esa comprobación. Sin consultas
+a BD ni pruebas nuevas; revisión de fuentes y git diff --check de documentación.
+El chequeo global anterior detectó espacios al final de línea en el manifest;
+el usuario lo formateó después. No se modificó ese archivo durante esta revisión.
+
+El usuario continuó tras las instrucciones de recuperación del fallo de colors;
+no hay comprobación nueva del navegador del agente que certifique su resolución.
+
+## Tickets: fallo de carga al editar colors (2026-11-18)
+
+El usuario reportó ChunkLoadError al cargar TicketList desde el manifest. El log
+local de Next muestra primero `[Server HMR] Update failed, full reload needed:
+SyntaxError: Invalid shorthand property initializer`, seguido del fallo de chunk.
+La fuente actual `{field:"estado", colors:{nuevo:"neutral"}}` es válida:
+TypeScript aprobado, proyección modelCollection con Ticket real acepta la columna
+y node --check del chunk indicado pasa. No se cambió código por este diagnóstico.
+El error inicial de sintaxis ya no está en el archivo actual; queda por confirmar
+recuperación del runtime con recarga completa o reinicio de dev. No se borró .next
+ni se iniciaron procesos adicionales. Consulta HTTP local impedida por el sandbox;
+sin comprobación autenticada de navegador. No atribuir el fallo a colors ni cambiar
+el import dinámico del manifest sin evidencia. Retomar Categoria después de resolver.
+
+## Tickets: ejercicios 4–5 completados; sigue Categoría (2026-11-18)
+
+El usuario añadió compromisoAt DateTime opcional/tracking y compartió el plan:
+añadir compromiso_at TIMESTAMPTZ(3) nullable. Después indicó que terminó orm:sync.
+Revisión de fuentes confirma clase y Prisma, con migración
+20261118145412_sync_tickets que sólo añade esa columna. No se consultó migrate
+status ni se verificó persistencia desde navegador del agente. El usuario confirmó
+terminar las pruebas de guardar/reabrir fecha y hora y después el campo vacío.
+Ejercicio 4 completado por esa confirmación. El usuario completó después el paso
+de presentación del ejercicio 5; fuentes verificadas: import displayName,
+@displayName("name", "asunto") y retorno folio · asunto con DisplayRecord tipado.
+La comprobación visual corresponde a la confirmación del usuario, sin navegador
+del agente. No cambió el formato de la serie ni se renumeraron datos.
+Sigue ejercicio 6: crear sólo Categoria con create:model, revisar antes de añadir
+minutos recomendados o sincronizar. No crear Tecnico ni relaciones por adelantado.
+
+Se encontraron también manifest modificado y vistas locales en tickets/views;
+la anotación previa «sin vistas expulsadas» describe el punto del 2026-11-17.
+TicketForm usa header para name e incluye FieldDate/compromisoAt type datetime,
+comprobado por lectura de fuentes. El manifest también registra TicketList local.
+No se editaron esos archivos. Sin pruebas de código nuevas en esta revisión.
+El avance nuevo de Tickets sigue sin commit. Revisión documental: git diff --check
+aprobado; sin pruebas de código nuevas.
+
 ## Sequence: readOnly explícito en la vista (2026-11-18)
 
 Por solicitud del usuario, `sequence` ya no añade `readOnly` al descriptor ni
@@ -2141,6 +2270,10 @@ Comprobaciones anteriores a la actividad (históricas para esos alcances):
   Las pruebas de código anteriores son históricas y no se repitieron para esta nota.
 
 ## Oportunidades de mejora pendientes
+
+- ~~Auditoría en ModelCollection declarativo~~: implementada el 2026-11-18 con
+  `audit: true` por modelo; ver la sección de esa fecha.
+
 
 - **Lista cuando falla el lookup de una relación**: con lectura de Vehicle pero
   sin lectura de Modelo, resolveListLabels rechaza toda la lista. Aceptación:

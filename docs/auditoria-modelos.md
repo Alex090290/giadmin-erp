@@ -153,6 +153,35 @@ y no se envían metadatos adicionales.
 Ejemplo local, RHF/Zod, guardado simulado y listado: `/sample#record-audit`.
 Los modelos manuales necesitan su propio proveedor autorizado de auditoría.
 
+### Colecciones de módulos declarativos (`audit: true`, 2026-11-18)
+
+En `src/modules`, cada modelo publica la auditoría en sus colecciones con una opción
+explícita del manifest; sin ella no se publica nada:
+
+```ts
+models: {
+  ticket: { model: Ticket, audit: true, views: { list: () => import("./views/TicketList") } },
+}
+```
+
+- Publica tres columnas fijas: `createByUser.partner.name` («Creado por», nombre del
+  contacto con avatar), `createdAt` («Creado el») y `updatedAt` («Actualizado el»).
+  Se ordenan y filtran en SQL; no se buscan ni agrupan.
+- Ocupan 3 de las 12 columnas publicadas: sin `list.fields`, el manifest publica hasta 9
+  campos del modelo más las tres de auditoría. Con `list.fields` explícito decides cuáles
+  y en qué orden (sólo con `audit: true`).
+- En una vista expulsada se usan como cualquier columna publicada:
+  `{ field: "createByUser.partner.name" }`, `{ field: "createdAt", label: "Alta" }`.
+  Sólo se cambian label, ancho y orden; tipo, widget y avatar los fija el framework.
+- `createBy` es el ID de User y nunca es columna: `ModelCollection` y `defineModule` lo
+  rechazan indicando la columna legible. Tampoco se publica ningún otro campo de User.
+- Las columnas TSX no conceden acceso: el servidor valida la política de lista, y los
+  registros siguen sujetos a permisos y reglas del modelo.
+- Registros sin autor (anteriores a la auditoría) muestran la celda vacía.
+
+Pruebas: `test:modules` (colecciones) y `test:capabilities:integration`/
+`test:modules:integration` (orden, filtro y proyección sin ID ni credenciales).
+
 ## Actualizar un módulo ya instalado
 
 La actualización es aditiva y mantiene las protecciones de propiedad y hashes:
