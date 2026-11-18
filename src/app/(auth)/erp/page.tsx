@@ -10,13 +10,31 @@ async function Applications() {
   const user = await getCurrentAccessUser();
   return (
     <AppGrid>
-      <AppContainer name="Ventas" icon={<ChartColumnBig size={26} strokeWidth={1.8} />} />
-      {applications.forUser(user).map(application => {
+      {applications.forUser(user).map((application) => {
         const Icon = application.icon;
-        return <AppContainer key={application.id} name={application.name} href={applicationHref(application)} icon={<Icon size={26} strokeWidth={1.8} />} />;
+        return (
+          <AppContainer
+            key={application.id}
+            name={application.name}
+            href={applicationHref(application)}
+            icon={<Icon size={26} strokeWidth={1.8} />}
+          />
+        );
       })}
     </AppGrid>
   );
 }
 
-export default function PageErp() { return <Suspense fallback={<p role="status" className="p-6 text-sm text-base-content/60">Cargando aplicaciones…</p>}><Applications /></Suspense>; }
+export default function PageErp() {
+  return (
+    <Suspense
+      fallback={
+        <p role="status" className="p-6 text-sm text-base-content/60">
+          Cargando aplicaciones…
+        </p>
+      }
+    >
+      <Applications />
+    </Suspense>
+  );
+}
