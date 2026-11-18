@@ -6,20 +6,40 @@ Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
-Revisión de continuidad (2026-11-18, Windows): rama `codex/tickets`, HEAD `408b593`
-(`tickets primer progreso`), árbol limpio antes de esta corrección documental.
-Contrastados instrucciones, README, guía de Tickets, historial, clase Ticket,
-manifest, registro de módulos, esquema Prisma y configuración de Prisma.
-Tickets es el único módulo registrado en `src/modules/index.ts`; sus campos
-coinciden con el punto de continuación siguiente y `compromisoAt` aún no existe.
-El progreso ya está versionado en ese commit; no se comprobó sincronización remota.
-Se corrigió el README que aún decía que los ejercicios no habían comenzado.
-Las secciones antiguas de Flota y separación de entornos son históricas;
-prevalecen las decisiones del 2026-11-17 y el avance de Tickets de abajo.
-Revisión documental y de fuentes, sin suites, navegador, consultas a la BD,
-generación ni migraciones; no se confirmó disponibilidad de dev o PostgreSQL.
-Distribución de módulos, estrategia de entornos, permisos por campo, compute
-persistido y fase 3 de herencia siguen pendientes, sin implementación anticipada.
+## Prioridad actual: Partner/User nativos y app Ajustes (2026-11-18)
+
+Decisión del usuario: pausar Tickets y priorizar un módulo declarativo **nativo**
+`core` con Partner y User, sin icono en el cajón, y una app nueva **«Ajustes»** donde
+Usuarios será un menú. Motivo: `createBy` legible/agrupable, Many2one a personas desde
+cualquier módulo y fase 3 de herencia dependen de que User/Partner sean declarativos.
+
+- **Tickets retirado** por el usuario con «Eliminar datos»: commit `71d3358`, migración
+  `20261118165807_uninstall_tickets` (historial y overrides limpios; DROP de tickets_*
+  y enums), `src/modules` vacío, ID `tickets` libre. Avance previo en Git en `68a31d5`.
+  Comprobado por el agente con consultas de sólo lectura: sin tablas `tickets_*` ni
+  actividad, última migración aplicada.
+- **Residuo detectado:** `model_sequences` conserva `TicketsTicket.name` (2026, valor 3).
+  La retirada no limpia contadores de folios (`cleanupSQL` en operation-engine.ts).
+  Pendiente: corrección del framework y limpieza de esa fila, ambas con aprobación.
+- **Fase 0 hecha:** inventario y plan en [Partner/User nativos y Ajustes](ideas/core-ajustes.md).
+  Decidido por el usuario: Ajustes con Usuarios, Accesos y Módulos; Contactos después como
+  app propia que extiende `core.partner`; contacto creado automáticamente al crear usuario;
+  Perfil en el avatar. Pendiente de aprobación: enfoque A (adaptador nativo, sin DDL) o B,
+  quién puede buscar personas y si toda alta exige contacto. Sin código; rama `codex/core`.
+- **Fase 1 de core implementada** (rama `codex/core`, sin commit): módulo nativo `core`
+  con `core.partner` sobre `partners`, grupo implícito «Usuario interno» con lectura,
+  Many2one y `extendModel` hacia Partner desde cualquier módulo sin `depends`. Sin DDL en
+  el ERP. Detalle y verificación en [core-ajustes](ideas/core-ajustes.md#fase-1-implementada-2026-11-18-rama-codexcore).
+- **Fase 2 implementada** (sin commit): `core.user` sobre `users` con contacto delegado
+  (`inherits`), contraseña `writeOnly` hasheada, revocación de sesión, `beforeRemove` y
+  Many2one a User. [Detalle](ideas/core-ajustes.md#fase-2-implementada-2026-11-18-rama-codexcore).
+- **Fase 3 implementada** (sin commit): app Ajustes con Usuarios (`core.user` vía
+  `ModelRoute`), Accesos y Módulos; rutas antiguas redirigen; «Usuario interno» implícito.
+  [Detalle](ideas/core-ajustes.md#fase-3-implementada-2026-11-18-rama-codexcore).
+- **Fase 4 implementada** (sin commit): `createBy` «Creado por» con etiqueta, filtro y
+  agrupación por creador mediante `creatorLookup`. [Detalle](ideas/core-ajustes.md#fase-4-implementada-2026-11-18-rama-codexcore).
+  Siguiente: fase 5, Contactos sobre `core.partner` (con `extendModel`), cuando el usuario lo indique.
+- En la Mac, `migrate deploy` de la retirada borrará sus datos de Tickets.
 
 ## Auditoría en ModelCollection: implementada (2026-11-18)
 

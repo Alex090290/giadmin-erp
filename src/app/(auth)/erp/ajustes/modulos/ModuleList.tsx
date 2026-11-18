@@ -7,8 +7,8 @@ import { loadModules } from "./actions";
 export default function ModuleList() {
   return <ListView
     model="module-catalogue" title="Módulos" load={loadModules}
-    breadcrumbs={[{ label: "Aplicaciones", href: "/erp" }, { label: "Módulos" }]}
-    create={false} delete={false} recordHref="/erp/modulos/{id}"
+    breadcrumbs={[{ label: "Aplicaciones", href: "/erp" }, { label: "Ajustes", href: "/erp/ajustes" }, { label: "Módulos" }]}
+    create={false} delete={false} recordHref="/erp/ajustes/modulos/{id}"
     searchFields={["name", "id"]} defaultSort={{ field: "name", direction: "asc" }}
     columns={[
       { field: "name", label: "Nombre", sortable: true, filterable: true },

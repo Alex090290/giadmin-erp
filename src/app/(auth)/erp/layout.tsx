@@ -33,7 +33,7 @@ async function ProtectedErp({ children }: { children: ReactNode }) {
         </div>
         <UserMenu user={{ login: user.login, name: user.name, image: user.image, isAdmin: user.isAdmin }} />
       </header>
-      {maintenance && <div role="status" className="rounded-md bg-warning/15 px-3 py-2 text-sm">El ERP está en mantenimiento de módulos. {user.isAdmin && <Link href={operation ? `/erp/modulos/${operation.module}/operaciones/${operation.id}` : "/erp/modulos"} className="link">Revisar operaciones y finalizar mantenimiento</Link>}</div>}
+      {maintenance && <div role="status" className="rounded-md bg-warning/15 px-3 py-2 text-sm">El ERP está en mantenimiento de módulos. {user.isAdmin && <Link href={operation ? `/erp/ajustes/modulos/${operation.module}/operaciones/${operation.id}` : "/erp/ajustes/modulos"} className="link">Revisar operaciones y finalizar mantenimiento</Link>}</div>}
       <main className="rounded-md flex-1 flex flex-col min-h-0 min-w-0 bg-base-100">{children}</main>
     </UserTheme>
   );

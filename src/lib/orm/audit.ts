@@ -36,8 +36,11 @@ export const recordAuditColumns = [
  * other User fields. The server list policy still decides what is queried.
  */
 export const auditCollectionColumns = [
-  { field: "createByUser.partner.name", label: "Creado por", type: "text", widget: "partner", avatarField: "createByUser.partner.avatarUrl" },
+  { field: "createBy", label: "Creado por", type: "text", widget: "many2one" },
+  { field: "createByUser.partner.name", label: "Nombre del creador", type: "text", widget: "partner", avatarField: "createByUser.partner.avatarUrl" },
   { field: "createdAt", label: "Creado el", type: "datetime" },
   { field: "updatedAt", label: "Actualizado el", type: "datetime" },
 ] as const satisfies readonly ListColumn[];
 export const auditCollectionFields: readonly string[] = auditCollectionColumns.map(column => column.field);
+/** Published by default with `audit: true`; the creator's name column is optional (sort by name, avatar). */
+export const defaultAuditFields: readonly string[] = ["createBy", "createdAt", "updatedAt"];

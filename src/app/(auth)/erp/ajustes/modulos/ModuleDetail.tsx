@@ -9,13 +9,13 @@ import { readModule } from "./actions";
 import OperationPanel from "./OperationPanel";
 
 function References({ ids }: { ids: readonly string[] }) {
-  return ids.length ? <ul className="flex flex-wrap gap-2">{ids.map(id => <li key={id}><Link href={`/erp/modulos/${encodeURIComponent(id)}`} className="link link-primary break-all">{id}</Link></li>)}</ul> : <span className="text-base-content/60">Ninguno</span>;
+  return ids.length ? <ul className="flex flex-wrap gap-2">{ids.map(id => <li key={id}><Link href={`/erp/ajustes/modulos/${encodeURIComponent(id)}`} className="link link-primary break-all">{id}</Link></li>)}</ul> : <span className="text-base-content/60">Ninguno</span>;
 }
 
 export default function ModuleDetail({ id }: { id: string }) {
   const load = useCallback(() => readModule(id), [id]);
   return <FormViewLoader recordKey={id} load={load}>{record => <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-2 sm:p-3">
-    <Breadcrumbs items={[{ label: "Aplicaciones", href: "/erp" }, { label: "Módulos", href: "/erp/modulos" }, { label: record.name }]} />
+    <Breadcrumbs items={[{ label: "Aplicaciones", href: "/erp" }, { label: "Ajustes", href: "/erp/ajustes" }, { label: "Módulos", href: "/erp/ajustes/modulos" }, { label: record.name }]} />
     <h1 className="sr-only">{record.name}</h1>
     <div className="grid gap-3 lg:grid-cols-2">
       <section className="rounded-box border border-base-300 p-3" aria-label="Información del módulo">

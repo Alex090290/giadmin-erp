@@ -135,7 +135,7 @@ permisos, concurrencia y eliminación con cuentas y un esquema PostgreSQL tempor
 
 ## Otras guías
 
-- [Gestor de Módulos](docs/gestor-modulos.md): catálogo administrativo en `/erp/modulos`, planes e instalación/actualización/desinstalación en desarrollo.
+- [Gestor de Módulos](docs/gestor-modulos.md): catálogo administrativo en `Ajustes → Módulos` (`/erp/ajustes/modulos`), planes e instalación/actualización/desinstalación en desarrollo.
 - [Estado actual y continuidad entre agentes](docs/estado-proyecto.md). Leer junto con [AGENTS.md](AGENTS.md) al retomar el proyecto.
 - [Módulos declarativos](docs/modulos-declarativos.md) (prototipo: `defineModule`, opciones de Field y `eject:view`).
 - [Aplicaciones y navegación](docs/desarrollo-aplicaciones.md).

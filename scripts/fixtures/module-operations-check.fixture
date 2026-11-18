@@ -69,13 +69,13 @@ try {
   plan = review("update"); assert.deepEqual(plan.blockers, []); assert.match(plan.sql, /ADD COLUMN\s+"notes"/);
   plan = apply(plan); finish(plan);
   assert.deepEqual((await database.query(`SELECT name,notes FROM ${table} WHERE id='preserved'`)).rows, [{ name: "Registro conservado", notes: null }]);
-  const protectedPlan = successful(request({ command: "review", input: { module: "usuarios", operation: "uninstall", policy: "drop" } }));
+  const protectedPlan = successful(request({ command: "review", input: { module: "ajustes", operation: "uninstall", policy: "drop" } }));
   assert.ok(protectedPlan.blockers.length > 0);
   plan = review("uninstall"); assert.deepEqual(plan.blockers, []); assert.equal(plan.sql, "");
   plan = apply(plan); finish(plan);
   assert.equal(await exists("src/modules/ciclo/manifest.ts"), false);
   assert.equal((await database.query(`SELECT name FROM ${table}`)).rows[0].name, "Registro conservado");
-  const catalogue = await moduleCatalogue(prisma, actor, { root: process.cwd(), schema, registered: new Set(["ensayo", "modulos", "usuarios", "contactos", "accesos", "citas", "flota"]) });
+  const catalogue = await moduleCatalogue(prisma, actor, { root: process.cwd(), schema, registered: new Set(["ensayo", "ajustes", "contactos", "citas", "flota"]) });
   assert.equal(catalogue.find(item => item.id === "ciclo")?.status, "retained");
   const reserved = spawnSync(process.execPath, ["--conditions=react-server", "--import", "tsx", "scripts/create-module.ts", "ciclo", "--dry-run"], { encoding: "utf8", timeout: 30000 });
   assert.equal(reserved.status, 1); assert.match(reserved.stderr, /conserva datos/);

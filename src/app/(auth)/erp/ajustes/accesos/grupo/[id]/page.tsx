@@ -7,7 +7,6 @@ import { groupDetail } from "@/lib/access/admin";
 import { accessOperations } from "@/lib/access/declare";
 import ActionForm from "../../ActionForm";
 import { saveMembers, saveModelAccess, saveRules } from "../../actions";
-import { accessManifest } from "../../manifest";
 
 type Props = { params: Promise<{ id: string }> };
 const operationLabels = { read: "Leer", create: "Crear", write: "Editar", unlink: "Eliminar" } as const;
@@ -18,7 +17,7 @@ async function Group({ params }: Props) {
   if (!detail) notFound();
   const { group, users, models, rules } = detail;
   return <>
-    <Breadcrumbs items={[{ label: "Aplicaciones", href: "/erp" }, { label: accessManifest.name, href: "/erp/accesos" }, { label: group.label }]} />
+    <Breadcrumbs items={[{ label: "Aplicaciones", href: "/erp" }, { label: "Ajustes", href: "/erp/ajustes" }, { label: "Accesos", href: "/erp/ajustes/accesos" }, { label: group.label }]} />
     <header className="space-y-1">
       <h1 className="text-lg font-semibold">{group.label} <code className="text-xs font-normal text-base-content/50">{group.id}</code></h1>
       {group.implies.length > 0 && <p className="text-sm text-base-content/70">Incluye los permisos de: {group.implies.join(", ")}.</p>}
@@ -26,7 +25,7 @@ async function Group({ params }: Props) {
 
     <section aria-labelledby="miembros" className="space-y-2 rounded-box border border-base-300 p-3">
       <h2 id="miembros" className="font-semibold">Miembros</h2>
-      <ActionForm action={saveMembers} label="Guardar miembros">
+      {group.implicit ? <p className="text-sm text-base-content/70">Incluye automáticamente a todos los usuarios activos; no se asignan miembros.</p> : <ActionForm action={saveMembers} label="Guardar miembros">
         <input type="hidden" name="group" value={group.id} />
         <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
           {users.map(user => <li key={user.id}>
@@ -38,7 +37,7 @@ async function Group({ params }: Props) {
             </label>
           </li>)}
         </ul>
-      </ActionForm>
+      </ActionForm>}
     </section>
 
     <section aria-labelledby="permisos" className="space-y-2 rounded-box border border-base-300 p-3">

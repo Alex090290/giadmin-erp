@@ -11,7 +11,7 @@ import type { DataPolicy, ModuleOperation, ModuleOperationPlan } from "@/lib/mod
 import { moduleOperation } from "./actions";
 
 const labels = { install: "Instalar", update: "Actualizar", uninstall: "Desinstalar" };
-const route = (module: string, job: string) => `/erp/modulos/${encodeURIComponent(module)}/operaciones/${job}`;
+const route = (module: string, job: string) => `/erp/ajustes/modulos/${encodeURIComponent(module)}/operaciones/${job}`;
 
 export default function OperationPanel({ record }: { record: ManagedModule }) {
   const [operation, setOperation] = useState<ModuleOperation>(record.status === "retained" ? "install" : record.managed ? "update" : "install");
@@ -56,7 +56,7 @@ function PlanConsole({ initial }: { initial: ModuleOperationPlan }) {
   };
   const destructive = plan.operation === "uninstall" && plan.policy === "drop";
   return <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-2 sm:p-3">
-    <Breadcrumbs items={[{ label: "Aplicaciones", href: "/erp" }, { label: "Módulos", href: "/erp/modulos" }, { label: plan.name, href: `/erp/modulos/${encodeURIComponent(plan.module)}` }, { label: "Revisar operación" }]} />
+    <Breadcrumbs items={[{ label: "Aplicaciones", href: "/erp" }, { label: "Ajustes", href: "/erp/ajustes" }, { label: "Módulos", href: "/erp/ajustes/modulos" }, { label: plan.name, href: `/erp/ajustes/modulos/${encodeURIComponent(plan.module)}` }, { label: "Revisar operación" }]} />
     <h1 className="sr-only">{labels[plan.operation]} {plan.name}</h1>
     <section className="space-y-3 rounded-box border border-base-300 p-3 text-sm">
       <h2 className="font-semibold">{labels[plan.operation]} {plan.name}</h2>
@@ -82,7 +82,7 @@ function PlanConsole({ initial }: { initial: ModuleOperationPlan }) {
         <button type="button" className="btn btn-primary btn-sm" disabled={busy || !acknowledged} onClick={() => { void execute("finish"); }}>Finalizar mantenimiento</button>
       </>}
       {plan.phase === "failed" && <p>Los pasos completados pueden conservarse. Revisa las migraciones y el estado del proyecto antes de preparar otra operación; no retires locks ni hashes sin comprobar qué proceso sigue activo.</p>}
-      <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { void execute("status"); }}>Consultar resultado</button><Link href="/erp/modulos" className="btn btn-ghost btn-sm">Volver a módulos</Link></div>
+      <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { void execute("status"); }}>Consultar resultado</button><Link href="/erp/ajustes/modulos" className="btn btn-ghost btn-sm">Volver a módulos</Link></div>
     </section>
   </div>;
 }

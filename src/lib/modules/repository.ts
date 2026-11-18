@@ -28,7 +28,8 @@ type Delegate = {
 };
 type Guards = Readonly<Record<string, readonly DisplayGuard[]>>;
 
-const auditSelect = { createdAt: true, updatedAt: true, createBy: true, createByUser: { select: { id: true, login: true, partner: { select: { name: true, avatarUrl: true } } } } } as const;
+const datesSelect = { createdAt: true, updatedAt: true } as const;
+const creatorSelect = { ...datesSelect, createBy: true, createByUser: { select: { id: true, login: true, partner: { select: { name: true, avatarUrl: true } } } } } as const;
 const lowerFirst = (value: string) => value[0].toLowerCase() + value.slice(1);
 
 function delegateOf(tx: Prisma.TransactionClient, name: string): Delegate {
@@ -47,18 +48,42 @@ function auditDto(record: Record<string, unknown>): RecordAudit {
  * Runtime equivalent of the `orm:bind` adapter, built from declared metadata. Same semantics:
  * revision = updatedAt, monotonic advance, createBy only on create, whitelisted projections.
  */
-export function createRepository<T extends Record<string, unknown>>(entry: ModuleModel, module: ModuleGeneration, models: readonly ModuleModel[] = [entry]): ModelRepository<T> {
+/**
+ * Options for native models (core) over hand-written tables. Server-only functions declared
+ * by trusted framework code, never by a request.
+ */
+export type NativeRepositoryOptions = {
+  /** Hash or otherwise transform a non-empty write-only secret before storing it. */
+  readonly writeOnly?: Readonly<Record<string, (value: string) => Promise<string>>>;
+  /** Columns maintained by the system (e.g. lastLogin): read, never written by the service. */
+  readonly readOnly?: readonly string[];
+  /** Extra columns for an update, computed in its transaction before writing (e.g. revoke sessions). */
+  readonly beforeUpdate?: (tx: Prisma.TransactionClient, id: string, values: Readonly<Record<string, unknown>>) => Promise<Record<string, unknown>>;
+};
+
+export function createRepository<T extends Record<string, unknown>>(entry: ModuleModel, module: ModuleGeneration, models: readonly ModuleModel[] = [entry], options: { creator?: boolean } & NativeRepositoryOptions = {}): ModelRepository<T> {
+  // Native tables (core: partners/users) are hand-written and have no creator column.
+  const creator = options.creator !== false;
+  const secrets = new Map(Object.entries(options.writeOnly ?? {}));
+  const systemColumns = new Set(options.readOnly ?? []);
+  for (const [name, field] of Object.entries(entry.contract.metadata as Readonly<Record<string, FieldMetadata>>)) {
+    // A write-only secret without its transform would be stored as plain text: refuse to start.
+    if (field.kind === "text" && field.writeOnly && !secrets.has(name)) throw new Error(`${entry.id}.${name}: un campo writeOnly necesita su transformación en el repositorio.`);
+  }
+  const auditSelect = creator ? creatorSelect : datesSelect;
   const many = Object.entries(entry.contract.many2manyFields).map(([field, descriptor]) => ({ field, maximum: descriptor.many2many.maxSelected, ...many2manyStorage(entry.contract, field) }));
   const metadata: Readonly<Record<string, FieldMetadata>> = entry.contract.metadata;
   // Fields of extensions live in companion tables owned by the extending modules (1:1 relation).
-  const companions = entry.extensions.filter(extension => extension.relation && extension.fields.length) as readonly { relation: string; fields: readonly string[] }[];
+  // An inherited relation (Odoo _inherits, e.g. User → Partner) is a 1:1 row read and written the
+  // same way, but its table has no creator column and the foreign key lives on this model.
+  const companions = entry.extensions.filter(extension => extension.relation && extension.fields.length) as readonly { relation: string; fields: readonly string[]; inherits?: boolean }[];
   const storage = storageProjection(entry, models);
   const whereOf = (where: Record<string, unknown>) => extensionWhere(entry, where);
   const extended = new Set(companions.flatMap(companion => companion.fields));
   const names = Object.keys(metadata).filter(name => !extended.has(name));
   const generation = { model: entry.contract, clientFields: entry.clientFields };
   if (!module.models.some(model => model.model.name === entry.contract.name)) throw new Error(`${entry.id}: el modelo no pertenece al perfil del módulo.`);
-  const select = Object.fromEntries([["id", true], ["updatedAt", true], ...names.map(name => [name, true]),
+  const select = Object.fromEntries([["id", true], ["updatedAt", true], ...names.filter(name => !secrets.has(name)).map(name => [name, true]),
     ...companions.map(companion => [companion.relation, { select: Object.fromEntries(companion.fields.map(name => [name, true])) }])]);
   const recordSelect = { ...select, ...Object.fromEntries(many.map(link => [link.source, { select: { targetId: true }, orderBy: { targetId: "asc" }, take: link.maximum + 1 }])) };
   const metadataOf = (model: string) => model === entry.contract.name ? metadata : module.models.find(candidate => candidate.model.name === model)?.model.metadata ?? {};
@@ -69,13 +94,14 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
   const displayGuards = guardsOf(display.policy);
   const displayTargets = relationTargets(display.policy);
   const related = relatedProjectionPlan(profile, generation);
-  const groupFields = new Set(["id", ...names.filter(name => metadata[name].kind !== "datetime"), "createBy"]);
+  const groupFields = new Set(["id", ...names.filter(name => metadata[name].kind !== "datetime" && !secrets.has(name)), ...(creator ? ["createBy"] : [])]);
 
   const dto = (record: Record<string, unknown>, defaults = true, includeMany = true) => {
     const row = record as Row;
     const result: Record<string, unknown> = { id: row.id, revision: row.updatedAt.toISOString() };
     const read = (name: string, value: unknown) => metadata[name].kind === "datetime" ? (value instanceof Date ? value.toISOString() : null) : value;
-    for (const name of names) result[name] = read(name, row[name]);
+    // Secrets are never read back: the form receives them empty.
+    for (const name of names) result[name] = secrets.has(name) ? null : read(name, row[name]);
     for (const link of includeMany ? many : []) {
       const rows = row[link.source] as { targetId: string }[];
       if (!Array.isArray(rows) || rows.length > link.maximum) throw new ModelValidationError("La relación supera el límite declarado. Revisa su configuración.");
@@ -92,11 +118,16 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
     const value = values[name];
     return [name, metadata[name].kind === "datetime" ? (value === null || value === undefined ? null : new Date(value as string)) : value];
   }));
-  const data = (values: T) => write(names, values);
+  const data = async (values: T) => {
+    const result = write(names.filter(name => !secrets.has(name) && !systemColumns.has(name)), values);
+    // An empty secret keeps the stored one (update) and is rejected by the model when required (create).
+    for (const [name, transform] of secrets) if (typeof values[name] === "string" && values[name]) result[name] = await transform(values[name] as string);
+    return result;
+  };
   // Nested writes keep base and companions in one statement, transaction and revision.
   const nested = (values: T, actorId?: string) => ({ ...Object.fromEntries(many.map(link => [link.source, { ...(actorId ? {} : { deleteMany: {} }), create: (values[link.field] as string[]).map(targetId => ({ targetId })) }])), ...Object.fromEntries(companions.map(companion => {
     const fields = write(companion.fields, values);
-    return [companion.relation, actorId ? { create: { ...fields, createBy: actorId } } : { upsert: { create: fields, update: fields } }];
+    return [companion.relation, actorId ? { create: { ...fields, ...(companion.inherits ? {} : { createBy: actorId }) } } : { upsert: { create: fields, update: fields } }];
   })) });
   const relatedGroup = (field: string) => {
     const group = related.find(candidate => candidate.root === field);
@@ -108,10 +139,10 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
   return {
     async read(tx, id) { const record = await delegateOf(tx, entry.delegate).findUnique({ where: { id }, select: recordSelect }); return record ? dto(record) : null; },
     async audit(tx, id) { const record = await delegateOf(tx, entry.delegate).findUnique({ where: { id }, select: auditSelect }); return record ? auditDto(record) : null; },
-    async create(tx, values, actorId) { return dto(await delegateOf(tx, entry.delegate).create({ data: { ...data(values), createBy: actorId, ...nested(values, actorId) }, select: recordSelect })); },
+    async create(tx, values, actorId) { return dto(await delegateOf(tx, entry.delegate).create({ data: { ...await data(values), ...(creator ? { createBy: actorId } : {}), ...nested(values, actorId) }, select: recordSelect })); },
     async update(tx, id, revision, values) {
       const updatedAt = new Date(Math.max(Date.now(), Date.parse(revision) + 1));
-      return dto(await delegateOf(tx, entry.delegate).update({ where: { id, updatedAt: new Date(revision) }, data: { ...data(values), ...nested(values), updatedAt }, select: recordSelect }));
+      return dto(await delegateOf(tx, entry.delegate).update({ where: { id, updatedAt: new Date(revision) }, data: { ...await data(values), ...nested(values), ...(await options.beforeUpdate?.(tx, id, values) ?? {}), updatedAt }, select: recordSelect }));
     },
     async remove(tx, id, revision) { await delegateOf(tx, entry.delegate).delete({ where: { id, updatedAt: new Date(revision) }, select: { id: true } }); },
     count(tx, where) { return delegateOf(tx, entry.delegate).count({ where: whereOf(where) }); },
@@ -182,7 +213,7 @@ export function createRepository<T extends Record<string, unknown>>(entry: Modul
         const rows = await delegateOf(tx, entry.delegate).findMany({ ...args, select: { ...select, ...auditSelect } });
         return rows.map(record => {
           const user = record.createByUser as { id: string; login: string; partner: { name: string; avatarUrl: string | null } | null } | null;
-          return { ...dto(record, false, false), createdAt: (record.createdAt as Date).toISOString(), updatedAt: (record.updatedAt as Date).toISOString(), createBy: record.createBy as string | null, createByUser: user ? { id: user.id, login: user.login, partner: user.partner ? { name: user.partner.name, avatarUrl: user.partner.avatarUrl } : null } : null };
+          return { ...dto(record, false, false), createdAt: (record.createdAt as Date).toISOString(), updatedAt: (record.updatedAt as Date).toISOString(), createBy: (record.createBy as string | null | undefined) ?? null, createByUser: user ? { id: user.id, login: user.login, partner: user.partner ? { name: user.partner.name, avatarUrl: user.partner.avatarUrl } : null } : null };
         });
       }
       return (await delegateOf(tx, entry.delegate).findMany({ ...args, select })).map(row => dto(row, false, false));

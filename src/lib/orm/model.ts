@@ -4,7 +4,7 @@ import { compileActionParameters, parseActionParameters, type ActionParameterMet
 import type { ActionDeclaration } from "./decorators";
 import { fieldInputSchema } from "./sequence";
 import { isField, isOne2many, isMany2many, type Many2manyField, type One2manyField, type Field, type FieldMetadata } from "./fields";
-import { ModelValidationError, type ModelActor, type ModelContext } from "./context";
+import { ModelValidationError, type ModelActor, type ModelContext, type RemoveContext } from "./context";
 import type { Prisma } from "@/generated/prisma/client";
 import { modelSnapshot } from "./snapshot";
 import { compileModelMethods } from "./reactions";
@@ -26,6 +26,8 @@ export abstract class Model {
   normalize?(values: Readonly<Record<string, unknown>>): Record<string, unknown>;
   beforeSave?(values: Record<string, unknown>, context: ModelContext): Record<string, unknown> | Promise<Record<string, unknown>>;
   afterSave?(record: Record<string, unknown>, context: ModelContext): void | Promise<void>;
+  /** Reject a deletion with ModelValidationError; runs in the deletion transaction. */
+  beforeRemove?(record: Readonly<Record<string, unknown>>, context: RemoveContext): void | Promise<void>;
 }
 
 type Constructor = new () => Model;
@@ -120,6 +122,7 @@ export function defineModel<C extends Constructor>(Declaration: C, options: Mode
       return result;
     },
     async afterSave(record: Record<string, unknown>, context: ModelContext<Values<InstanceType<C>>>) { await instance.afterSave?.(record, context); },
+    async beforeRemove(record: Readonly<Record<string, unknown>>, context: RemoveContext) { await instance.beforeRemove?.(modelSnapshot(record as Record<string, unknown>), Object.freeze({ ...context })); },
     /** Published business actions (name/label/groups). Only these names can be executed. */
     actions: actions.list,
     parseActionParams(name: string, input: unknown): Record<string, unknown> {
@@ -152,7 +155,7 @@ export type ActionRecord<I> = Readonly<Values<I> & RelationInput<I> & { id: stri
 /** Patch an action may return: only declared fields. */
 export type ActionPatch<I> = Partial<Values<I> & RelationInput<I>> | void;
 
-const internalMethods = new Set(["normalize", "beforeSave", "afterSave", "displayName", "constructor"]);
+const internalMethods = new Set(["normalize", "beforeSave", "afterSave", "beforeRemove", "displayName", "constructor"]);
 function compileActions(model: string, instance: object, declarations: readonly ActionDeclaration[]) {
   const byName = new Map<string, { method: string; label: string; groups?: readonly string[]; parameters?: CompiledActionParameters }>();
   for (const declaration of declarations) {

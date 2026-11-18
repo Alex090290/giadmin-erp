@@ -61,7 +61,7 @@ type CommonMetadata = {
 };
 export type SelectionOption = { readonly value: string; readonly label: string };
 export type FieldMetadata = CommonMetadata & (
-  | { readonly kind: "text"; readonly trim: boolean; readonly minLength?: number; readonly maxLength?: number }
+  | { readonly kind: "text"; readonly trim: boolean; readonly minLength?: number; readonly maxLength?: number; readonly writeOnly?: boolean }
   | { readonly kind: "image"; readonly folder: string; readonly maxLength: number }
   | { readonly kind: "integer"; readonly min?: number; readonly max?: number }
   | { readonly kind: "boolean" }
@@ -148,7 +148,9 @@ function makeField<I, O>(schema: z.ZodType<O, I>, options: CommonOptions & { def
 }
 
 function nullableString(value: string | null) { return value === "" ? null : value; }
-type TextOptions = NullableOptions<string> & { sequence?: SequenceOptions; minLength?: number; maxLength?: number; trim?: boolean; related?: string; compute?: string };
+type TextOptions = NullableOptions<string> & { sequence?: SequenceOptions; minLength?: number; maxLength?: number; trim?: boolean; related?: string; compute?: string;
+  /** Secret written by the server (e.g. hashed) and never read back nor published: implies sensitive. */
+  writeOnly?: boolean };
 type ImageOptions = NullableOptions<string> & { maxLength?: number; compute?: string } & ({ folder: string; related?: string } | { related: string; folder?: string } | { compute: string; folder?: string; related?: string });
 type IntegerOptions = NullableOptions<number> & { min?: number; max?: number; compute?: string };
 type BooleanOptions = Omit<CommonOptions, "required"> & { default?: Default<boolean> };
@@ -168,14 +170,16 @@ export const Fields = Object.freeze({
   },
 
   Text<const O extends TextOptions = Record<never, never>>(options: O = {} as O): DeclaredField<string | null, RequiredValue<string, O>, O> {
-    checkOptions(options, ["minLength", "maxLength", "trim", "related", "compute", "sequence"]);
+    checkOptions(options, ["minLength", "maxLength", "trim", "related", "compute", "sequence", "writeOnly"]);
+    if (options.writeOnly !== undefined && options.writeOnly !== true) throw new Error("writeOnly sólo admite true.");
+    if (options.writeOnly && (options.required || options.unique || options.tracking || options.sequence || options.related !== undefined || options.compute !== undefined || Object.hasOwn(options, "default") || presentationKeys.some(key => options[key]))) throw new Error("writeOnly es un secreto opcional: sin required, unique, tracking, default, sequence, related, compute ni opciones de colección.");
     const sequence = options.sequence === undefined ? undefined : sequenceConfig(options.sequence);
     if (sequence) {
       if (options.required === false || options.unique === false || options.sensitive || options.related !== undefined || options.compute !== undefined || Object.hasOwn(options, "default") || options.trim === false || options.minLength !== undefined) throw new Error("sequence es obligatorio, único y generado: sin default, sensitive, related, compute, minLength ni trim:false.");
       const length = sequence.prefix.replaceAll("{year}", "2000").length + sequence.padding;
       if (options.maxLength !== undefined && options.maxLength < length) throw new Error("maxLength no permite el formato del folio.");
     }
-    const settings = { ...options, ...(sequence ? { required: true, unique: true } : {}), sequence };
+    const settings = { ...options, ...(sequence ? { required: true, unique: true } : {}), ...(options.writeOnly ? { sensitive: true } : {}), sequence };
     checkBounds(settings.minLength, settings.maxLength, true);
     if (settings.required && settings.maxLength === 0) throw new Error("Un texto obligatorio debe permitir al menos un carácter.");
     if (settings.trim !== undefined && typeof settings.trim !== "boolean") throw new Error("trim debe ser booleano.");
@@ -187,7 +191,7 @@ export const Fields = Object.freeze({
     const nonempty = z.string({ error: `${label}: campo obligatorio.` }).min(1, `${label}: campo obligatorio.`).pipe(value);
     const schema = z.string({ error: `${label}: escribe un texto válido.` }).nullable().transform(text => nullableString(trim ? text?.trim() ?? null : text))
       .pipe(settings.required ? nonempty : value.nullable());
-    return makeField(schema as z.ZodType<RequiredValue<string, O>, string | null>, settings, "", { kind: "text", trim: settings.trim !== false, minLength: settings.minLength, maxLength: settings.maxLength }) as DeclaredField<string | null, RequiredValue<string, O>, O>;
+    return makeField(schema as z.ZodType<RequiredValue<string, O>, string | null>, settings, "", { kind: "text", trim: settings.trim !== false, minLength: settings.minLength, maxLength: settings.maxLength, ...(options.writeOnly ? { writeOnly: true } : {}) }) as DeclaredField<string | null, RequiredValue<string, O>, O>;
   },
 
   Integer<const O extends IntegerOptions = Record<never, never>>(options: O = {} as O): DeclaredField<number | null, RequiredValue<number, O>, O> {

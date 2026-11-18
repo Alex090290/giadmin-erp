@@ -53,6 +53,7 @@ type Contract<T extends Record<string, unknown>> = CollectionComputed & {
   formSchema?: z.ZodType<T>;
   prepareSave?(values: T, context: ModelContext<T>): Promise<T>;
   constrain?(values: Readonly<Record<string, unknown>>, context: ModelContext<T>): Promise<void>;
+  beforeRemove?(record: Readonly<Record<string, unknown>>, context: import("./context").RemoveContext): Promise<void>;
   readonly relatedFields?:Readonly<Record<string,Field>>;
   reactionRules?:readonly ReactionRule[];
   react?(field:string,values:Readonly<Record<string,unknown>>,context:ReactionContext):Promise<{patch:Record<string,unknown>;preview:Record<string,string|number|boolean|null>}>;
@@ -167,7 +168,9 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     searchFields: policy?.searchFields ?? presentation.searchFields!,
   };
   for (const [name, loader] of Object.entries(presentation.relations ?? {})) {
-    if (model.metadata[name]?.kind !== "many2one" || model.metadata[name].sensitive || typeof loader !== "function" || !config.columns.some(column => column.field === name)) throw new Error("Las etiquetas requieren una relación publicada y un lookup autorizado.");
+    // createBy (audit) is the creator Many2one to User, labelled by a fixed server provider.
+    const creator = name === "createBy" && presentation.audit === true;
+    if ((!creator && (model.metadata[name]?.kind !== "many2one" || model.metadata[name].sensitive)) || typeof loader !== "function" || !config.columns.some(column => column.field === name)) throw new Error("Las etiquetas requieren una relación publicada y un lookup autorizado.");
   }
   const allowed = new Set(["id", ...Object.keys(collectionMetadata)]);
   if (presentation.audit) for (const field of ["createdAt", "updatedAt", "createBy", "createByUser.login", "createByUser.partner.name"]) allowed.add(field);
@@ -597,6 +600,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
       if (!current || current.revision !== revision) throw new ModelValidationError(conflict);
       const owners = await captureOwners(tx, actor, current, current, presentation.owners ?? [], options);
       if (!repository.remove) throw new Error("MODEL_NOT_BOUND");
+      await model.beforeRemove?.(current as Readonly<Record<string, unknown>>, { tx, actor, id });
       await repository.remove(tx, id, revision);
       for (const owner of owners) await owner.parent.refresh(tx, actor, owner.previous);
     },

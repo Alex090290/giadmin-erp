@@ -24,7 +24,6 @@ export function modelCollection(config: ModelClientConfig, declared?: readonly M
   // Audit columns have fixed descriptors (readable creator and dates), never a User field chosen here.
   const audit: Readonly<Record<string, ListColumn>> = config.audit ? Object.fromEntries(auditCollectionColumns.map(column => [column.field, column])) : {};
   const project = (columns: readonly ModelColumn[]) => columns.map(column => {
-    if (column.field === "createBy") throw new Error(`${config.id}: createBy es el ID de User; publica la auditoría con audit: true y usa la columna createByUser.partner.name («Creado por»).`);
     const isAudit = Object.hasOwn(audit, column.field);
     if (!config.list.fields.includes(column.field) || (!Object.hasOwn(fields, column.field) && !isAudit)) throw new Error(`${config.id}: la columna ${column.field} no está publicada en la política de lista del servidor.`);
     const capabilities = {

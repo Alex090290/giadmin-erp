@@ -1,6 +1,6 @@
 # Aplicación Módulos
 
-Implementada el 2026-11-13 en `/erp/modulos`, disponible sólo para
+Implementada el 2026-11-13; desde el 2026-11-18 vive en `Ajustes → Módulos` (`/erp/ajustes/modulos`; `/erp/modulos` redirige), disponible sólo para
 administradores. Es una aplicación nativa de administración, registrada en el
 catálogo junto a Control de accesos. No añade tablas propias ni migraciones.
 
@@ -164,7 +164,7 @@ pueden descubrir. No es una tienda ni descarga paquetes remotos.
 
 TypeScript pasa a dependencia de ejecución porque el servidor usa su parser AST;
 se conserva la versión fijada en el lockfile. Next incluye explícitamente en los
-traces de `/erp/modulos` sus manifests, perfiles y esquemas/propiedad necesarios.
+traces de `/erp/ajustes/modulos` sus manifests, perfiles y esquemas/propiedad necesarios.
 Las fuentes no se sirven como archivos públicos ni se envían completas al cliente.
 La misma funcionalidad requiere un servidor Node y acceso de lectura al catálogo;
 un despliegue estático no puede ofrecer esta administración.

@@ -125,34 +125,36 @@ test("declared compute is a readonly collection field, while manual previews and
   assert.throws(() => defineModule({ id: "calc", name: "Calc", icon: "boxes", models: { item: { model: Calc, list: { fields: ["total"], searchFields: [], sortable: [], filterable: [], groupable: [] } } } }), /dependencias/);
 });
 
-test("audit: true publishes readable creator and dates; createBy and unpublished audit are rejected", () => {
+test("audit: true publishes the creator as a Many2one plus dates; groups by creator, never searches", () => {
   class Nota extends Model {
     name = Fields.Text({ label: "Nombre", required: true });
     estado = Fields.Selection([{ value: "a", label: "A" }], { label: "Estado", required: true, default: "a" });
   }
   const entry = defineModule({ id: "notas", name: "Notas", icon: "boxes", models: { nota: { model: Nota, audit: true } } }).models[0];
-  assert.deepEqual(entry.list.fields, ["name", "estado", "createByUser.partner.name", "createdAt", "updatedAt"]);
-  assert.ok(["createByUser.partner.name", "createdAt", "updatedAt"].every(name => entry.list.sortable?.includes(name) && entry.list.filterable?.includes(name)));
-  assert.ok(!entry.list.searchFields.includes("createdAt") && !(entry.list.groupable ?? []).includes("createdAt"));
+  assert.deepEqual(entry.list.fields, ["name", "estado", "createBy", "createdAt", "updatedAt"]);
+  assert.ok(["createBy", "createdAt", "updatedAt"].every(name => entry.list.filterable?.includes(name)));
+  assert.ok(["createdAt", "updatedAt"].every(name => entry.list.sortable?.includes(name)) && !entry.list.sortable?.includes("createBy"));
+  assert.ok(entry.list.groupable?.includes("createBy") && !entry.list.groupable?.includes("createdAt"));
+  assert.ok(!entry.list.searchFields.includes("createBy"));
   const audited: ModelClientConfig = { ...config, fields: entry.metadata, preview: {}, related: [], audit: true, kanban: undefined, list: {
     fields: entry.list.fields, searchFields: entry.list.searchFields,
     sortable: entry.list.sortable ?? [], filterable: entry.list.filterable ?? [], groupable: entry.list.groupable ?? [],
   } };
-  const source = modelCollection(audited, [{ field: "name" }, { field: "createByUser.partner.name", label: "Autor" }, { field: "createdAt" }]);
-  assert.deepEqual(source.columns.slice(1).map(({ field, label, type, widget, avatarField, sortable, filterable, groupable }) => ({ field, label, type, widget, avatarField, sortable, filterable, groupable })), [
-    { field: "createByUser.partner.name", label: "Autor", type: "text", widget: "partner", avatarField: "createByUser.partner.avatarUrl", sortable: true, filterable: true, groupable: false },
-    { field: "createdAt", label: "Creado el", type: "datetime", widget: undefined, avatarField: undefined, sortable: true, filterable: true, groupable: false },
+  const source = modelCollection(audited, [{ field: "name" }, { field: "createBy", label: "Autor" }, { field: "createdAt" }]);
+  assert.deepEqual(source.columns.slice(1).map(({ field, label, type, widget, sortable, filterable, groupable }) => ({ field, label, type, widget, sortable, filterable, groupable })), [
+    { field: "createBy", label: "Autor", type: "text", widget: "many2one", sortable: false, filterable: true, groupable: true },
+    { field: "createdAt", label: "Creado el", type: "datetime", widget: undefined, sortable: true, filterable: true, groupable: false },
   ]);
   assert.equal(modelCollection(audited).columns.length, 5, "default presentation includes the audit columns");
-  assert.throws(() => modelCollection(audited, [{ field: "createBy" }]), /createByUser\.partner\.name/);
+  assert.throws(() => modelCollection(audited, [{ field: "createByUser.partner.name" }]), /no está publicada/);
   assert.throws(() => modelCollection(audited, [{ field: "createdAt", type: "text" }]), /auditoría/);
   assert.throws(() => modelCollection({ ...audited, audit: undefined }, [{ field: "createdAt" }]), /no está publicada/);
-  // Without audit: true the manifest cannot publish them, and createBy is never a column.
+  // Without audit: true the manifest cannot publish them; createBy is grouped, never sorted or searched.
   assert.throws(() => defineModule({ id: "notas", name: "Notas", icon: "boxes", models: { nota: { model: Nota, list: { fields: ["name", "createdAt"] } } } }), /audit: true/);
-  assert.throws(() => defineModule({ id: "notas", name: "Notas", icon: "boxes", models: { nota: { model: Nota, audit: true, list: { fields: ["name", "createBy"] } } } }), /ID de User/);
-  assert.throws(() => defineModule({ id: "notas", name: "Notas", icon: "boxes", models: { nota: { model: Nota, audit: true, list: { groupable: ["createdAt"] } } } }), /no se busca ni agrupa/);
-  // Explicit list.fields decide placement; derived fields leave room for the three columns.
-  const placed = defineModule({ id: "notas", name: "Notas", icon: "boxes", models: { nota: { model: Nota, audit: true, list: { fields: ["createdAt", "name"] } } } }).models[0];
-  assert.deepEqual(placed.list.fields, ["createdAt", "name"]);
-  assert.deepEqual(placed.list.sortable, ["name", "createdAt"]);
+  assert.throws(() => defineModule({ id: "notas", name: "Notas", icon: "boxes", models: { nota: { model: Nota, audit: true, list: { groupable: ["createdAt"] } } } }), /no se busca/);
+  assert.throws(() => defineModule({ id: "notas", name: "Notas", icon: "boxes", models: { nota: { model: Nota, audit: true, list: { sortable: ["createBy"] } } } }), /createByUser.partner.name/);
+  // Explicit list.fields decide placement, including the optional creator name column.
+  const placed = defineModule({ id: "notas", name: "Notas", icon: "boxes", models: { nota: { model: Nota, audit: true, list: { fields: ["createdAt", "name", "createByUser.partner.name"] } } } }).models[0];
+  assert.deepEqual(placed.list.fields, ["createdAt", "name", "createByUser.partner.name"]);
+  assert.deepEqual(placed.list.sortable, ["name", "createByUser.partner.name", "createdAt"]);
 });

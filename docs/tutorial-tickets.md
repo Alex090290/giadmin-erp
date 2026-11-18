@@ -1,5 +1,11 @@
 # Tickets: aprender el framework desde cero
 
+> **Pausada y retirada el 2026-11-18.** El usuario desinstaló Tickets con «Eliminar
+> datos» (migración `20261118165807_uninstall_tickets`, commit `71d3358`) para dar
+> prioridad a convertir Partner/User en un módulo nativo `core` y crear la app
+> «Ajustes». El avance (ejercicios 0–6 parciales) quedó en Git en `68a31d5`. La guía
+> se retomará desde cero sobre la base nueva; el ejercicio 6 podrá usar Partner/User.
+
 Guía preparada el 2026-11-17. **Estado al 2026-11-18: ejercicios 0–5 completados;
 ejercicio 6 en curso, selector y columna de categoría conectados; sigue filtro.** El módulo Tickets ya está creado e
 instalado. El usuario escribe sus archivos y ejecuta los pasos; el agente explica,
