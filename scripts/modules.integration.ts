@@ -50,7 +50,60 @@ try {
     .replace('"@tailwindcss/turbopack"', `{ loader: "@tailwindcss/turbopack", options: { base: ${JSON.stringify(join(root, "src"))} } }`));
   prisma(["migrate", "deploy"]);
 
-  if (process.argv.includes("--one2many-only")) {
+  if (process.argv.includes("--parameters-only")) {
+    const target = join(root, "src/modules/parametros");
+    await mkdir(join(target, "models"), { recursive: true });
+    await cp(join(project, "scripts/fixtures/modules-parameters/models.fixture"), join(target, "models/ticket.ts"));
+    await cp(join(project, "scripts/fixtures/modules-parameters/manifest.fixture"), join(target, "manifest.ts"));
+    tsx(join(root, "scripts/orm-install.ts"), ["parametros", "--write"], "orm:install parameter fixture");
+    const sql = command("prisma", ["migrate", "diff", "--from-config-datasource", "--to-schema", join(root, "prisma/models"), "--script", "--config", join(root, "prisma7.config.ts")], "parameter migration diff");
+    assert.doesNotMatch(sql, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bTRUNCATE\b/i);
+    await mkdir(join(root, "prisma/migrations/20990206000000_parameters"));
+    await writeFile(join(root, "prisma/migrations/20990206000000_parameters/migration.sql"), sql);
+    prisma(["migrate", "deploy"]); prisma(["generate"]);
+    await writeFile(join(root, "src/modules/index.ts"), `import "server-only";\nimport parametros from "./parametros/manifest";\nexport const modules = [parametros];\n`);
+    await cp(join(project, "scripts/fixtures/action-parameters-check.fixture"), join(root, "action-parameters-check.ts"));
+    console.log(tsx(join(root, "action-parameters-check.ts"), [], "action parameter service check").trim());
+    command("next", ["typegen"], "Next route types");
+    command("tsc", ["--noEmit", "--incremental", "false"], "parameter fixture types");
+  } else if (process.argv.includes("--sequences-only")) {
+    const target = join(root, "src/modules/series");
+    await mkdir(join(target, "models"), { recursive: true });
+    await cp(join(project, "scripts/fixtures/modules-sequence/models.fixture"), join(target, "models/ticket.ts"));
+    await cp(join(project, "scripts/fixtures/modules-sequence/manifest.fixture"), join(target, "manifest.ts"));
+    tsx(join(root, "scripts/orm-install.ts"), ["series", "--write"], "orm:install sequence fixture");
+    const sql = command("prisma", ["migrate", "diff", "--from-config-datasource", "--to-schema", join(root, "prisma/models"), "--script", "--config", join(root, "prisma7.config.ts")], "sequence migration diff");
+    assert.match(sql, /CREATE UNIQUE INDEX "series_ticket_name_key"/);
+    assert.doesNotMatch(sql, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bTRUNCATE\b/i);
+    await mkdir(join(root, "prisma/migrations/20990205000000_sequences"));
+    await writeFile(join(root, "prisma/migrations/20990205000000_sequences/migration.sql"), sql);
+    prisma(["migrate", "deploy"]); prisma(["generate"]);
+    await writeFile(join(root, "src/modules/index.ts"), `import "server-only";\nimport series from "./series/manifest";\nexport const modules = [series];\n`);
+    await cp(join(project, "scripts/fixtures/sequence-check.fixture"), join(root, "sequence-check.ts"));
+    console.log(tsx(join(root, "sequence-check.ts"), [], "sequence service check").trim());
+    tsx(join(root, "scripts/eject-view.ts"), ["series", "ticket", "form"], "eject sequence form");
+    command("next", ["typegen"], "Next route types");
+    command("tsc", ["--noEmit", "--incremental", "false"], "sequence fixture types");
+  } else if (process.argv.includes("--many2many-only")) {
+    const target = join(root, "src/modules/vinculos");
+    await mkdir(join(target, "models"), { recursive: true });
+    await cp(join(project, "scripts/fixtures/modules-many2many/models.fixture"), join(target, "models/ticket.ts"));
+    await cp(join(project, "scripts/fixtures/modules-many2many/manifest.fixture"), join(target, "manifest.ts"));
+    tsx(join(root, "scripts/orm-install.ts"), ["vinculos", "--write"], "orm:install Many2many fixture");
+    const sql = command("prisma", ["migrate", "diff", "--from-config-datasource", "--to-schema", join(root, "prisma/models"), "--script", "--config", join(root, "prisma7.config.ts")], "Many2many migration diff");
+    assert.match(sql, /CREATE TABLE "vinculos_ticket_etiquetas_rel"/);
+    assert.doesNotMatch(sql, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bTRUNCATE\b/i);
+    await mkdir(join(root, "prisma/migrations/20990204000000_many2many"));
+    await writeFile(join(root, "prisma/migrations/20990204000000_many2many/migration.sql"), sql);
+    prisma(["migrate", "deploy"]); prisma(["generate"]);
+    await writeFile(join(root, "src/modules/index.ts"), `import "server-only";\nimport vinculos from "./vinculos/manifest";\nexport const modules = [vinculos];\n`);
+    await cp(join(project, "scripts/fixtures/many2many-check.fixture"), join(root, "many2many-check.ts"));
+    console.log(tsx(join(root, "many2many-check.ts"), [], "Many2many service check").trim());
+    tsx(join(root, "scripts/eject-view.ts"), ["vinculos", "ticket", "form"], "eject Many2many form");
+    assert.match(await readFile(join(target, "views/TicketForm.tsx"), "utf8"), /FieldRelationTag<Values> name="etiquetas"/);
+    command("next", ["typegen"], "Next route types");
+    command("tsc", ["--noEmit", "--incremental", "false"], "Many2many fixture types");
+  } else if (process.argv.includes("--one2many-only")) {
     const target = join(root, "src/modules/lineas");
     await mkdir(target, { recursive: true });
     await cp(join(project, "scripts/fixtures/modules-lineas/manifest.fixture"), join(target, "manifest.ts"));

@@ -9,7 +9,7 @@ export function fieldFromMetadata(field: FieldMetadata): Field {
     list: field.list, searchable: field.searchable, sortable: field.sortable, filterable: field.filterable, groupable: field.groupable };
   const defined = <T extends Record<string, unknown>>(value: T) => Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
   switch (field.kind) {
-    case "text": return Fields.Text(defined({ ...common, trim: field.trim, minLength: field.minLength, maxLength: field.maxLength }) as never);
+    case "text": return Fields.Text(defined({ ...common, trim: field.trim, minLength: field.minLength, maxLength: field.maxLength, ...(field.sequence ? { sequence: field.sequence } : {}) }) as never);
     case "image": return Fields.Image(defined({ ...common, folder: field.folder, maxLength: field.maxLength }) as never);
     case "integer": return Fields.Integer(defined({ ...common, min: field.min, max: field.max }) as never);
     case "boolean": return Fields.Boolean(defined(common) as never);

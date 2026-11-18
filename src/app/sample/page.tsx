@@ -10,6 +10,9 @@ import { Suspense } from "react";
 import SampleForms from "./SampleForms";
 import ImageSample from "./ImageSample";
 import Many2OneSample from "./Many2OneSample";
+import ActionParametersSample from "./ActionParametersSample";
+import SequenceSample from "./SequenceSample";
+import Many2manySample from "./Many2manySample";
 import RelationTagSample from "./RelationTagSample";
 import ListViewSample from "./ListViewSample";
 import FormViewSample from "./FormViewSample";
@@ -54,6 +57,8 @@ export default function PageSample() {
             <a className="btn btn-sm btn-outline" href="#form-view">FormView</a>
             <a className="btn btn-sm btn-outline" href="#form-deletion">Eliminar desde formulario</a>
             <a className="btn btn-sm btn-outline" href="#form-actions">Acciones de formulario</a>
+            <a className="btn btn-sm btn-outline" href="#action-parameters">Parámetros de acciones</a>
+            <a className="btn btn-sm btn-outline" href="#action-parameters">Parámetros de acciones</a>
             <a className="btn btn-sm btn-outline" href="#model-capabilities">Capacidades</a>
             <a className="btn btn-sm btn-outline" href="#record-audit">Auditoría</a>
             <a className="btn btn-sm btn-outline" href="#alerts">Alertas</a>
@@ -71,6 +76,8 @@ export default function PageSample() {
             <a className="btn btn-sm btn-outline" href="#field-many2one">FieldMany2One</a>
             <a className="btn btn-sm btn-outline" href="#model-display-name">Nombre desde el modelo</a>
             <a className="btn btn-sm btn-outline" href="#field-relation-tag">FieldRelationTag</a>
+            <a className="btn btn-sm btn-outline" href="#many2many-model">Many2many</a>
+            <a className="btn btn-sm btn-outline" href="#model-sequences">Folios</a>
             <a className="btn btn-sm btn-outline" href="#field-one2many">FieldOne2many</a>
             <a className="btn btn-sm btn-outline" href="#one2many-model">Líneas declarativas</a>
             <a className="btn btn-sm btn-outline" href="#field-date">FieldDate</a>
@@ -96,12 +103,15 @@ export default function PageSample() {
         <FormViewSample />
         <FormDeletionSample />
         <FormActionsSample />
+        <ActionParametersSample />
         <CapabilitiesSample />
         <AuditSample />
         <SampleForms />
         <Many2OneSample />
         <ModelDisplayNameSample />
         <RelationTagSample />
+        <Many2manySample />
+        <SequenceSample />
         <One2manySample />
         <One2manyDeclarativeSample />
         <ImageSample />

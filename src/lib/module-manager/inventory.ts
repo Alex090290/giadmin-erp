@@ -85,7 +85,15 @@ export async function readModuleInventory(root: string): Promise<ModuleInventory
         const manifest = await readSource(join(root, directory, entry.name, "manifest.ts"));
         if (manifest === null) continue;
         if (baseKind === "manual" && await readSource(join(root, directory, entry.name, "orm.config.ts")) !== null) kind = "scaffold";
-        declarations.push(inspectManifest(manifest, entry.name, kind));
+        const declaration = inspectManifest(manifest, entry.name, kind);
+        // Junctions are internal owned storage, not public manifest models. Only trust
+        // the installed, hash-verified source; never evaluate available manifests.
+        const installed = snapshot.state.modules[entry.name];
+        if (kind === "declarative" && installed) {
+          const links = prismaBlocks(snapshot.clean[installed.file]).filter(block => block.kind === "model" && /^\s*\/\/ lite-erp:many2many\s*$/m.test(block.body));
+          declaration.models.push(...links.map(block => block.name));
+        }
+        declarations.push(declaration);
       } catch {
         declarations.push({ id: entry.name, name: entry.name, description: "", version: "", kind, models: [], depends: [], issues: ["No se pudo inspeccionar el manifest. Revisa su declaración y que sus archivos no sean enlaces."] });
       }

@@ -6,3 +6,8 @@ export type ModelContext<T = Record<string, unknown>> = { tx: Prisma.Transaction
 export class ModelValidationError extends Error {
   constructor(message: string, readonly fieldErrors?: Record<string, string>) { super(message); }
 }
+
+/** Validation of ephemeral action inputs, separate from document field errors. */
+export class ActionParameterError extends ModelValidationError {
+  constructor(message: string, readonly parameterErrors?: Record<string, string>) { super(message); }
+}

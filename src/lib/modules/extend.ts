@@ -1,6 +1,6 @@
 import "server-only";
 import { Model } from "../orm/model";
-import { isField, isOne2many, type Field } from "../orm/fields";
+import { isField, isOne2many, isMany2many, type Field } from "../orm/fields";
 import { relationFieldName } from "../orm/display";
 
 type ModelClass = new () => Model;
@@ -40,7 +40,10 @@ export function extensionFields(extension: ModelExtension): Readonly<Record<stri
   const fields: Record<string, Field> = {};
   for (const [name, value] of Object.entries(new Extended())) {
     if (value === undefined || typeof value === "function") continue;
+    if (isMany2many(value)) throw new Error(`${name}: las extensiones todavía no admiten Many2many.`);
     if (isOne2many(value)) throw new Error(`${name}: las extensiones todavía no admiten One2many.`);
+    if (isField(value) && value.metadata.sequence) throw new Error(`${name}: sequence debe declararse en el modelo dueño, no en una extensión.`);
+    if (isField(value) && value.metadata.sequence) throw new Error(`${name}: sequence debe declararse en el modelo dueño, no en una extensión.`);
     if (isField(value)) fields[name] = value;
   }
   return fields;

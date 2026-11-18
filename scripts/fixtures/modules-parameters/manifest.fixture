@@ -1,0 +1,7 @@
+import "server-only";
+import { defineModule } from "@/lib/modules/define";
+import { Ticket, Tecnico } from "./models/ticket";
+export default defineModule({ id: "parametros", name: "Parámetros", icon: "list", models: { ticket: Ticket, tecnico: Tecnico }, groups: { operador: "Operador", consulta: "Consulta", sinaccion: "Sin acción" },
+  access: [{ group: "operador", models: "ticket", perms: "crud" }, { group: "operador", models: "tecnico", perms: "r" }, { group: "consulta", models: ["ticket", "tecnico"], perms: "r" }, { group: "sinaccion", models: "ticket", perms: "crud" }, { group: "sinaccion", models: "tecnico", perms: "r" }],
+  rules: [{ id: "propios", label: "Tickets propios", models: "ticket", groups: ["operador"], domain: ({ actor }) => [{ field: "createBy", operator: "eq", value: actor.id }] }, { id: "tecnicos-activos", label: "Técnicos activos", models: "tecnico", groups: ["operador"], domain: [{ field: "active", operator: "eq", value: true }] }],
+});

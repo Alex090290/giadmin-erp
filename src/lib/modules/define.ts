@@ -271,7 +271,7 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
       const { target, inverse } = field.one2many;
       const child = models.find(model => model.contract.name === target);
       const foreign = child?.metadata[inverse];
-      if (!child || child === parent || Object.keys(child.contract.one2manyFields).length || foreign?.kind !== "many2one" || foreign.target !== parent.contract.name || !foreign.required || foreign.unique || foreign.onDelete !== "Restrict" || Object.values(child.metadata).some(field => field.sensitive)) throw new Error(`${parent.id}.${name}: One2many requiere un hijo del mismo módulo sin líneas/sensitive y un Many2one inverso obligatorio, no único, con Restrict.`);
+      if (!child || child === parent || Object.keys(child.contract.one2manyFields).length || Object.keys(child.contract.many2manyFields).length || foreign?.kind !== "many2one" || foreign.target !== parent.contract.name || !foreign.required || foreign.unique || foreign.onDelete !== "Restrict" || Object.values(child.metadata).some(field => field.sensitive)) throw new Error(`${parent.id}.${name}: One2many requiere un hijo del mismo módulo sin líneas/Many2many/sensitive y un Many2one inverso obligatorio, no único, con Restrict.`);
       const key = `${target}.${inverse}`;
       if (inverses.has(key)) throw new Error(`${key}: una inversa sólo puede pertenecer a una declaración One2many.`);
       inverses.add(key);
@@ -279,6 +279,7 @@ export function defineModule(spec: ModuleSpec): ModuleDefinition {
       children.add(target);
     }
   }
+  for (const model of models) if (Object.keys(model.contract.many2manyFields).length > 4) throw new Error(`${model.id}: máximo cuatro relaciones Many2many.`);
   const byKey = new Map(models.map(model => [model.key, model]));
   const ruleTargets = Object.fromEntries(extensions.map(extension => {
     const metadata = defineModel(extension.extension.apply(extension.extension.base), { name: "ExtensionRules", table: "extension_rules" }).metadata as Readonly<Record<string, FieldMetadata>>;

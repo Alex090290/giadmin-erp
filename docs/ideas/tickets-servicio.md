@@ -17,10 +17,10 @@ para un piloto posterior tipo pedidos).
 | --- | --- | --- |
 | Dependencias entre módulos | Solicitante/técnico como User/Partner; ticket ligado a un registro de otro módulo declarativo (Flota se retiró el 2026-11-17: elegir otro módulo o reinstalarla sólo si el usuario lo pide) | Parcial: Many2one a User existe; dependencia declarada entre módulos declarativos, no |
 | Herencia/extensión de modelos | Añadir campos de Tickets a un modelo de otro módulo o a Partner (p. ej. departamento) | Fases 1–2 sí (declarativos, colecciones, vistas y reglas); Partner/User en fase 3. [Diseño](herencia-modelos.md) |
-| Folio/secuencia | `TCK-0001` consecutivo, seguro en concurrencia | No |
+| Folio/secuencia | `TCK-0001` consecutivo, seguro en concurrencia | Sí al crear; serie por modelo/campo y año UTC opcional. [Contrato](../folios-secuencias.md) |
 | Fecha sin hora | Fecha compromiso/vencimiento | No (sólo DateTime UTC) |
-| Acciones con parámetros | «Cerrar» con nota de resolución; «Reasignar» con técnico | No (`@action` recibe sólo el registro) |
-| Many2many | Etiquetas y observadores | No |
+| Acciones con parámetros | «Cerrar» con nota de resolución; «Reasignar» con técnico | Sí: Fields, validación y diálogo desde FormButton. Many2one sólo a destinos declarativos. [Contrato](../acciones-parametros.md) |
+| Many2many | Etiquetas y observadores | Sí para destinos declarativos; User/Partner manuales e inversa editable pendientes. [Contrato](../relaciones-many2many.md) |
 | Reglas por registro | Solicitante ve los suyos; técnico los asignados; supervisor todos | Sí |
 | Kanban con transiciones | Nuevo → En proceso → En espera → Resuelto → Cerrado | Sí |
 | Efectos fuera de la transacción | Aviso al técnico al asignar (afterCommit/cola) | No; dejar al final |

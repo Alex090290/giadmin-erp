@@ -1,0 +1,10 @@
+// Framework-owned counters; never exposed as a module model or editable API.
+model ModelSequence {
+  key           String @db.VarChar(200)
+  period        String @db.VarChar(4)
+  value         BigInt @default(0)
+  configuration String @db.VarChar(64)
+
+  @@id([key, period])
+  @@map("model_sequences")
+}

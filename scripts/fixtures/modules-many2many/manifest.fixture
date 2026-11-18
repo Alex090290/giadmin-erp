@@ -1,0 +1,9 @@
+import "server-only";
+import { defineModule } from "@/lib/modules/define";
+import { Ticket, Etiqueta } from "./models/ticket";
+export default defineModule({ id: "vinculos", name: "Vínculos", icon: "tags", models: { ticket: Ticket, etiqueta: Etiqueta },
+  groups: { editor: "Editor", sinlectura: "Sin lectura de etiquetas" },
+  access: [{ group: "editor", models: "ticket", perms: "crud" }, { group: "editor", models: "etiqueta", perms: "r" }, { group: "sinlectura", models: "ticket", perms: "crud" }],
+  rules: [{ id: "propios", label: "Tickets propios", models: "ticket", groups: ["editor"], domain: ({actor}) => [{ field: "createBy", operator: "eq", value: actor.id }] },
+    { id: "visibles", label: "Etiquetas activas", models: "etiqueta", groups: ["editor"], domain: [{ field: "active", operator: "eq", value: true }] }],
+});

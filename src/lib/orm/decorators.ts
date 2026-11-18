@@ -1,9 +1,10 @@
 import "server-only";
+import type { ActionParameterFields } from "./action-parameters";
 export type ReactionDeclaration = { method: string; fields: readonly string[]; reads?: readonly string[]; writes?: readonly string[]; preview?: readonly string[] };
 export type ConstraintDeclaration = { method: string; fields: readonly string[] };
 export type DisplayDeclaration = { method: string; fields: readonly string[] };
 /** Business action published to the browser by name; only decorated methods are executable. */
-export type ActionDeclaration = { method: string; label: string; groups?: readonly string[] };
+export type ActionDeclaration = { method: string; label: string; groups?: readonly string[]; params?: ActionParameterFields };
 type Annotation = { kind: "onchange" | "depends"; options: Omit<ReactionDeclaration,"method"> } | { kind:"constraint" | "display"; fields:readonly string[] } | { kind: "action"; options: Omit<ActionDeclaration,"method"> };
 const annotations = new WeakMap<(...args:never[])=>unknown, Annotation[]>();
 /** Compatibility adapter for Next's supported legacy decorator transform; no reflect-metadata. */
@@ -26,7 +27,8 @@ export const constraint = (...fields:string[]) => annotation({kind:"constraint",
 export const displayName = (...fields:string[]) => annotation({kind:"display",fields});
 /**
  * Publish a model method as a business action (like an Odoo button). It receives the
- * saved record and the transaction context and returns a patch of declared fields;
+ * saved record and transaction context (legacy), or record/params/context when params
+ * are declared, and returns a patch of declared fields;
  * the service applies it through the normal save pipeline (normalize, Zod, hooks,
  * constraints, tracking). Groups restrict who may run it on top of model write access.
  */

@@ -40,9 +40,15 @@ import type { ActionContext, ModelAction } from "./model";
 import { displayProjectionPaths } from "./display";
 import { modelDisplayName, resolveDisplayNames } from "./display.server";
 
+import { parseActionParameters } from "./action-parameters";
+import { ActionParameterError } from "./context";
+import { assignSequences, assertSequences } from "./sequence.server";
+import { validateMany2many } from "./many2many";
+
 const conflict = "El registro cambió desde que lo abriste. Recarga sus datos antes de guardar.";
 type Contract<T extends Record<string, unknown>> = CollectionComputed & {
   readonly computedFields?:Readonly<Record<string,Field>>;
+  readonly many2manyFields?: Readonly<Record<string, import("./fields").Many2manyField>>;
   readonly one2manyFields?: Readonly<Record<string, import("./fields").One2manyField>>;
   formSchema?: z.ZodType<T>;
   prepareSave?(values: T, context: ModelContext<T>): Promise<T>;
@@ -55,12 +61,13 @@ type Contract<T extends Record<string, unknown>> = CollectionComputed & {
   beforeSave?(values: T, context: ModelContext<T>): Promise<T>;
   afterSave?(record: Record<string, unknown>, context: ModelContext<T>): Promise<void>;
   readonly actions?: readonly ModelAction[];
-  runAction?(name: string, record: Readonly<Record<string, unknown>>, context: ActionContext): Promise<Record<string, unknown>>;
+  runAction?(name: string, record: Readonly<Record<string, unknown>>, context: ActionContext, params?: unknown): Promise<Record<string, unknown>>;
+  parseActionParams?(name: string, input: unknown): Record<string, unknown>;
   readonly displayFields?: readonly string[];
   displayName?(record: Readonly<Record<string, unknown>>): string;
 };
 const idSchema = z.string().trim().min(1).max(100);
-const actionRequestSchema = z.strictObject({ action: z.string().regex(/^[a-z][A-Za-z0-9]*$/).max(60), id: idSchema, revision: z.iso.datetime({ precision: 3 }) });
+const actionRequestSchema = z.strictObject({ action: z.string().regex(/^[a-z][A-Za-z0-9]*$/).max(60), id: idSchema, revision: z.iso.datetime({ precision: 3 }), params: z.unknown().optional() });
 const codeOf = (error: unknown) => error && typeof error === "object" && "code" in error ? String(error.code) : "";
 export const fieldListType = (field: FieldMetadata): ListDataType => field.kind === "integer" ? "integer" : field.kind === "boolean" ? "boolean" : field.kind === "datetime" ? "datetime" : "text";
 
@@ -133,7 +140,11 @@ type ServicePresentation = {
 export function createModelService<T extends Record<string, unknown>>(model: Contract<T>, repository: ModelRepository<T>, presentation: ServicePresentation) {
   type Values = T & RecordIdentity;
   const lines = presentation.lines ?? {};
+  const many = model.many2manyFields ?? {};
+  const sequenceFields = Object.fromEntries(Object.entries(model.metadata).filter(([, field]) => field.sequence));
+  const hasSequences = Object.keys(sequenceFields).length > 0;
   const formSchema = model.formSchema ?? model.schema;
+  if (Object.keys(many).length && !presentation.relationAccess) throw new Error("Many2many requiere autorización de los destinos en módulos declarativos.");
   if (Object.keys(model.one2manyFields ?? {}).some(name => !Object.hasOwn(lines, name))) throw new Error("One2many requiere el servicio de líneas de módulos declarativos.");
   const auditFields = new Set(presentation.audit ? ["createdAt", "updatedAt", "createBy", "createByUser.login", "createByUser.partner.name"] : []);
   const policy = presentation.list;
@@ -189,6 +200,11 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
   }
   /** One cached access decision per target/ID within the operation. */
   const relationAccessFor = (tx: Prisma.TransactionClient, actor: ModelActor) => presentation.relationAccess ? cachedRelationAccess(presentation.relationAccess(tx, actor)) : undefined;
+  async function loadDocument(tx: Prisma.TransactionClient, actor: ModelActor, record: Document) {
+    const values = await loadLines(tx, actor, record, lines);
+    await validateMany2many(values, many, relationAccessFor(tx, actor));
+    return values;
+  }
   async function readDisplayName(tx: Prisma.TransactionClient, actor: ModelActor, values: Values) {
     const names = await resolveDisplayNames(tx, [values], model, repository, relationAccessFor(tx, actor));
     return { displayName: names.get(values.id!)! };
@@ -208,7 +224,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         // Records outside the rules behave as not found, without revealing that they exist.
         if (!await inScope(tx, id.data, scope)) return null;
         const scalar = await repository.read(tx, id.data);
-        const values = scalar ? await loadLines(tx, actor, scalar, lines) as Values : null;
+        const values = scalar ? await loadDocument(tx, actor, scalar) as Values : null;
         return values ? { values, ...await readAudit(tx, id.data), ...await readDisplayName(tx, actor, values) } : null;
       }, { isolationLevel: "RepeatableRead" });
       return record ? { ok: true, ...record } : { ok: false, error: "No se encontró este registro." };
@@ -222,7 +238,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     const { id, revision, ...fields } = input as Record<string, unknown>;
     const identity = recordIdentitySchema.safeParse({ id, revision });
     // Reject forged/unknown fields before any model code can discard them.
-    if (Object.keys(fields).some(key => !Object.hasOwn(model.metadata, key) && !Object.hasOwn(lines, key))) throw new ModelValidationError("El registro contiene campos no declarados.");
+    if (Object.keys(fields).some(key => !Object.hasOwn(model.metadata, key) && !Object.hasOwn(lines, key) && !Object.hasOwn(many, key))) throw new ModelValidationError("El registro contiene campos no declarados.");
     if (!identity.success) {
       const errors: Record<string, string> = {};
       for (const issue of identity.error.issues) if (issue.path.length) errors[issue.path.join(".")] ??= issue.message;
@@ -230,20 +246,25 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     }
     const metadata = identity.data;
     const scalarCurrent = metadata.id && await inScope(tx, metadata.id, scope) ? await repository.read(tx, metadata.id) : null;
-    const current = scalarCurrent ? await loadLines(tx, actor, scalarCurrent, lines) as Values : null;
+    const current = scalarCurrent ? await loadDocument(tx, actor, scalarCurrent) as Values : null;
     if (metadata.id) {
       if (!current || current.revision !== metadata.revision) throw new ModelValidationError(conflict);
     }
     const context: ModelContext<T> = Object.freeze({ tx, actor: Object.freeze({ ...actor }), operation: metadata.id ? "update" : "create", id: metadata.id, previous: current ? modelSnapshot(options?.previous ?? current) as ModelContext<T>["previous"] : null });
     if (JSON.stringify(fields).length > 256000) throw new ModelValidationError("El documento supera el tamaño permitido.");
     validateLines(fields, current as Document | null, lines);
-    const normalized = formSchema.parse(model.normalize ? model.normalize(fields) : fields);
+    await validateMany2many(fields, many, relationAccessFor(tx, actor));
+    const sequence = hasSequences ? await assignSequences(tx, model.name, sequenceFields, fields, current) : { values: fields, locked: {} };
+    const normalized = formSchema.parse(model.normalize ? model.normalize(sequence.values) : sequence.values);
+    assertSequences(normalized, sequence.locked);
     const owners = await captureOwners(tx, actor, scalarCurrent, normalized, presentation.owners ?? [], options);
     const values = formSchema.parse(model.prepareSave ? await model.prepareSave(normalized, context) : model.beforeSave ? await model.beforeSave(normalized, context) : normalized);
+    assertSequences(values, sequence.locked);
     validateLines(values, current as Document | null, lines);
+    await validateMany2many(values, many, relationAccessFor(tx, actor));
     for (const owner of presentation.owners ?? []) if (values[owner.inverse] !== normalized[owner.inverse]) throw new ModelValidationError("La lógica del hijo no puede cambiar su documento padre.");
     if (!Object.keys(lines).length) await model.constrain?.(values, context);
-    const scalars = Object.fromEntries(Object.keys(model.metadata).map(name => [name, values[name]])) as T;
+    const scalars = Object.fromEntries([...Object.keys(model.metadata), ...Object.keys(many)].map(name => [name, values[name]])) as T;
     const saved = metadata.id ? await repository.update(tx, metadata.id, metadata.revision!, scalars) : await repository.create(tx, scalars, actor.id);
     const aggregate = await persistLines(tx, actor, saved, values, current as Document | null, lines, model.name);
     const canonical = formSchema.parse(aggregate.values && Object.fromEntries(Object.entries(aggregate.values).filter(([key]) => key !== "id" && key !== "revision")));
@@ -251,30 +272,47 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     await model.afterSave?.(aggregate.values, context);
     const finalScalar = await repository.read(tx, saved.id);
     if (!finalScalar) throw new ModelValidationError("El registro no está disponible después de guardar.");
-    const final = await loadLines(tx, actor, finalScalar, lines) as Values & Document;
+    const final = await loadDocument(tx, actor, finalScalar) as Values & Document;
+    assertSequences(final, sequence.locked);
     if (!await inScope(tx, final.id, scope)) throw new AccessError("DENIED");
-    await recordActivity(tx, model.name, actor.id, model.metadata, current, final, activityLabel ?? (aggregate.changed ? "Líneas actualizadas" : undefined));
+    const relationsChanged = current && Object.keys(many).some(name => JSON.stringify([...(current[name] as string[])].sort()) !== JSON.stringify([...(final[name] as string[])].sort()));
+    await recordActivity(tx, model.name, actor.id, model.metadata, current, final, activityLabel ?? (aggregate.changed ? "Líneas actualizadas" : relationsChanged ? "Relaciones actualizadas" : undefined));
     for (const owner of owners) await owner.parent.refresh(tx, actor, owner.previous);
     // Owner hooks may canonicalize the child again. Never return an obsolete revision.
     if (owners.length) {
       const canonical = await repository.read(tx, final.id);
       if (!canonical || !await inScope(tx, canonical.id, scope)) throw new ModelValidationError("La línea ya no está disponible después de validar su documento.");
-      return await loadLines(tx, actor, canonical, lines) as Values & Document;
+      return await loadDocument(tx, actor, canonical) as Values & Document;
     }
     return final;
   }
 
   async function save(prisma: PrismaClient, actor: ModelActor, input: unknown): Promise<FormViewResult<Values>> {
     try {
-      const record = await prisma.$transaction(async tx => {
-        const values = await persist(tx, actor, input);
-        return { values, ...await readAudit(tx, values.id), ...await readDisplayName(tx, actor, values) };
-      }, { isolationLevel: "Serializable" });
+      const creatingSequence = hasSequences && Boolean(input && typeof input === "object" && !(input as Record<string, unknown>).id);
+      const attempts = creatingSequence ? 5 : 1;
+      let record: { values: Values & Document; audit?: import("./audit").RecordAudit; displayName: string } | undefined;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        try {
+          record = await prisma.$transaction(async tx => {
+            const values = await persist(tx, actor, input);
+            return { values, ...await readAudit(tx, values.id), ...await readDisplayName(tx, actor, values) };
+          }, { isolationLevel: "Serializable" });
+          break;
+        } catch (error) {
+          // Only a confirmed serialization abort can replay this local transaction.
+          // Never retry network failures, unique conflicts or an unknown commit.
+          if (!creatingSequence || codeOf(error) !== "P2034" || attempt === attempts - 1) throw error;
+          await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
+        }
+      }
+      if (!record) throw new ModelValidationError(conflict);
       return { ok: true, ...record, message: "Registro guardado." };
     } catch (error) { return writeFailure(error); }
   }
 
   function writeFailure(error: unknown): FormViewResult<Values> {
+    if (error instanceof ActionParameterError) return { ok: false, kind: "validation", error: error.message, ...(error.parameterErrors ? { parameterErrors: error.parameterErrors } : {}) };
     const validation = error instanceof ModelValidationError || error instanceof z.ZodError || ["P2002", "P2003", "P2018", "P2025", "P2034"].includes(codeOf(error));
     const fieldErrors = error instanceof ModelValidationError ? error.fieldErrors : error instanceof z.ZodError ? Object.fromEntries(error.issues.filter(issue => issue.path.length).map(issue => [issue.path.join("."), issue.message])) : undefined;
     return { ok: false, kind: validation ? "validation" : "server", error: error instanceof z.ZodError ? "Revisa los datos del registro." : messageFor(error), ...(fieldErrors ? { fieldErrors: fieldErrors as Partial<Record<FieldPath<Values>, string>> } : {}) };
@@ -296,7 +334,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
         const scope = await authorize(tx, actor, "write");
         const current = await inScope(tx, request.data.id, scope) ? await repository.read(tx, request.data.id) : null;
         if (!current || current.revision !== request.data.revision) throw new ModelValidationError(conflict);
-        const values2 = await persistAction(tx, actor, declared, current);
+        const values2 = await persistAction(tx, actor, declared, current, request.data.params);
         return { values: values2, ...await readAudit(tx, values2.id), ...await readDisplayName(tx, actor, values2) };
       }, { isolationLevel: "Serializable" });
       return { ok: true, ...record, message: `${declared.label}: acción completada.` };
@@ -304,11 +342,18 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
   }
 
   /** Shared by form actions and Kanban moves; always uses the caller's transaction. */
-  async function persistAction(tx: Prisma.TransactionClient, actor: ModelActor, declared: ModelAction, current: Values) {
+  async function persistAction(tx: Prisma.TransactionClient, actor: ModelActor, declared: ModelAction, current: Values, input?: unknown) {
     if (declared.groups && presentation.authorizeAction) await presentation.authorizeAction(tx, actor, declared);
     if (!model.runAction) throw new ModelValidationError("La acción no está publicada en este modelo.");
-    current = await loadLines(tx, actor, current as Document, lines) as Values;
-    const patch = await model.runAction(declared.name, current, { tx, actor: Object.freeze({ ...actor }), action: declared.name });
+    current = await loadDocument(tx, actor, current as Document) as Values;
+    if (declared.params && !model.parseActionParams) throw new ActionParameterError("El contrato de parámetros no está cargado.");
+    const params = model.parseActionParams ? model.parseActionParams(declared.name, input) : parseActionParameters(undefined, input);
+    const access = relationAccessFor(tx, actor);
+    for (const [name, field] of Object.entries(declared.params ?? {})) {
+      const id = params[name];
+      if (field.kind === "many2one" && id !== null && id !== undefined && (!access || !(await access(field.target, [id as string])).has(id as string))) throw new ActionParameterError("Revisa los registros seleccionados.", { [name]: "Selecciona un registro existente y accesible." });
+    }
+    const patch = await model.runAction(declared.name, current, { tx, actor: Object.freeze({ ...actor }), action: declared.name }, params);
     const { id, revision, ...values } = current;
     return persist(tx, actor, { ...values, ...patch, id, revision }, declared.label);
   }
@@ -402,7 +447,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
           if (!declared) throw new ModelValidationError("La acción no está publicada en este modelo.");
           const saved = await persistAction(tx, actor, declared, current);
           if (saved[groupField] !== parsed.data.to) throw new ModelValidationError("La acción no dejó el registro en el estado de destino. Se revirtió el movimiento.");
-        } else await persist(tx, actor, { ...await loadLines(tx, actor, current, lines), [groupField]: parsed.data.to });
+        } else await persist(tx, actor, { ...await loadDocument(tx, actor, current), [groupField]: parsed.data.to });
       }, { isolationLevel: "Serializable" });
       return { ok: true };
     } catch (error) { return { ok: false, kind: error instanceof ModelValidationError || error instanceof z.ZodError || ["P2002", "P2003", "P2025", "P2034"].includes(codeOf(error)) ? "validation" : "server", error: messageFor(error) }; }
@@ -525,7 +570,7 @@ export function createModelService<T extends Record<string, unknown>>(model: Con
     async snapshot(tx, actor, id, operation = "read") {
       const scope = await authorize(tx, actor, operation);
       const row = await inScope(tx, id, scope) ? await repository.read(tx, id) : null;
-      return row ? loadLines(tx, actor, row, lines) : null;
+      return row ? loadDocument(tx, actor, row) : null;
     },
     async owned(tx, actor, inverse, id, maximum) {
       const field = model.metadata[inverse];

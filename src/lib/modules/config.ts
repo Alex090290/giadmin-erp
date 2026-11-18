@@ -1,5 +1,5 @@
 import type { AccessPerms } from "../access/declare";
-import type { One2manyMetadata } from "../orm/fields";
+import type { Many2manyMetadata, One2manyMetadata } from "../orm/fields";
 import type { FieldMetadata } from "../orm/fields";
 import type { ReactionRule } from "../orm/reactions.types";
 import type { ListViewConfig } from "../list/types";
@@ -37,6 +37,7 @@ export type ModelLineConfig = {
   readonly capabilities: AccessPerms;
 };
 export type ModelClientConfig = {
+  readonly many2many?: Readonly<Record<string, Many2manyMetadata>>;
   readonly lines?: Readonly<Record<string, ModelLineConfig>>;
   /** Actor-specific snapshot supplied by the server route, never cached in the model registry. */
   readonly capabilities?: ModelCapabilities;
@@ -54,7 +55,7 @@ export type ModelClientConfig = {
   /** Many2one field → target module model id with an authorized lookup. */
   readonly lookups: Readonly<Record<string, string>>;
   /** Business actions published with `@action` (name and label only). */
-  readonly actions: readonly { readonly name: string; readonly label: string }[];
+  readonly actions: readonly import("../orm/action-parameters").ClientModelAction[];
   readonly list: {
     readonly fields: readonly string[];
     readonly searchFields: readonly string[];

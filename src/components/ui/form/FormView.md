@@ -293,3 +293,12 @@ disponible para otros flujos explícitos. No cambia la confirmación de eliminac
 
 Ejemplos existentes /sample#alerts y /sample#form-view; carga/guardado de ejemplo
 incluyen 600 ms de latencia ficticia para observar el bloqueo, sin escrituras de BD.
+
+## Acciones con parámetros
+
+Las acciones publicadas pueden incluir params (metadatos de Fields) y lookups.
+FormButton solicita esos argumentos con RHF/Zod separado antes de guardar. Cancelar
+no escribe; confirmar conserva el flujo guardar → ejecutar con revisión persistida.
+FormActionRunner recibe `(action, target, params?)`. Los parameterErrors no se
+registran en RHF del documento. El diálogo es hermano de FormLayout, nunca un form
+anidado. Contrato, cancelación y límites: [acciones con parámetros](../../../../docs/acciones-parametros.md).

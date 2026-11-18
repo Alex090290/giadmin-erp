@@ -15,7 +15,7 @@ export type FormLineModel = {
   lookups?: Readonly<Record<string, Many2OneLoader>>;
   uploads?: Readonly<Record<string, ImageUploader>>;
 };
-export type FormModel = { lines?: Readonly<Record<string, FormLineModel>>; readFields?:PublishedFields; reactions?:FormReactions; reactionState?:ReactionState; retryReaction?:()=>void; fields: PublishedFields; lookups?: Readonly<Record<string, Many2OneLoader>>; uploads?: Readonly<Record<string, ImageUploader>> };
+export type FormModel = { many2many?: Readonly<Record<string, import("@/lib/orm/fields").Many2manyField>>; lines?: Readonly<Record<string, FormLineModel>>; readFields?:PublishedFields; reactions?:FormReactions; reactionState?:ReactionState; retryReaction?:()=>void; fields: PublishedFields; lookups?: Readonly<Record<string, Many2OneLoader>>; uploads?: Readonly<Record<string, ImageUploader>> };
 export const FormModelContext = createContext<FormModel | undefined>(undefined);
 /** Shared readonly contract: never register computed/related values with RHF. */
 export function useModelReadField(name:string, kind:string) {
@@ -29,6 +29,10 @@ export function useModelField<P extends { name: string; direction?: FieldDirecti
   const model = useContext(FormModelContext);
   const direction = useFieldDirection(props.direction);
   const layoutProps = direction === props.direction ? props : { ...props, direction };
+  if (kind === "many2many") {
+    const metadata = model?.many2many?.[props.name]?.many2many;
+    return { ...(metadata ? { label: metadata.label, required: metadata.minSelected > 0, invisible: metadata.invisible, maxSelected: metadata.maxSelected, load: model?.lookups?.[props.name] } : {}), ...Object.fromEntries(Object.entries(layoutProps).filter(([, value]) => value !== undefined)) } as P;
+  }
   const indexed = /^([a-z][A-Za-z0-9]*)\.\d+\.([a-z][A-Za-z0-9]*)$/.exec(props.name);
   const line = indexed ? model?.lines?.[indexed[1]] : undefined;
   const key = indexed?.[2] ?? props.name;
@@ -42,5 +46,5 @@ export function useModelField<P extends { name: string; direction?: FieldDirecti
   if (metadata.kind === "many2one" && !("model" in props && props.model !== undefined)) defaults.load = (line?.lookups ?? model?.lookups)?.[key];
   if (metadata.kind === "image") defaults.upload = (line?.uploads ?? model?.uploads)?.[key];
   if (metadata.kind === "integer") defaults.allowNegative = (metadata.min ?? -2147483648) < 0;
-  return { ...defaults, ...Object.fromEntries(Object.entries(layoutProps).filter(([, value]) => value !== undefined)) } as P;
+  return { ...defaults, ...Object.fromEntries(Object.entries(layoutProps).filter(([, value]) => value !== undefined)), ...(metadata.sequence ? { readOnly: true, required: false, placeholder: (props as { placeholder?: string }).placeholder ?? "Nuevo" } : {}) } as P;
 }

@@ -16,6 +16,7 @@ import FieldNumber from "@/components/ui/form/FieldNumber";
 import FieldDate from "@/components/ui/form/FieldDate";
 import FieldSelect from "@/components/ui/form/FieldSelect";
 import FieldImage from "@/components/ui/form/FieldImage";
+import FieldRelationTag from "@/components/ui/form/FieldRelationTag";
 import FieldMany2One from "@/components/ui/form/FieldMany2One";
 import { useFormNavigation } from "@/components/ui/form/FormNavigationProvider";
 import { useAlerts } from "@/components/ui/alerts/AlertProvider";
@@ -67,7 +68,7 @@ export function ModelFields({ ui }: { ui: ModelUI }) {
   const extended = new Set(ui.config.extensions?.flatMap(extension => extension.fields) ?? []);
   const controls = Object.entries(ui.config.fields).filter(([name]) => !extended.has(name)).map(([name, field]) => control(ui, name, field));
   const previews = Object.entries(ui.config.preview).filter(([name]) => !extended.has(name)).map(([name, field]) => display(name, field));
-  return <><FormGroup legend="Datos generales">{controls}{previews}</FormGroup><ModelExtensions />{Object.keys(ui.recordUI.lines).map(name => <FormGroup fullWidth key={name}><FieldOne2many name={name} /></FormGroup>)}</>;
+  return <><FormGroup legend="Datos generales">{controls}{previews}{Object.keys(ui.recordUI.many2many).map(name => <FieldRelationTag key={name} name={name} direction="inline" />)}</FormGroup><ModelExtensions />{Object.keys(ui.recordUI.lines).map(name => <FormGroup fullWidth key={name}><FieldOne2many name={name} /></FormGroup>)}</>;
 }
 
 function Editor({ ui, record, displayName, onReload, children }: { ui: ModelUI; record: Values; displayName?: string; onReload?: () => void; children?: ReactNode }) {
@@ -92,7 +93,7 @@ function Editor({ ui, record, displayName, onReload, children }: { ui: ModelUI; 
     onSubmit={values => modelSave(config.id, values)}
     deletion={capabilities.unlink ? { action: selection => modelDelete(config.id, selection), returnHref: config.route, allowReadOnly: true } : undefined}
     // FormButton: published @action names only; the server validates them and re-authorizes.
-    runAction={(action, target) => modelAction(config.id, { action, ...target })}
+    runAction={(action, target, params) => modelAction(config.id, { action, ...target, ...(params !== undefined ? { params } : {}) })}
     actions={config.actions}
     onNew={savedId && capabilities.create ? () => router.push(`${config.route}/nuevo${returnQuery}`) : undefined}
     onSaved={(values, _audit, name) => {

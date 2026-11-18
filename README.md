@@ -138,4 +138,10 @@ permisos, concurrencia y eliminación con cuentas y un esquema PostgreSQL tempor
 - [Historial de cambios y notas internas](docs/actividad-registros.md).
 - [Vistas de colecciones](docs/vistas-colecciones.md).
 
+Acciones con argumentos: [parámetros del modelo](docs/acciones-parametros.md), con `@action({ params: ... })`, validación de servidor y diálogo automático desde FormButton.
+
+Folios automáticos: [secuencias del modelo](docs/folios-secuencias.md), con `Fields.Text({ sequence: ... })`, contador transaccional y presentación de sólo lectura.
+
+Selección de registros compartidos: [Many2many declarativo](docs/relaciones-many2many.md), con FieldRelationTag, tabla intermedia y guardado autorizado en la transacción del dueño.
+
 Líneas de documentos: [One2many declarativo](docs/lineas-one2many.md), con edición inline, lógica del hijo y guardado transaccional del padre. Demo local en `/sample#one2many-model`.

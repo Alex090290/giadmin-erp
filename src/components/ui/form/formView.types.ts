@@ -4,7 +4,7 @@ import type { RecordAudit } from "@/lib/orm/audit";
 
 export type FormViewResult<TValues extends FieldValues> =
   | { ok: true; values: TValues; message?: string; audit?: RecordAudit; displayName?: string }
-  | { ok: false; error: string; kind?: "validation" | "server"; fieldErrors?: Partial<Record<FieldPath<TValues>, string>> };
+  | { ok: false; error: string; kind?: "validation" | "server"; parameterErrors?: Record<string, string>; fieldErrors?: Partial<Record<FieldPath<TValues>, string>> };
 
 export type FormViewSubmit<TValues extends FieldValues, TOutput = TValues> =
   (values: TOutput, event?: BaseSyntheticEvent) => FormViewResult<TValues> | Promise<FormViewResult<TValues>>;

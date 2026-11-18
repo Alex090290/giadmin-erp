@@ -15,6 +15,16 @@ export function composeModules(definitions: readonly ModuleDefinition[]): readon
     const depends = byId.get(id)?.application.depends ?? [];
     return depends.length ? 1 + Math.max(...depends.map(next => depth(next, [...seen, id]))) : 0;
   };
+  const registeredModels = new Map(definitions.flatMap(definition => definition.models.map(model => [model.contract.name, model] as const)));
+  for (const definition of definitions) for (const model of definition.models) for (const [field, descriptor] of Object.entries(model.contract.many2manyFields)) {
+    const target = registeredModels.get(descriptor.many2many.target);
+    if (!target || (target.module !== definition.id && !(definition.application.depends ?? []).includes(target.module))) throw new Error(`${model.id}.${field}: Many2many requiere un destino declarativo registrado y depends de su módulo.`);
+  }
+  for (const definition of definitions) for (const model of definition.models) for (const action of model.contract.actions) for (const [name, field] of Object.entries(action.params ?? {})) {
+    if (field.kind !== "many2one") continue;
+    const target = registeredModels.get(field.target);
+    if (!target || (target.module !== definition.id && !(definition.application.depends ?? []).includes(target.module))) throw new Error(`${model.id}.${action.name}.${name}: params Many2one requiere un destino declarativo registrado y depends de su módulo.`);
+  }
   const byTarget = new Map<string, ModuleExtension[]>();
   for (const definition of definitions) {
     for (const extension of definition.extensions) {
@@ -53,6 +63,12 @@ export function composeModules(definitions: readonly ModuleDefinition[]): readon
       ...(extension.views ? { views: extension.views } : {}),
       ...(extension.companion ? { relation: extension.companion.relation, delegate: extension.companion.name[0].toLowerCase() + extension.companion.name.slice(1) } : {}),
     })));
+    for (const action of compiled.contract.actions) for (const [name, field] of Object.entries(action.params ?? {})) {
+      if (field.kind !== "many2one") continue;
+      const owner = methodOwners.get(action.name) ?? entry.module;
+      const target = registeredModels.get(field.target);
+      if (!target || (target.module !== owner && !(byId.get(owner)?.application.depends ?? []).includes(target.module))) throw new Error(`${entry.id}.${action.name}.${name}: falta el destino o la dependencia de params Many2one.`);
+    }
     // Local group names of extension actions belong to the declaring module, not the base.
     return Object.freeze({ ...compiled, contract: Object.freeze({ ...compiled.contract, actions: Object.freeze(compiled.contract.actions.map(action => Object.freeze({
       ...action, ...(action.groups ? { groups: Object.freeze(action.groups.map(group => group.includes(".") ? group : `${methodOwners.get(action.name) ?? entry.module}.${group}`)) } : {}),

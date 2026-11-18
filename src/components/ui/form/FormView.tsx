@@ -1,5 +1,7 @@
 "use client";
 
+import ActionParametersDialog from "./ActionParametersDialog";
+import type { ClientModelAction } from "@/lib/orm/action-parameters";
 import FormPendingStatus from "./FormPendingStatus";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useFormState, type FieldPath, type FieldValues } from "react-hook-form";
@@ -57,7 +59,7 @@ export type FormViewProps<TValues extends FieldValues, TContext = unknown, TOutp
     /** Executes named business actions for FormButton (e.g. ModelForm → modelAction). */
     runAction?: FormActionRunner<TValues>;
     /** Published action labels, so FormButton can default its text. */
-    actions?: readonly { name: string; label: string }[];
+    actions?: readonly ClientModelAction[];
   };
 
 class SaveRejected extends Error {
@@ -85,6 +87,17 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
   const [deletedHref, setDeletedHref] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const actionLock = useRef(false);
+  const [parameterAction, setParameterAction] = useState<{ action: ClientModelAction; values?: Record<string, unknown>; errors?: Record<string, string> } | null>(null);
+  const parameterWaiter = useRef<((values: Record<string, unknown> | null) => void) | null>(null);
+  const parameterDrafts = useRef(new Map<string, Record<string, unknown>>());
+  const parameterErrors = useRef(new Map<string, Record<string, string>>());
+  useEffect(() => () => { parameterWaiter.current?.(null); parameterWaiter.current = null; }, []);
+  const finishParameters = (values: Record<string, unknown> | null) => {
+    const finish = parameterWaiter.current;
+    parameterWaiter.current = null;
+    setParameterAction(null);
+    finish?.(values);
+  };
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   // Save → action coordination: the action's own submit bypasses the lock it holds.
   const actionSubmit = useRef(false);
@@ -158,6 +171,11 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
     setActing(name);
     let saved: Extract<FormViewResult<TValues>, { ok: true }> | null = null;
     try {
+      const declared = publishedActions?.find(action => action.name === name);
+      const params = declared?.params ? await new Promise<Record<string, unknown> | null>(resolve => { parameterWaiter.current = resolve; setParameterAction({ action: declared, values: parameterDrafts.current.get(name), errors: parameterErrors.current.get(name) }); }) : undefined;
+      if (params === null || !mounted.current) return false;
+      if (params !== undefined) parameterDrafts.current.set(name, params);
+      parameterErrors.current.delete(name);
       let target = mode === "edit" && !isDirty ? savedTarget : null;
       if (!target) {
         const form = document.getElementById(titleId)?.closest("form");
@@ -172,16 +190,19 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
         if (!target) return false;
       }
       methods.clearErrors("root.server");
-      const outcome = await runAction(name, target);
+      const outcome = await runAction(name, target, params);
       if (!mounted.current) return false;
       if (!outcome.ok) {
+        if (outcome.parameterErrors) parameterErrors.current.set(name, outcome.parameterErrors);
         for (const [field, message] of Object.entries(outcome.fieldErrors ?? {})) if (typeof message === "string") methods.setError(field as FieldPath<TValues>, { type: "server", message });
         methods.setError("root.server", { type: "server", message: outcome.error });
-        const details = [...new Set(Object.values(outcome.fieldErrors ?? {}).filter((message): message is string => typeof message === "string"))];
+        const details = [...new Set([...Object.values(outcome.fieldErrors ?? {}), ...Object.values(outcome.parameterErrors ?? {})].filter((message): message is string => typeof message === "string"))];
         await (outcome.kind === "validation" ? alerts.validation : alerts.error)({ title: "No se pudo completar la acción", message: outcome.error, details });
         if (saved) onSaved?.(saved.values, saved.audit, saved.displayName);
         return false;
       }
+      parameterDrafts.current.delete(name);
+      parameterErrors.current.delete(name);
       methods.reset(outcome.values);
       markClean();
       setActivityVersion(version => version + 1);
@@ -315,5 +336,6 @@ export default function FormView<TValues extends FieldValues, TContext = unknown
       {footerContent && <div className="border-t border-base-300 pt-3">{footerContent}</div>}
     </footer>
   </FormLayout>
+  {parameterAction && <ActionParametersDialog key={parameterAction.action.name} action={parameterAction.action} initialValues={parameterAction.values} errors={parameterAction.errors} onConfirm={finishParameters} onCancel={() => finishParameters(null)} />}
   </FormActionsContext.Provider>;
 }

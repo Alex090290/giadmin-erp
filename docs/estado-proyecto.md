@@ -16,18 +16,113 @@ Al iniciar esta revisión, la siguiente prioridad registrada era diseñar y pres
 la distribución de módulos entre proyectos. Después el usuario autorizó la fase 2
 de herencia, cuyo avance se registra abajo. Distribución, entornos y fase 3 siguen pendientes.
 
+## Acciones con parámetros implementadas (2026-11-17)
+
+Autorizado por el usuario. @action admite params declarados con Fields; se derivan
+Zod estricto, defaults y metadatos serializables. ActionParams infiere tipos. Firma
+nueva record/params/context y legacy record/context conservada. Validación en la
+transacción tras permisos/grupos/reglas/revisión; Many2one verifica lectura del
+destino. No se invocan getters/toJSON del input. Parámetros inmutables y patch por
+el guardado existente, sin mezclar argumentos con valores ni historial del modelo.
+
+ModelForm y FormButton abren ActionParametersDialog, con RHF/Modal separados del
+formulario principal. Cancelar no guarda; confirmar valida parámetros, guarda el
+documento si corresponde y ejecuta la acción con revisión actual bajo un lock.
+ActionParameterError/parameterErrors separados; argumentos confirmados se conservan
+en memoria para reintentar mientras viva la instancia. No se reintentan mutaciones.
+Sin parámetros durante transiciones Kanban; declaración se rechaza. Sin User/Partner
+manuales, uploads, arrays, virtuales ni sequence en parámetros. [Contrato](acciones-parametros.md).
+
+Demo /sample#action-parameters (memoria, sin BD): comprobados en navegador cancelar
+sin llamadas, nota obligatoria, orden guardar → acción, rechazo con «rechazar»,
+conservación de nota al reabrir y corrección exitosa. Se preserva el título editado y
+los parámetros no aparecen en RHF del documento. Sin crear Tickets ni tocar Flota.
+
+Verificación: test:orm 106, test:modules 38, test:form-model 12 y ESLint aprobados.
+La integración PostgreSQL test:action-parameters:integration verificó defaults,
+tipos, campos extra, actor/grupos/reglas, IDs de destino, revisiones, sesión,
+contexto inmutable, firma legacy, errores de negocio y rollback de hooks/historial,
+en un proyecto/esquema temporal eliminado. Build y regresiones de One2many/folios
+aprobados; cancelación, validación, rechazo y reintento comprobados en navegador. No requiere
+migración nueva; la migración de folios y las pendientes de Flota siguen sin aplicar
+en la base real. Sin commit ni push; cambios previos conservados.
+
+## Folios por modelo implementados (2026-11-17)
+
+Autorización del usuario tras revisar el ejemplo de `name = Fields.Text({sequence})`.
+Text deriva required/unique/readonly y permite borrador vacío mediante formSchema;
+ModelForm/FieldText muestran Nuevo sin exigir el número antes de guardar. El
+servidor asigna el folio antes de normalize/beforeSave/constraints, rechaza valores
+falsificados y protege el resultado tras hooks y acciones. Ediciones conservan
+el folio. Contadores compartidos ModelSequence por modelo.campo/período, BIGINT,
+upsert atómico y hash de formato dentro de la transacción del documento; cinco
+intentos sólo ante P2034 de altas con secuencia. Reinicio anual UTC opcional.
+
+Migración `20261117233000_add_model_sequences` revisada: sólo crea model_sequences.
+Prisma Client regenerado. Consulta de status real (sin SQL de escritura): tres
+pendientes en localhost:5433/liteerp4_dev/public: 20261117154411_sync_flota,
+20261117190856_uninstall_flota y la nueva. **No ejecutar deploy sin revisar las de
+Flota: la retirada borra sus tablas en esta Mac.** No se aplicaron migraciones en
+el ERP, ni se cambiaron secretos/entornos. No se creó Tickets ni se restauró Flota.
+
+Verificados test:orm (103), test:modules (38), test:form-model (12),
+test:orm:install (19), TypeScript, ESLint y build Next 16.4.6 (tres avisos conocidos).
+Integraciones sequences, Many2many y One2many aprobadas en proyectos/esquemas
+propios, eliminados. Secuencias verificó cinco altas simultáneas, serie por campo,
+reinicio UTC, permisos, datos falsificados, cambios de formato, edición/acciones,
+fallos en normalize/beforeSave/constraint/afterSave y rollback de contador/documento.
+Navegador local: demo RHF/Zod mostró Nuevo/readonly, recibió TCK-2026-000001 del
+servidor y volvió al borrador; simulación sin contador ni persistencia real.
+
+[Contrato, migración y límites](folios-secuencias.md). Sin asignación diferida al
+confirmar, series por empresa/sucursal, reset manual o nuevos campos sequence en
+extensiones/bindings legacy. No se hizo commit ni push. Las piezas previas de
+Many2many y su ajuste visual se conservaron en el árbol local.
+
+## FieldRelationTag: etiquetas dentro del control (2026-11-17)
+
+Por solicitud del usuario, etiquetas y buscador comparten un flujo flex con salto
+de línea; se retiró la distribución fija en dos bloques verticales. Los botones
+Limpiar/Buscar más permanecen dentro y pueden saltar en contenedores estrechos.
+Se conservan lista accesible, nombres completos, autocompletado off, RHF, lookup,
+validación y callbacks. Demo Many2many añade Cargar ejemplo con dos IDs ficticios.
+Verificados TypeScript/ESLint y navegador local: muestra seleccionada, distribución
+compacta a 1200 px y salto en ancho de 320 px, Retroceso elimina la última etiqueta
+y cargar ejemplo restaura ambas. En controles inline muy estrechos, los nombres
+largos ocupan varias líneas. Sin cambios de BD, permisos, commit ni push.
+
+## Many2many declarativo implementado (2026-11-17)
+
+Autorizado por el usuario con «implementa». Declaración Fields.Many2many, tipado,
+formSchema/defaults, tabla intermedia gestionada con PK compuesta y FK, repositorio
+runtime y validación transaccional de IDs/acceso antes/después de hooks. Revisiones,
+rollback y acciones conservados; cambios sólo de vínculos registran un resumen de
+actividad. ModelForm, buildModelUI, FieldRelationTag con load autorizado y eject:view
+comparten el contrato. Catálogo/retirada reconocen las tablas intermedias mediante
+marca interna en el esquema instalado verificado por hashes.
+
+Caso conservador explícito: vínculos existentes a destinos no legibles bloquean
+apertura/edición para no publicar IDs ni perder vínculos ocultos. Sin Partner/User,
+inversa editable, extensiones, hijos One2many, consultas de colecciones ni reacciones
+sobre el arreglo; ver [alcance, ejemplos y límites](relaciones-many2many.md).
+Demo ficticia RHF/Zod /sample#many2many-model. No se creó Tickets ni se restauró Flota.
+
+Verificación local Mac: test:orm 99, test:modules 38, test:form-model 11,
+test:orm:install 19 y test:module-manager 20 aprobados; tsc, ESLint y build
+Next 16.4.6 aprobados (tres avisos previos de trazado). Integraciones Many2many y
+One2many aprobadas con proyectos/esquemas temporales, eliminados. La primera incluye
+SQL real, permisos/reglas, IDs falsificados, snapshots/actions, rollback tardío,
+concurrencia, FK, historial, plan de retirada, eject:view y TS del formulario.
+La regresión de extensiones comprobó servicios y Next/RSC por HTTP, pero no terminó:
+la retirada con respaldo requiere pg_dump/pg_restore, ausentes en esta Mac. No se
+omitió ese requisito ni se ejecutó una retirada sin respaldo. Sin interacción visual
+de navegador, SQL en el ERP, cambios de entorno privados, commit ni push.
+
 ## Pendiente urgente: capacidades restantes del ORM (2026-11-17)
 
 Prioridad elevada por petición expresa del usuario. Quedan estas capacidades para
 incorporar cuando una aplicación concreta las necesite:
 
-- **Many2many declarativo:** declaración en el modelo, tabla intermedia, lectura,
-  guardado y autorización. Ya existe FieldRelationTag como selector múltiple
-  visual; falta el soporte de Fields.Many2many y su persistencia en el ORM.
-- **Folios:** numeración de documentos. Caso previsto en
-  [Tickets de servicio](ideas/tickets-servicio.md).
-- **Acciones con parámetros:** ampliar el contrato de @action para recibir
-  parámetros validados. Caso previsto en [Tickets de servicio](ideas/tickets-servicio.md).
 - **Permisos por campo:** lectura/escritura autorizadas en servidor y presentación
   por grupo; alcance y criterios en [el diseño pendiente](ideas/permisos-campos.md).
 - **Compute persistido:** store:true, recomputación y evolución de datos;
@@ -41,7 +136,7 @@ verificada con git diff --check, sin nuevas pruebas de código ni consultas a BD
 ## Herencia de modelos: fase 2 (2026-11-17)
 
 Implementada por autorización posterior del usuario, sin esperar a Tickets. La fase
-1 permanece en `dd70ff9`; los cambios de fase 2 todavía no tienen commit.
+1 permanece en `dd70ff9`; la fase 2 está versionada en `0c0e945`.
 
 - Colecciones publican campos extendidos, con búsqueda/filtros/dominios/orden/grupos
   traducidos a la compañera. Los grupos se paginan en SQL, incluido un grupo vacío

@@ -1,5 +1,18 @@
 import { z } from "zod";
+import { sequenceConfig, type SequenceOptions, type SequenceConfig } from "./sequence";
 import { IMAGE_URL_MAX_LENGTH, imageUrlSchema, validateImageFolder } from "../uploads/image-policy";
+
+const many2manyTag = Symbol("orm.many2many");
+export type Many2manyMetadata = { readonly target: string; readonly label?: string; readonly minSelected: number; readonly maxSelected: number; readonly invisible?: boolean };
+export type Many2manyField = {
+  readonly [many2manyTag]: true;
+  readonly many2many: Many2manyMetadata;
+  readonly schema: z.ZodType<string[], string[]>;
+  createDefault(): string[];
+};
+export function isMany2many(value: unknown): value is Many2manyField {
+  return Boolean(value && typeof value === "object" && many2manyTag in value);
+}
 
 const one2manyTag = Symbol("orm.one2many");
 export type One2manyMetadata = { readonly target: string; readonly inverse: string; readonly label?: string; readonly minRows: number; readonly maxRows: number; readonly invisible?: boolean };
@@ -23,9 +36,10 @@ type PresentationOptions = { list?: boolean; searchable?: boolean; sortable?: bo
 type CommonOptions = { label?: string; required?: boolean; unique?: boolean; tracking?: boolean; sensitive?: boolean; invisible?: boolean } & PresentationOptions;
 const presentationKeys = ["list", "searchable", "sortable", "filterable", "groupable"] as const;
 type NullableOptions<T> = CommonOptions & { default?: Default<T | null> };
-type RequiredValue<T, O> = O extends { required: true } ? T : T | null;
+type RequiredValue<T, O> = O extends { sequence: SequenceOptions } | { required: true } ? T : T | null;
 
 type CommonMetadata = {
+  readonly sequence?: SequenceConfig;
   readonly invisible?: boolean;
   /** Generated presentation capability; not an editable Field option. */
   readonly readOnly?: boolean;
@@ -88,7 +102,7 @@ function checkBounds(min: number | undefined, max: number | undefined, lengths =
   if (min !== undefined && max !== undefined && min > max) throw new Error("El límite mínimo no puede superar al máximo.");
 }
 
-function makeField<I, O>(schema: z.ZodType<O, I>, options: CommonOptions & { default?: unknown; related?: string; compute?: string }, empty: I, details: FieldDetails): Field<I, O> {
+function makeField<I, O>(schema: z.ZodType<O, I>, options: CommonOptions & { default?: unknown; related?: string; compute?: string; sequence?: SequenceConfig }, empty: I, details: FieldDetails): Field<I, O> {
   if (options.compute !== undefined) {
     if (typeof options.compute !== "string" || !/^[a-z][A-Za-z0-9]*$/.test(options.compute) || ["constructor", "prototype", "__proto__"].includes(options.compute)) throw new Error("compute necesita el nombre de un método de instancia.");
     if (options.related !== undefined || options.unique || options.tracking || options.sensitive || Object.hasOwn(options, "default")) throw new Error("compute es virtual de lectura: sin related, unique, tracking, sensitive ni default.");
@@ -116,6 +130,7 @@ function makeField<I, O>(schema: z.ZodType<O, I>, options: CommonOptions & { def
     ...(options.invisible !== undefined ? { invisible: options.invisible } : {}),
     ...(options.related ? { related: options.related } : {}),
     ...(options.compute ? { compute: options.compute } : {}),
+    ...(options.sequence ? { sequence: options.sequence, readOnly: true } : {}),
     defaultKind: !hasDefault ? "empty" : typeof configuredDefault === "function" ? "factory" : "literal",
     ...(hasDefault && typeof configuredDefault !== "function" ? { defaultValue: configuredDefault } : {}),
     ...Object.fromEntries(presentationKeys.filter(key => options[key] !== undefined).map(key => [key, options[key]])),
@@ -133,7 +148,7 @@ function makeField<I, O>(schema: z.ZodType<O, I>, options: CommonOptions & { def
 }
 
 function nullableString(value: string | null) { return value === "" ? null : value; }
-type TextOptions = NullableOptions<string> & { minLength?: number; maxLength?: number; trim?: boolean; related?: string; compute?: string };
+type TextOptions = NullableOptions<string> & { sequence?: SequenceOptions; minLength?: number; maxLength?: number; trim?: boolean; related?: string; compute?: string };
 type ImageOptions = NullableOptions<string> & { maxLength?: number; compute?: string } & ({ folder: string; related?: string } | { related: string; folder?: string } | { compute: string; folder?: string; related?: string });
 type IntegerOptions = NullableOptions<number> & { min?: number; max?: number; compute?: string };
 type BooleanOptions = Omit<CommonOptions, "required"> & { default?: Default<boolean> };
@@ -153,19 +168,26 @@ export const Fields = Object.freeze({
   },
 
   Text<const O extends TextOptions = Record<never, never>>(options: O = {} as O): DeclaredField<string | null, RequiredValue<string, O>, O> {
-    checkOptions(options, ["minLength", "maxLength", "trim", "related", "compute"]);
-    checkBounds(options.minLength, options.maxLength, true);
-    if (options.required && options.maxLength === 0) throw new Error("Un texto obligatorio debe permitir al menos un carácter.");
-    if (options.trim !== undefined && typeof options.trim !== "boolean") throw new Error("trim debe ser booleano.");
-    const label = options.label ?? "Texto";
-    const trim = options.trim !== false;
+    checkOptions(options, ["minLength", "maxLength", "trim", "related", "compute", "sequence"]);
+    const sequence = options.sequence === undefined ? undefined : sequenceConfig(options.sequence);
+    if (sequence) {
+      if (options.required === false || options.unique === false || options.sensitive || options.related !== undefined || options.compute !== undefined || Object.hasOwn(options, "default") || options.trim === false || options.minLength !== undefined) throw new Error("sequence es obligatorio, único y generado: sin default, sensitive, related, compute, minLength ni trim:false.");
+      const length = sequence.prefix.replaceAll("{year}", "2000").length + sequence.padding;
+      if (options.maxLength !== undefined && options.maxLength < length) throw new Error("maxLength no permite el formato del folio.");
+    }
+    const settings = { ...options, ...(sequence ? { required: true, unique: true } : {}), sequence };
+    checkBounds(settings.minLength, settings.maxLength, true);
+    if (settings.required && settings.maxLength === 0) throw new Error("Un texto obligatorio debe permitir al menos un carácter.");
+    if (settings.trim !== undefined && typeof settings.trim !== "boolean") throw new Error("trim debe ser booleano.");
+    const label = settings.label ?? "Texto";
+    const trim = settings.trim !== false;
     let value = z.string();
-    if (options.minLength !== undefined) value = value.min(options.minLength, `${label}: mínimo ${options.minLength} caracteres.`);
-    if (options.maxLength !== undefined) value = value.max(options.maxLength, `${label}: máximo ${options.maxLength} caracteres.`);
+    if (settings.minLength !== undefined) value = value.min(settings.minLength, `${label}: mínimo ${settings.minLength} caracteres.`);
+    if (settings.maxLength !== undefined) value = value.max(settings.maxLength, `${label}: máximo ${settings.maxLength} caracteres.`);
     const nonempty = z.string({ error: `${label}: campo obligatorio.` }).min(1, `${label}: campo obligatorio.`).pipe(value);
     const schema = z.string({ error: `${label}: escribe un texto válido.` }).nullable().transform(text => nullableString(trim ? text?.trim() ?? null : text))
-      .pipe(options.required ? nonempty : value.nullable());
-    return makeField(schema as z.ZodType<RequiredValue<string, O>, string | null>, options, "", { kind: "text", trim: options.trim !== false, minLength: options.minLength, maxLength: options.maxLength }) as DeclaredField<string | null, RequiredValue<string, O>, O>;
+      .pipe(settings.required ? nonempty : value.nullable());
+    return makeField(schema as z.ZodType<RequiredValue<string, O>, string | null>, settings, "", { kind: "text", trim: settings.trim !== false, minLength: settings.minLength, maxLength: settings.maxLength }) as DeclaredField<string | null, RequiredValue<string, O>, O>;
   },
 
   Integer<const O extends IntegerOptions = Record<never, never>>(options: O = {} as O): DeclaredField<number | null, RequiredValue<number, O>, O> {
@@ -203,6 +225,14 @@ export const Fields = Object.freeze({
     const value = z.iso.datetime({ error: `${options.label ?? "Fecha y hora"}: usa un ISO UTC válido.` });
     const schema = z.string().nullable().transform(nullableString).pipe(options.required ? value : value.nullable());
     return makeField(schema as z.ZodType<RequiredValue<string, O>, string | null>, options, null, { kind: "datetime" });
+  },
+
+  Many2many(target: string, options: { label?: string; minSelected?: number; maxSelected?: number; invisible?: boolean } = {}): Many2manyField {
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(target) || !options || typeof options !== "object" || Array.isArray(options) || Object.keys(options).some(key => !["label", "minSelected", "maxSelected", "invisible"].includes(key))) throw new Error("Many2many necesita un modelo destino y opciones válidas.");
+    const minSelected = options.minSelected ?? 0, maxSelected = options.maxSelected ?? 100;
+    if (!Number.isSafeInteger(minSelected) || !Number.isSafeInteger(maxSelected) || minSelected < 0 || maxSelected < 1 || maxSelected > 100 || minSelected > maxSelected || (options.label !== undefined && (typeof options.label !== "string" || !options.label.trim())) || (options.invisible !== undefined && typeof options.invisible !== "boolean")) throw new Error("Many2many admite entre 0 y 100 selecciones, con límites y label válidos.");
+    const schema = z.array(z.string().min(1).max(100).refine(id => id.trim() === id, "ID inválido.")).min(minSelected).max(maxSelected).refine(ids => new Set(ids).size === ids.length, "La selección contiene IDs duplicados.");
+    return Object.freeze({ [many2manyTag]: true as const, many2many: Object.freeze({ target, minSelected, maxSelected, ...(options.label !== undefined ? { label: options.label } : {}), ...(options.invisible !== undefined ? { invisible: options.invisible } : {}) }), schema, createDefault: () => [] });
   },
 
   One2many<Row extends One2manyRow = One2manyRow>(target: string, options: { inverse: string; label?: string; minRows?: number; maxRows?: number; invisible?: boolean }): One2manyField<Row> {

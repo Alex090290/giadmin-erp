@@ -11,6 +11,7 @@ export type EjectModel = {
   readonly classImport: string;
   readonly fields: Readonly<Record<string, FieldMetadata>>;
   readonly preview: Readonly<Record<string, FieldMetadata>>;
+  readonly many2many?: readonly string[];
   readonly listFields: readonly string[];
   /** Many2one fields with an authorized lookup (targets inside registered modules). */
   readonly lookups: readonly string[];
@@ -40,6 +41,10 @@ export function formViewSource(model: EjectModel): string {
     const result = control(name, field, model.lookups);
     if (!result) { lines.push(`{/* ${name}: Many2one sin proveedor de búsqueda autorizado (modelo fuera de los módulos). */}`); continue; }
     imports.add(result[0]); lines.push(result[1]);
+  }
+  for (const name of model.many2many ?? []) {
+    imports.add("FieldRelationTag");
+    lines.push(`<FieldRelationTag<Values> name=${JSON.stringify(name)} direction="inline" />`);
   }
   for (const [name, field] of Object.entries(model.preview)) {
     const component = field.kind === "image" ? "FieldImage" : field.kind === "integer" ? "FieldNumber" : field.kind === "text" ? "FieldText" : null;

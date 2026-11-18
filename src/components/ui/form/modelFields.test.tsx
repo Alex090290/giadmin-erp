@@ -130,3 +130,35 @@ test("declarative One2many columns inherit child metadata and preserve persisted
   assert.match(html,/Descripción/);assert.match(html,/maxLength="17"/i);assert.match(html,/name="lines.0.name"/);assert.match(html,/value="Guardado"/);assert.match(html,/database-id/);assert.match(html,/Agregar línea/);assert.match(html,/autocomplete="off"/i);assert.doesNotMatch(html,/documentoId/);
   const readonly=renderToStaticMarkup(<LinesFixture readonly />);assert.doesNotMatch(readonly,/Agregar línea|Quitar línea/);assert.match(readonly,/<fieldset disabled=""/);assert.match(readonly,/value="Guardado"/);
 });
+
+
+test("Many2many tags inherit provider, bounds, label and visibility with explicit overrides", () => {
+  const tags = Fields.Many2many("SampleTag", { label: "Etiquetas heredadas", minSelected: 1, maxSelected: 3, invisible: true });
+  function ProbeTags({ override = false }: { override?: boolean }) {
+    const props = useModelField({ name: "tags", ...(override ? { label: "Propias", required: false, invisible: false } : {}) }, "many2many") as { label?: string; required?: boolean; invisible?: boolean; maxSelected?: number; load?: unknown };
+    return <span>{JSON.stringify({ ...props, load: props.load === load })}</span>;
+  }
+  const render = (override = false) => renderToStaticMarkup(<FormModelContext.Provider value={{ fields: {}, many2many: { tags }, lookups: { tags: load } }}><ProbeTags override={override} /></FormModelContext.Provider>);
+  const inherited = render();
+  assert.match(inherited, /Etiquetas heredadas/);
+  assert.match(inherited, /maxSelected&quot;:3/);
+  assert.match(inherited, /load&quot;:true/);
+  assert.match(inherited, /invisible&quot;:true/);
+  assert.match(render(true), /Propias/);
+  assert.match(render(true), /required&quot;:false/);
+  assert.match(render(true), /invisible&quot;:false/);
+});
+
+
+test("sequence text inherits readonly Nuevo presentation even when editable props are requested", () => {
+  const name = Fields.Text({ label: "Folio", sequence: { prefix: "TCK-" } });
+  function SequenceFixture() {
+    const methods = useForm({ defaultValues: { name: "" } });
+    return <FormProvider {...methods}><FormModelContext.Provider value={{ fields: { name } }}><FieldText name="name" readOnly={false} required /></FormModelContext.Provider></FormProvider>;
+  }
+  const html = renderToStaticMarkup(<SequenceFixture />);
+  assert.match(html, /readOnly=""/i);
+  assert.match(html, /placeholder="Nuevo"/);
+  assert.match(html, /autoComplete="off"/i);
+  assert.doesNotMatch(html, / required=""/);
+});
