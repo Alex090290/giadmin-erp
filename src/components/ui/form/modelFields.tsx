@@ -39,7 +39,10 @@ export function useModelField<P extends { name: string; direction?: FieldDirecti
   const fields = line?.fields ?? model?.fields;
   if (!fields || !Object.hasOwn(fields, key)) return layoutProps;
   const metadata = fields[key].metadata;
-  if (metadata.sensitive || metadata.kind !== kind) throw new Error(`Contrato incompatible: ${props.name} (${kind}).`);
+  // Sensitive values never reach the form; a write-only secret is the exception: it is always
+  // received empty and only carries a new value typed by the user (e.g. a password).
+  const secret = metadata.kind === "text" && metadata.writeOnly === true;
+  if ((metadata.sensitive && !secret) || metadata.kind !== kind) throw new Error(`Contrato incompatible: ${props.name} (${kind}).`);
   const defaults: Record<string, unknown> = { label: metadata.label, required: metadata.kind === "boolean" ? undefined : metadata.required };
   if (metadata.kind === "text") { defaults.maxLength = metadata.maxLength; defaults.minLength = metadata.minLength; }
   if (metadata.kind === "selection") defaults.options = metadata.choices;

@@ -173,6 +173,14 @@ las altas de usuario crearán su contacto (fase 2).
   `service.list` directamente sin `withActor` hace fallar la resolución de etiquetas; las
   pruebas siguen el mismo camino que la acción.
 
+## Corrección tras revisión en navegador (2026-11-18)
+
+Al abrir un usuario en Ajustes, el formulario fallaba con «Contrato incompatible: password
+(text)»: `useModelField` rechaza todo campo `sensitive` y la copia cliente de Fields
+(`lib/modules/fields.ts`) perdía `writeOnly`. Ahora un `writeOnly` se enlaza (siempre llega
+vacío y sólo transporta un valor nuevo); el resto de `sensitive` sigue rechazado. Prueba en
+`modelFields.test.tsx` (test:form-model 13). Las pruebas previas no renderizaban el formulario.
+
 ## Plan por fases (con A)
 
 1. **Framework para modelos nativos.**
