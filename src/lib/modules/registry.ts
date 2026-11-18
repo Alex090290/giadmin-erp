@@ -88,9 +88,8 @@ export function modelService(id: string): Service {
       let scope: Record<string, unknown> | undefined;
       try { scope = await authorizeModel(tx, actor, related.id, "read"); }
       catch (error) { if (error instanceof AccessError && error.code === "DENIED") return new Set<string>(); throw error; }
-      if (!scope) return new Set(ids);
       const delegate = (tx as unknown as Record<string, { findMany(args: unknown): Promise<{ id: string }[]> }>)[related.delegate];
-      const rows = await delegate.findMany({ where: { AND: [{ id: { in: [...ids] } }, scope] }, select: { id: true } });
+      const rows = await delegate.findMany({ where: { AND: [{ id: { in: [...ids] } }, ...(scope ? [scope] : [])] }, select: { id: true } });
       return new Set(rows.map(row => row.id));
     },
     // Actions with groups: superusers pass; others need one of the groups (local keys belong to this module).
@@ -114,6 +113,11 @@ function lookupTargets(entry: ModuleModel): Record<string, string> {
     if (metadata.kind !== "many2one" || metadata.sensitive) continue;
     const target = byPrismaName.get(metadata.target);
     if (target) targets[field] = target.id;
+  }
+  for (const [field, descriptor] of Object.entries(entry.contract.many2manyFields)) {
+    const target = byPrismaName.get(descriptor.many2many.target);
+    if (!target) throw new Error(`${entry.id}.${field}: Many2many requiere un destino declarativo registrado.`);
+    targets[field] = target.id;
   }
   return targets;
 }
@@ -153,6 +157,7 @@ export function modelClientConfig(id: string, access?: CapabilityActor): ModelCl
     related: Object.keys(contract.relatedFields ?? {}),
     reactionRules: contract.reactionRules ?? [],
     lookups: lookupTargets(entry),
+    many2many: Object.fromEntries(Object.entries(contract.many2manyFields).map(([name, field]) => [name, field.many2many])),
     lines: Object.fromEntries(Object.entries(contract.one2manyFields).map(([name, field]) => {
       const child = module.models.find(model => model.contract.name === field.one2many.target)!;
       return [name, {
@@ -163,7 +168,11 @@ export function modelClientConfig(id: string, access?: CapabilityActor): ModelCl
       }];
     })),
     // Names and labels only; the server validates the name and re-checks permissions on every call.
-    actions: published.map(({ name, label }) => ({ name, label })),
+    actions: published.map(({ name, label, params }) => ({ name, label, ...(params ? { params, lookups: Object.fromEntries(Object.entries(params).filter(([, field]) => field.kind === "many2one").map(([name, field]) => {
+      const target = field.kind === "many2one" && byPrismaName.get(field.target);
+      if (!target) throw new Error(`${entry.id}: parámetro Many2one sin destino declarativo registrado.`);
+      return [name, target.id];
+    })) } : {}) })),
     list: { fields: entry.list.fields, searchFields: entry.list.searchFields, sortable: entry.list.sortable ?? [], groupable: entry.list.groupable ?? [], filterable: entry.list.filterable ?? [] },
     view: entry.view,
     collectionViews: entry.collectionViews,

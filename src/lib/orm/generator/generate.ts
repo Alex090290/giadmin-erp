@@ -1,4 +1,6 @@
 import "server-only";
+import { many2manyStorage } from "../many2many";
+import type { Many2manyField } from "../fields";
 import type { Field, FieldMetadata } from "../fields";
 import { prismaBlocks, maskPrisma } from "./prisma-source";
 import { lookupProjectionPlan } from "./display";
@@ -6,7 +8,7 @@ import { relationFieldName } from "../display";
 import { relatedProjectionPlan } from "./related";
 
 export type GenerationModel = {
-  model: { readonly name: string; readonly table: string; readonly fields: Readonly<Record<string, Field>>; readonly metadata: Readonly<Record<string, FieldMetadata>>; readonly relatedFields?: Readonly<Record<string,Field>>; readonly computedFields?: Readonly<Record<string,Field>>; readonly reactionRules?: readonly import("../reactions.types").ReactionRule[]; readonly previewFields?: Readonly<Record<string,Field>>; readonly displayFields?: readonly string[] };
+  model: { readonly name: string; readonly table: string; readonly many2manyFields?: Readonly<Record<string, Many2manyField>>; readonly fields: Readonly<Record<string, Field>>; readonly metadata: Readonly<Record<string, FieldMetadata>>; readonly relatedFields?: Readonly<Record<string,Field>>; readonly computedFields?: Readonly<Record<string,Field>>; readonly reactionRules?: readonly import("../reactions.types").ReactionRule[]; readonly previewFields?: Readonly<Record<string,Field>>; readonly displayFields?: readonly string[] };
   /** Explicit publication boundary. Adding a private field must not publish it to the browser. */
   clientFields: readonly string[];
 };
@@ -25,7 +27,7 @@ export function fieldExpression(field: FieldMetadata) {
     ...(field.defaultKind === "literal" ? { default: field.defaultValue } : {}),
     // Presentation flags only when declared, so existing generated contracts stay byte-identical.
     ...Object.fromEntries((["list", "searchable", "sortable", "filterable", "groupable"] as const).filter(key => field[key] !== undefined).map(key => [key, field[key]])) };
-  if (field.kind === "text") return `Fields.Text(${quote({ ...common, trim: field.trim, minLength: field.minLength, maxLength: field.maxLength })})`;
+  if (field.kind === "text") return `Fields.Text(${quote({ ...common, trim: field.trim, minLength: field.minLength, maxLength: field.maxLength, ...(field.sequence ? { sequence: field.sequence } : {}) })})`;
   if (field.kind === "image") return `Fields.Image(${quote({ ...common, folder: field.folder, maxLength: field.maxLength })})`;
   if (field.kind === "integer") return `Fields.Integer(${quote({ ...common, min: field.min, max: field.max })})`;
   if (field.kind === "boolean") return `Fields.Boolean(${quote(common)})`;
@@ -36,13 +38,16 @@ export function fieldExpression(field: FieldMetadata) {
 
 function clientSource({ model, clientFields }: GenerationModel) {
   const n = model.name;
-  return `${header}import { z } from "zod";\nimport { Fields } from "@/lib/orm/fields";\nimport { recordIdentityShape, validateRecordIdentity } from "@/lib/orm/record";\n\n` +
-    `export const ${n}Fields = {\n${clientFields.map(name => `  ${name}: ${fieldExpression(model.metadata[name])},`).join("\n")}\n} as const;\n\n` +
-    `export const ${n}Schema = z.strictObject({\n${clientFields.map(name => `  ${name}: ${n}Fields.${name}.schema,`).join("\n")}\n});\n\n` +
+  const hasSequence = clientFields.some(name => model.metadata[name].sequence);
+  const many = Object.entries(model.many2manyFields ?? {});
+  const relations = many.map(([name, field]) => `  ${name}: Fields.Many2many(${quote(field.many2many.target)}, ${quote(Object.fromEntries(Object.entries(field.many2many).filter(([key]) => key !== "target")))}),`);
+  return `${header}import { z } from "zod";\nimport { Fields } from "@/lib/orm/fields";\n${hasSequence ? 'import { fieldInputSchema } from "@/lib/orm/sequence";\n' : ""}import { recordIdentityShape, validateRecordIdentity } from "@/lib/orm/record";\n\n` +
+    `export const ${n}Fields = {\n${[...clientFields.map(name => `  ${name}: ${fieldExpression(model.metadata[name])},`), ...relations].join("\n")}\n} as const;\n\n` +
+    `export const ${n}Schema = z.strictObject({\n${[...clientFields, ...many.map(([name]) => name)].map(name => `  ${name}: ${model.metadata[name]?.sequence ? `fieldInputSchema(${n}Fields.${name})` : `${n}Fields.${name}.schema`},`).join("\n")}\n});\n\n` +
     `export const ${n}ReactionRules = ${quote(model.reactionRules ?? [])} as const;\n` +
     `export const ${n}PreviewFields = {\n${Object.entries(model.previewFields??{}).map(([name,field])=>`  ${name}: ${fieldExpression(field.metadata)},`).join("\n")}\n} as const;\n\n` +
-    `export const ${n}CollectionFields = { ...${n}Fields,\n${Object.keys({...model.relatedFields,...model.computedFields}).map(name=>`  ${name}: { metadata: { ...${n}PreviewFields.${name}.metadata, readOnly: true } },`).join("\n")}\n} as const;\n\n` +
-    `export function create${n}Defaults() {\n  return {\n${clientFields.map(name => `    ${name}: ${n}Fields.${name}.createDefault(),`).join("\n")}\n  };\n}\n\n` +
+    `export const ${n}CollectionFields = { ${many.length ? clientFields.map(name => `${name}: ${n}Fields.${name},`).join(" ") : `...${n}Fields,`}\n${Object.keys({...model.relatedFields,...model.computedFields}).map(name=>`  ${name}: { metadata: { ...${n}PreviewFields.${name}.metadata, readOnly: true } },`).join("\n")}\n} as const;\n\n` +
+    `export function create${n}Defaults() {\n  return {\n${[...clientFields, ...many.map(([name]) => name)].map(name => `    ${name}: ${n}Fields.${name}.createDefault(),`).join("\n")}\n  };\n}\n\n` +
     `export type ${n}Input = z.input<typeof ${n}Schema>;\nexport type ${n}Values = z.output<typeof ${n}Schema>;\n\n` +
     `export const ${n}RecordSchema = ${n}Schema.extend(recordIdentityShape).superRefine(validateRecordIdentity);\n` +
     `export type ${n}RecordInput = z.input<typeof ${n}RecordSchema>;\nexport type ${n}RecordValues = z.output<typeof ${n}RecordSchema>;\n`;
@@ -64,6 +69,7 @@ export function generateModule(module: ModuleGeneration, context: GenerationCont
   const enums: string[] = [];
   const relations: { target: string; field: string; declaration: string; owner: string }[] = [];
   const constraints: string[] = [];
+  const junctions: string[] = [];
 
   for (const entry of module.models) {
     const { model } = entry;
@@ -86,7 +92,7 @@ export function generateModule(module: ModuleGeneration, context: GenerationCont
     relatedProjectionPlan(module, entry);
     const lines = modelLines.get(model.name)!;
     const indexes: string[] = [];
-    const names = new Set(["id", "createdAt", "updatedAt", "createBy", "createByUser", ...Object.keys(model.fields)]);
+    const names = new Set(["id", "createdAt", "updatedAt", "createBy", "createByUser", ...Object.keys(model.fields), ...Object.keys(model.many2manyFields ?? {})]);
     const columns = new Set(["id", "created_at", "updated_at", "create_by"]);
     for (const [name, descriptor] of Object.entries(model.fields)) {
       if (!/^[a-z][A-Za-z0-9]*$/.test(name) || ["id", "revision", "createdAt", "updatedAt", "createBy", "createByUser"].includes(name)) throw new Error(`Campo inválido: ${model.name}.${name}.`);
@@ -141,6 +147,31 @@ export function generateModule(module: ModuleGeneration, context: GenerationCont
       inverseLines.push(declaration); additions.set(field.target, inverseLines);
       relations.push({ target: field.target, field: inverse, declaration, owner });
     }
+    for (const [field, descriptor] of Object.entries(model.many2manyFields ?? {})) {
+      const { target } = descriptor.many2many;
+      const destination = definitions.get(target);
+      const external = blocks.find(block => block.kind === "model" && block.name === target);
+      const owner = destination ? module.id : context.owners[target];
+      if ((!destination && !external) || !owner || (!destination && !module.depends.includes(owner))) throw new Error(`${model.name}.${field}: falta el destino o la dependencia Many2many.`);
+      if (external && (!/^\s*id\s+String\b[^\n]*@id\b/m.test(external.maskedBody) || /^\s*id\s+String\b[^\n]*@db\./m.test(external.maskedBody))) throw new Error(`${target}: Many2many requiere id String sin tipo nativo.`);
+      const link = many2manyStorage(model, field);
+      if (usedNames.has(link.name) || usedTables.has(link.table) || names.has(link.source) || Object.hasOwn(model.many2manyFields ?? {}, link.source)) throw new Error(`Relación Many2many en conflicto: ${model.name}.${field}.`);
+      if (blocks.some(block => block.kind === "model" && (block.name === link.table || block.body.includes(`@@map(${quote(link.table)})`)))) throw new Error(`Tabla Many2many en conflicto: ${link.table}.`);
+      usedNames.add(link.name); usedTables.add(link.table); names.add(link.source);
+      const add = (name: string, inverse: string, side: string, owning: string) => {
+        const local = definitions.get(name);
+        const block = blocks.find(block => block.kind === "model" && block.name === name);
+        if ((block && new RegExp(`\\b${inverse}\\b`).test(block.maskedBody)) || (local && (Object.hasOwn(local.model.fields, inverse) || Object.hasOwn(local.model.many2manyFields ?? {}, inverse)))) throw new Error(`Inversa Many2many en conflicto: ${name}.${inverse}.`);
+        const declaration = `  ${inverse} ${link.name}[] @relation(${quote(`${link.name}_${side}`)})`;
+        const previous = additions.get(name) ?? [];
+        if (previous.some(line => line.startsWith(`  ${inverse} `))) throw new Error(`Inversa Many2many duplicada: ${inverse}.`);
+        additions.set(name, [...previous, declaration]);
+        relations.push({ target: name, field: inverse, declaration, owner: owning });
+      };
+      add(model.name, link.source, "source", module.id);
+      add(target, link.target, "target", owner);
+      junctions.push(`model ${link.name} {\n  // lite-erp:many2many\n  sourceId String @map("source_id")\n  targetId String @map("target_id")\n  source ${model.name} @relation(${quote(`${link.name}_source`)}, fields: [sourceId], references: [id], onDelete: Cascade)\n  target ${target} @relation(${quote(`${link.name}_target`)}, fields: [targetId], references: [id], onDelete: Restrict)\n  @@id([sourceId, targetId])\n  @@index([targetId])\n  @@map(${quote(link.table)})\n}`);
+    }
     const auditRelation = `${model.name}_createBy`, auditInverse = `${lowerFirst(model.name)}CreatedRecords`;
     const inverseLines = additions.get("User") ?? [];
     if (new RegExp(`\\b${auditInverse}\\b`).test(auditUser.maskedBody) || inverseLines.some(line => line.startsWith(`  ${auditInverse} `))) throw new Error(`Relación de auditoría en conflicto: User.${auditInverse}.`);
@@ -153,7 +184,7 @@ export function generateModule(module: ModuleGeneration, context: GenerationCont
   }
 
   const generatedModels = module.models.map(({ model }) => `model ${model.name} {\n${[...modelLines.get(model.name)!, ...(additions.get(model.name) ?? [])].join("\n")}\n}`).join("\n\n");
-  const prisma = `${header}${[...enums, generatedModels].join("\n\n")}\n`;
+  const prisma = `${header}${[...enums, generatedModels, ...junctions].join("\n\n")}\n`;
   let preview = context.schema;
   // Apply edits backwards so each original source offset remains valid; originals are never written.
   for (const block of [...blocks].reverse()) {

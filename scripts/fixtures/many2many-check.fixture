@@ -1,0 +1,67 @@
+import assert from "node:assert/strict";
+import { config } from "dotenv";
+config({ path: ".env.local", quiet: true });
+const { prisma } = await import("./src/lib/prisma");
+const { modelService, modelClientConfig } = await import("./src/lib/modules/registry");
+const { hashPassword } = await import("./src/lib/auth/password");
+const password = await hashPassword("many-test-only");
+const root = await prisma.user.create({ data: { login: "many-root", password, isAdmin: true } });
+const user = await prisma.user.create({ data: { login: "many-editor", password } });
+const denied = await prisma.user.create({ data: { login: "many-denied", password } });
+await prisma.accessUserGroup.createMany({ data: [{ userId: user.id, groupId: "vinculos.editor" }, { userId: denied.id, groupId: "vinculos.sinlectura" }] });
+const admin = { id: root.id, sessionVersion: root.sessionVersion }, actor = { id: user.id, sessionVersion: user.sessionVersion }, noRead = { id: denied.id, sessionVersion: denied.sessionVersion };
+const service = modelService("vinculos.ticket");
+const a = await prisma.vinculosEtiqueta.create({ data: { name: "A" } }), b = await prisma.vinculosEtiqueta.create({ data: { name: "B" } }), hidden = await prisma.vinculosEtiqueta.create({ data: { name: "Hidden", active: false } });
+type Row = { id: string; revision: string; name: string; etiquetas: string[] };
+const save = async (values: unknown, who = actor) => { const result = await service.save(prisma, who, values); assert.ok(result.ok, JSON.stringify(result)); return result.values as Row; };
+const reopen = async (id: string, who = actor) => { const result = await service.read(prisma, who, id); assert.ok(result.ok, JSON.stringify(result)); return result.values as Row; };
+const fail = async (values: unknown, who = actor) => {
+  const before = await prisma.vinculosTicket.findMany({ orderBy: { id: "asc" } }), links = await prisma.vinculosTicketEtiquetasLink.findMany({ orderBy: [{ sourceId: "asc" }, { targetId: "asc" }] }), logs = await prisma.recordActivity.count();
+  const result = await service.save(prisma, who, values); assert.equal(result.ok, false, JSON.stringify(result));
+  assert.deepEqual(await prisma.vinculosTicket.findMany({ orderBy: { id: "asc" } }), before);
+  assert.deepEqual(await prisma.vinculosTicketEtiquetasLink.findMany({ orderBy: [{ sourceId: "asc" }, { targetId: "asc" }] }), links);
+  assert.equal(await prisma.recordActivity.count(), logs);
+};
+let one = await save({ name: "Uno", etiquetas: [a.id, b.id] });
+let two = await save({ name: "Dos", etiquetas: [a.id] });
+assert.deepEqual(new Set((await reopen(one.id)).etiquetas), new Set([a.id, b.id]));
+assert.equal(await prisma.vinculosTicketEtiquetasLink.count(), 3);
+assert.equal((await prisma.vinculosEtiqueta.findUniqueOrThrow({ where: { id: a.id } })).name, "A");
+const cfg = modelClientConfig("vinculos.ticket");
+assert.equal(cfg.lookups.etiquetas, "vinculos.etiqueta"); assert.equal(cfg.many2many?.etiquetas.maxSelected, 3); assert.ok(!cfg.list.fields.includes("etiquetas"));
+for (const etiquetas of [[a.id, a.id], ["missing"], [hidden.id], [a.id, b.id, hidden.id, "four"], [{}]]) await fail({ ...one, etiquetas });
+await fail({ ...one, name: "forjar" }); // hooks cannot introduce unauthorized IDs
+await fail({ ...one, name: "fallar", etiquetas: [b.id] }); // base/revision/links/activity rollback
+await fail({ ...one, etiquetas: [] }, noRead);
+const unauthorized = await service.read(prisma, noRead, one.id); assert.equal(unauthorized.ok, false);
+const outsider = await save({ name: "Admin", etiquetas: [a.id] }, admin);
+assert.equal((await service.read(prisma, actor, outsider.id)).ok, false);
+const activityBefore = await prisma.recordActivity.count({ where: { recordId: one.id } });
+one = await save({ ...one, etiquetas: [b.id] });
+assert.equal(await prisma.recordActivity.count({ where: { recordId: one.id } }), activityBefore + 1);
+assert.equal((await prisma.recordActivity.findFirstOrThrow({ where: { recordId: one.id }, orderBy: { createdAt: "desc" } })).body, "Relaciones actualizadas");
+assert.deepEqual((await reopen(two.id)).etiquetas, [a.id]); // shared target and other owner's links survive
+await fail({ ...one, revision: "2000-01-01T00:00:00.000Z", etiquetas: [] });
+const action = await service.action(prisma, actor, { action: "vaciar", id: one.id, revision: one.revision });
+assert.ok(action.ok, JSON.stringify(action)); one = action.values as Row; assert.deepEqual(one.etiquetas, []);
+const restricted = await prisma.vinculosTicket.create({ data: { name: "Legacy hidden", createBy: actor.id, vinculosTicketEtiquetasLinkSourceRecords: { create: { targetId: hidden.id } } } });
+assert.equal((await service.read(prisma, actor, restricted.id)).ok, false); // do not expose hidden IDs or silently remove their links
+assert.deepEqual((await reopen(restricted.id, admin)).etiquetas, [hidden.id]);
+await assert.rejects(prisma.vinculosEtiqueta.delete({ where: { id: a.id } }), (e: unknown) => (e as { code: string }).code === "P2003");
+const race = await save({ name: "Race", etiquetas: [] });
+const results = await Promise.all([service.save(prisma, actor, { ...race, etiquetas: [a.id] }), service.save(prisma, actor, { ...race, etiquetas: [b.id] })]);
+assert.equal(results.filter(result => result.ok).length, 1);
+const winner = await reopen(race.id); assert.equal(winner.etiquetas.length, 1);
+const removed = await service.remove(prisma, actor, [{ id: two.id, revision: two.revision }]); assert.ok(removed.ok, JSON.stringify(removed));
+assert.equal(await prisma.vinculosTicketEtiquetasLink.count({ where: { sourceId: two.id } }), 0);
+assert.ok(await prisma.vinculosEtiqueta.findUnique({ where: { id: a.id } }));
+const { readModuleInventory } = await import("./src/lib/module-manager/inventory");
+const inventory = await readModuleInventory(process.cwd());
+assert.ok(inventory.declarations.find(item => item.id === "vinculos")?.models.includes("VinculosTicketEtiquetasLink"));
+const { reviewModuleOperation } = await import("./src/lib/module-manager/operation-engine");
+const plan = await reviewModuleOperation(process.cwd(), admin, { module: "vinculos", operation: "uninstall", policy: "keep" });
+assert.deepEqual(plan.blockers, [], JSON.stringify(plan.blockers));
+await prisma.user.update({ where: { id: user.id }, data: { active: false } });
+assert.equal((await service.read(prisma, actor, one.id)).ok, false);
+console.log("✓ Many2many: shared targets, nested transaction, hooks/actions, access/rules, hidden-ID fail-closed, FK, stale revisions, races and deletion verified.");
+await prisma.$disconnect();

@@ -48,6 +48,9 @@
     "test:module-manager": "node --conditions=react-server --import tsx --test src/lib/module-manager/*.test.ts",
     "module:manage": "node --conditions=react-server --import tsx scripts/module-operation.ts",
     "test:prisma-connection": "node --conditions=react-server --import tsx --test src/lib/prisma-connection.test.ts",
+    "test:action-parameters:integration": "node --conditions=react-server --import tsx scripts/modules.integration.ts --parameters-only",
+    "test:sequences:integration": "node --conditions=react-server --import tsx scripts/modules.integration.ts --sequences-only",
+    "test:many2many:integration": "node --conditions=react-server --import tsx scripts/modules.integration.ts --many2many-only",
     "test:one2many:integration": "node --conditions=react-server --import tsx scripts/modules.integration.ts --one2many-only",
     "test:extensions:integration": "node --conditions=react-server --import tsx scripts/modules.integration.ts --extensions-only"
   },

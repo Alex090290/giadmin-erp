@@ -26,6 +26,7 @@ const methods = useForm({
 </FormLayout>
 ```
 
+- Las etiquetas y el buscador comparten una fila flexible dentro del mismo control. Al faltar espacio saltan de línea sin salir de él; los nombres largos se ajustan sin truncarse. Limpiar y Buscar más permanecen dentro del control.
 - RHF conserva `string[]`, sin duplicados. `onChange(ids, records)` devuelve los IDs y DTOs públicos en el mismo orden. Limpiar todo devuelve `([], [])`.
 - El desplegable permite agregar/quitar un registro. El modal usa checkboxes y conserva las marcas entre búsquedas y páginas. **Aplicar selección** confirma el conjunto; Cancelar/Escape lo descartan sin cambiar el formulario ni ejecutar onChange.
 - Las × quitan tags; Retroceso quita el último cuando la búsqueda está vacía. Flechas/Enter/Escape funcionan en el desplegable.
@@ -43,3 +44,5 @@ La acción existente admite `ids` (máximo 100, únicos) para cargar todas las s
 El componente no decide qué relación se guarda ni escribe en la base. En una relación many-to-many de Prisma, el servidor puede traducir los IDs con `set: ids.map(id => ({ id }))` para reemplazar la selección, o `connect`/`disconnect` para cambios puntuales. Validar existencia, permisos y pertenencia al guardar. Los modelos actuales mantienen sus relaciones originales; no se crea una relación M:N nueva para este ejemplo.
 
 Ejemplo Zod/RHF con usuarios y contactos reales: `/sample#field-relation-tag`. La carga de registros no inserta datos.
+
+En módulos declarativos, `Fields.Many2many` conecta el selector, lookup y persistencia por convención: [contrato y límites](../../../../docs/relaciones-many2many.md). Demo ficticia con botón Cargar ejemplo en `/sample#many2many-model`.

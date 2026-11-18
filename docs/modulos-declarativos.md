@@ -506,3 +506,19 @@ del hijo; ModelForm la incorpora y FieldOne2many.Column personaliza sus columnas
 El guardado aplica lógica/permisos/revisiones de padre e hijos en una transacción.
 Alcance inicial de un nivel, mismo módulo y colección completa acotada: ver
 [contrato y ejemplos](lineas-one2many.md). No requiere crear Server Actions por relación.
+
+## Relaciones Many2many
+
+`Fields.Many2many("ModuloEtiqueta", { label: "Etiquetas", maxSelected: 20 })`
+declara IDs de registros existentes y compartidos. ModelForm y eject:view lo
+presentan con FieldRelationTag y lookup autorizado. orm:sync genera su tabla
+intermedia gestionada; guardado y revisión pertenecen al dueño, con autorización
+de lectura de los destinos. Alcance y límites en [Many2many](relaciones-many2many.md).
+
+## Folio en name u otro Text
+
+`name = Fields.Text({ label: "Folio", sequence: { prefix: "TCK-{year}-", padding: 6,
+reset: "year" } })` asigna el folio al crear desde el servidor. No requiere
+beforeSave; el campo se conserva único y de sólo lectura. ModelForm muestra Nuevo
+en el borrador y el valor asignado después de guardar. [Migración, concurrencia
+y límites](folios-secuencias.md).

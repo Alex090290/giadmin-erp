@@ -8,7 +8,7 @@ import type { FormViewResult } from "./formView.types";
 /** Saved identity the action runs on: always the revision persisted by the form cycle. */
 export type FormActionTarget = { id: string; revision: string };
 /** Server execution of a named, published action (e.g. `modelAction(model, {action, id, revision})`). */
-export type FormActionRunner<TValues extends FieldValues = FieldValues> = (action: string, target: FormActionTarget) => Promise<FormViewResult<TValues>>;
+export type FormActionRunner<TValues extends FieldValues = FieldValues> = (action: string, target: FormActionTarget, params?: Record<string, unknown>) => Promise<FormViewResult<TValues>>;
 
 type FormActionsContextValue = {
   /** Header slot rendered by FormView (portal target for FormHeader). */
@@ -16,7 +16,7 @@ type FormActionsContextValue = {
   locked: boolean;
   readOnly: boolean;
   /** Labels of the actions the server publishes for this form, when known. */
-  actions?: readonly { name: string; label: string }[];
+  actions?: readonly import("@/lib/orm/action-parameters").ClientModelAction[];
   /** Runs save (if new/dirty) and then the action, under one lock. Resolves true on success. */
   run: ((action: string) => Promise<boolean>) | null;
   /** Which action is running, for its spinner. */
@@ -50,7 +50,8 @@ type FormButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "o
 };
 
 /**
- * Validates and saves the form first (only if new or modified); on success, runs the
+ * Collects declared parameters first (cancel does not save), then validates and saves
+ * the form (only if new or modified); on success, runs the
  * named action with the saved ID/revision. One lock covers both phases; a failed save
  * never runs the action, and a failed action keeps what was already saved.
  */

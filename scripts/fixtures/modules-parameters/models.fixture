@@ -1,0 +1,31 @@
+import "server-only";
+import { Fields, Model, action, ActionParameterError, ModelValidationError, type ActionParams, type ActionRecord, type ActionContext } from "@/lib/orm";
+export const closeParams = {
+  nota: Fields.Text({ label: "Nota de resolución", required: true, maxLength: 2000 }),
+  tecnicoId: Fields.Many2one("ParametrosTecnico", { label: "Técnico", required: true }),
+  cantidad: Fields.Integer({ label: "Cantidad", min: 1, required: true, default: 1 }),
+  urgente: Fields.Boolean({ label: "Urgente" }),
+  resultado: Fields.Selection([{ value: "ok", label: "Resuelto" }, { value: "otro", label: "Otro" }], { required: true, default: "ok" }),
+  fecha: Fields.DateTime({ label: "Fecha" }),
+};
+let executions = 0;
+export const executionCount = () => executions;
+export class Ticket extends Model {
+  name = Fields.Text({ required: true, tracking: true });
+  estado = Fields.Selection([{ value: "draft", label: "Borrador" }, { value: "closed", label: "Cerrado" }], { required: true, default: "draft" });
+  resolucion = Fields.Text({ maxLength: 2000, tracking: true });
+  tecnicoId = Fields.Many2one("ParametrosTecnico");
+  @action({ label: "Cerrar", groups: ["operador"], params: closeParams })
+  cerrar(record: ActionRecord<Ticket>, params: ActionParams<typeof closeParams>, context: ActionContext) {
+    executions++;
+    if (!Object.isFrozen(params) || !Object.isFrozen(record) || context.action !== "cerrar" || !context.tx.user) throw new Error("Invalid action context");
+    if (params.nota === "business") throw new ActionParameterError("Revisa la nota.", { nota: "Explica la solución." });
+    return { estado: "closed", resolucion: params.nota, tecnicoId: params.tecnicoId };
+  }
+  @action({ label: "Legacy" }) legacy(_record: ActionRecord<Ticket>, context: ActionContext) {
+    executions++; if (!context.tx.user) throw new Error("Legacy context changed"); return { estado: "draft" };
+  }
+  beforeSave(values: Record<string, unknown>) { if (values.resolucion === "hook") throw new ModelValidationError("Hook rechazado."); return values; }
+  afterSave(record: Record<string, unknown>) { if (record.resolucion === "late") throw new Error("Late rollback"); }
+}
+export class Tecnico extends Model { name = Fields.Text({ required: true }); active = Fields.Boolean({ default: true }); }

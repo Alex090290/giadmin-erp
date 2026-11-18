@@ -1,60 +1,39 @@
-# Siguiente guía: Tickets de servicio interno
+# Tickets de servicio interno: dirección del piloto
 
-Planeada el 2026-11-17 a petición del usuario como **siguiente tutoría después de
-Flota**. Todavía no inicia: antes, el usuario quiere afinar otros módulos. No crear
-el módulo, modelos, campos ni piezas del framework por anticipación.
+Idea registrada el 2026-11-17. La preparación del recorrido ya fue autorizada:
+la **[guía vigente de Tickets desde cero](../tutorial-tickets.md)** sustituye el
+orden preliminar de este documento. Los ejercicios todavía no han comenzado.
+No crear módulos, modelos ni vistas por anticipación.
 
 ## Propósito
 
-Segundo piloto del framework para probar lo que Flota no cubrió: dependencias entre
-módulos, folios, fecha sin hora, acciones con parámetros, Many2many y reglas de
-acceso por rol. Dominio sencillo, sin dinero ni inventario (dinero/decimales quedan
-para un piloto posterior tipo pedidos).
+Aprender el framework desde su primer módulo y comprobar sus capacidades actuales
+con una mesa de ayuda interna: tickets, clasificación, técnicos, intervenciones,
+etiquetas y equipos. Sin dinero ni inventario. Usar módulos declarativos, negocio
+en clases y presentación TSX. Avanzar un ejercicio por confirmación del usuario.
 
-## Conceptos y cómo aparecen
+La guía cubre campos y folios, presentación/Many2one, ciclo de guardado, reacciones,
+related/compute, formularios, colecciones, transiciones, parámetros, actividad,
+One2many/Many2many, grupos/reglas/capacidades, dominios y ciclo de vida modular.
+Un módulo auxiliar Recursos permitirá practicar dependencias e herencia entre
+modelos declarativos. Flota permanece retirada y no se reinstala para este piloto.
 
-| Concepto | En Tickets | ¿Existe hoy? |
-| --- | --- | --- |
-| Dependencias entre módulos | Solicitante/técnico como User/Partner; ticket ligado a un registro de otro módulo declarativo (Flota se retiró el 2026-11-17: elegir otro módulo o reinstalarla sólo si el usuario lo pide) | Parcial: Many2one a User existe; dependencia declarada entre módulos declarativos, no |
-| Herencia/extensión de modelos | Añadir campos de Tickets a un modelo de otro módulo o a Partner (p. ej. departamento) | Fases 1–2 sí (declarativos, colecciones, vistas y reglas); Partner/User en fase 3. [Diseño](herencia-modelos.md) |
-| Folio/secuencia | `TCK-0001` consecutivo, seguro en concurrencia | No |
-| Fecha sin hora | Fecha compromiso/vencimiento | No (sólo DateTime UTC) |
-| Acciones con parámetros | «Cerrar» con nota de resolución; «Reasignar» con técnico | No (`@action` recibe sólo el registro) |
-| Many2many | Etiquetas y observadores | No |
-| Reglas por registro | Solicitante ve los suyos; técnico los asignados; supervisor todos | Sí |
-| Kanban con transiciones | Nuevo → En proceso → En espera → Resuelto → Cerrado | Sí |
-| Efectos fuera de la transacción | Aviso al técnico al asignar (afterCommit/cola) | No; dejar al final |
-| Adjuntos | Evidencias/fotos | No; dejar al final |
+## Distinciones que debe conservar la tutoría
 
-## Ritmo acordado
+- Dependencias y extensiones entre módulos declarativos ya existen. Las
+  extensiones de Partner/User siguen pendientes; no son el ejercicio inicial.
+- Técnico es primero un catálogo declarativo. Vincularlo a una cuenta exige una
+  integración autorizada; su ID no equivale al ID del usuario autenticado.
+- Folios, acciones con parámetros y Many2many declarativo ya están implementados.
+  Many2many y parámetros Many2one no admiten destinos User/Partner manuales.
+- La fecha compromiso usará DateTime UTC. Date sin hora no existe todavía.
+- Adjuntos generales, avisos después del commit, compute persistido y permisos
+  por campo quedan pendientes. Se diseñan cuando aparezca un caso real.
+- La estrategia de entornos está pendiente: no desplegar como parte de esta guía.
 
-A diferencia de Flota, varias piezas no existen. Ciclo por concepto:
+## Siguiente paso
 
-1. El usuario escribe el módulo hasta toparse con lo que falta.
-2. Se diseña la pieza, se presenta la propuesta y, con aprobación, el agente la
-   implementa en el framework con pruebas y demo ficticia en `/sample`.
-3. El usuario la aplica en Tickets como ejercicio.
-
-Cada pieza nueva nace del caso real; sin abstracciones por anticipación.
-
-## Orden propuesto
-
-1. Base: módulo y modelo Ticket (título, descripción, prioridad, estado), solicitante
-   y técnico como User — posible con el framework actual.
-2. Folio al crear.
-3. Fecha compromiso (Date).
-4. Kanban y reglas por registro por rol.
-5. Acciones con parámetros: Cerrar y Reasignar.
-6. Many2many: etiquetas y observadores.
-7. Dependencia con otro módulo declarativo (Flota está retirada): vincular un registro y definir el comportamiento al desinstalar el módulo requerido.
-8. Extensión de un modelo ajeno (herencia), si el caso lo pide:
-   [propuesta](herencia-modelos.md).
-9. Avisos y adjuntos.
-
-## Límites
-
-- Flota está retirada desde el 2026-11-17; no reinstalarla ni recuperar su código salvo petición expresa.
-- Tutoría a ritmo del usuario: explicar y verificar un paso a la vez.
-- Pruebas del framework con fixtures/esquemas propios, nunca datos reales.
-- Considerar antes la [estrategia de entornos](entornos-bases.md) si la guía llega a
-  requerir despliegue.
+Ejercicio 0 de la [guía](../tutorial-tickets.md): revisar entorno y migraciones
+pendientes de la máquina actual. Después proponer únicamente el dry-run de
+create:module. El avance confirmado se registra en la guía y en
+[estado-proyecto.md](../estado-proyecto.md).

@@ -1,0 +1,4 @@
+import "server-only";
+import { defineModule } from "@/lib/modules/define";
+import { Ticket } from "./models/ticket";
+export default defineModule({ id: "series", name: "Series", icon: "hash", models: { ticket: Ticket }, groups: { editor: "Editor", reader: "Consulta" }, access: [{ group: "editor", models: "ticket", perms: "crud" }, { group: "reader", models: "ticket", perms: "r" }] });

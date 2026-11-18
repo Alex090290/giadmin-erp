@@ -1,0 +1,18 @@
+import "server-only";
+import { Fields, Model, ModelValidationError, constraint, action, type ModelContext } from "@/lib/orm";
+export class Ticket extends Model {
+  name = Fields.Text({ label: "Folio", sequence: { prefix: "TCK-{year}-", padding: 6, reset: "year" } });
+  referencia = Fields.Text({ sequence: { prefix: "REF-", padding: 4 } });
+  descripcion = Fields.Text({ required: true, tracking: true });
+  estado = Fields.Selection([{ value: "draft", label: "Borrador" }, { value: "done", label: "Confirmado" }], { required: true, default: "draft" });
+  normalize(values: Readonly<Record<string, unknown>>) { return values.descripcion === "normalize" ? { ...values, name: "OVERRIDE" } : { ...values }; }
+  beforeSave(values: Record<string, unknown>) { return values.descripcion === "hook" ? { ...values, name: "OVERRIDE" } : values; }
+  @constraint("descripcion")
+  validar(values: Readonly<Record<string, unknown>>) { if (values.descripcion === "reject") throw new ModelValidationError("No permitido."); }
+  @action({ label: "Confirmar" }) confirmar() { return { estado: "done" }; }
+  @action({ label: "Forjar" }) forjar() { return { name: "OVERRIDE" }; }
+  async afterSave(record: Record<string, unknown>, context: ModelContext) {
+    if (record.descripcion === "late") throw new Error("Late failure");
+    if (record.descripcion === "direct") await context.tx.seriesTicket.update({ where: { id: record.id as string }, data: { name: "OVERRIDE" } });
+  }
+}

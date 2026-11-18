@@ -68,6 +68,8 @@ export function compileModelMethods(instance:object & Declarations, fields:Reado
     seen.add(declaration.method); method(declaration.method);
     const rule:ReactionRule={fields:[...declaration.fields],reads:[...(declaration.reads??declaration.fields)],writes:[...(declaration.writes??[])],preview:[...(declaration.preview??[])]};
     if(!rule.fields.length||!names(rule.fields,publicFields)||!names(rule.reads,publicFields)||!rule.fields.every(name=>rule.reads.includes(name))||!names(rule.writes,publicFields)||!names(rule.preview,previews)||!rule.writes.length&&!rule.preview.length) throw new Error(`Contrato onchange inválido: ${declaration.method}.`);
+    if (rule.writes.some(name => fields[name]?.metadata.sequence)) throw new Error("onchange no puede escribir campos con sequence.");
+    if (rule.writes.some(name => fields[name]?.metadata.sequence)) throw new Error("onchange no puede escribir campos con sequence.");
     for(const entries of Object.values(rule)) Object.freeze(entries);
     const inputSchema=z.strictObject(Object.fromEntries(rule.reads.map(name=>[name,fields[name].schema.optional().nullable()])));
     return Object.freeze({declaration,rule:Object.freeze(rule),inputSchema});

@@ -5,7 +5,7 @@ import type { KanbanConfig, KanbanTransition } from "./types";
 export function compileKanbanConfig(
   input: string | KanbanConfig | undefined,
   fields: Readonly<Record<string, FieldMetadata>>,
-  actions: readonly { readonly name: string }[],
+  actions: readonly { readonly name: string; readonly params?: object }[],
   published: readonly string[],
 ): KanbanConfig | undefined {
   if (input === undefined) return undefined;
@@ -27,6 +27,7 @@ export function compileKanbanConfig(
       typeof route.from !== "string" || typeof route.to !== "string" || typeof route.action !== "string" ||
       !values.has(route.from) || !values.has(route.to) || route.from === route.to ||
       !actions.some(action => action.name === route.action)) throw new Error("La transición kanban requiere estados distintos y una acción publicada.");
+    if (actions.find(action => action.name === route.action)?.params) throw new Error("Las acciones con parámetros se ejecutan desde el formulario, no mediante una transición Kanban.");
     const pair = JSON.stringify([route.from, route.to]);
     if (pairs.has(pair)) throw new Error("Transición kanban duplicada.");
     pairs.add(pair);

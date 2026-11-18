@@ -26,7 +26,14 @@ actor entre menús, formularios y colecciones: consulta, crear, eliminar, accion
 y movimientos. Incluye grupos heredados y ajustes desde Accesos; el servidor
 revalida cada operación. El [catálogo y gestor ampliado de Accesos](docs/ideas/access-manager.md) quedan pendientes; se conserva la administración básica de grupos, miembros, CRUD y reglas.
 
-## Comandos del scaffold, en orden
+## Aprender desde cero
+
+El siguiente módulo piloto es **Tickets**. La [guía paso a paso](docs/tutorial-tickets.md)
+comienza por el entorno y un modelo sencillo, y recorre formularios, colecciones,
+negocio, folios, relaciones, accesos y extensiones. Incluye comandos, comprobaciones
+y límites actuales. Los ejercicios todavía no han comenzado; se harán uno a uno.
+
+## Comandos del scaffold anterior, en orden
 
 Para añadir otro modelo a una aplicación, el flujo es **modelo → negocio → vistas → sincronizar**:
 
@@ -59,9 +66,10 @@ Muestra el SQL y pide aprobación antes de aplicarlo; se detiene ante errores.
 datos y mantiene la aprobación del SQL. [Guía del comando](docs/sincronizar-aplicaciones.md).
 
 Cada aplicación creada con `create:app` incluye un README con comandos concretos
-para su identificador, separados por caso. La nueva tutoría de Flota usa módulos
-declarativos con el ID `flota`, disponible tras retirar la aplicación anterior.
-[Punto de partida y ritmo](docs/tutorial-flota.md).
+para su identificador, separados por caso. Ese flujo corresponde a aplicaciones
+con `orm.config.ts`; los nuevos módulos siguen create:module → create:model →
+orm:sync y usan eject:view sólo para personalizar. Flota está retirada; su
+[tutoría](docs/tutorial-flota.md) queda como referencia histórica.
 
 Continuidad: [avance actual y siguiente paso](docs/estado-proyecto.md).
 Implementado el 2026-11-14:
@@ -137,5 +145,11 @@ permisos, concurrencia y eliminación con cuentas y un esquema PostgreSQL tempor
 - [Auditoría de registros](docs/auditoria-modelos.md).
 - [Historial de cambios y notas internas](docs/actividad-registros.md).
 - [Vistas de colecciones](docs/vistas-colecciones.md).
+
+Acciones con argumentos: [parámetros del modelo](docs/acciones-parametros.md), con `@action({ params: ... })`, validación de servidor y diálogo automático desde FormButton.
+
+Folios automáticos: [secuencias del modelo](docs/folios-secuencias.md), con `Fields.Text({ sequence: ... })`, contador transaccional y presentación de sólo lectura.
+
+Selección de registros compartidos: [Many2many declarativo](docs/relaciones-many2many.md), con FieldRelationTag, tabla intermedia y guardado autorizado en la transacción del dueño.
 
 Líneas de documentos: [One2many declarativo](docs/lineas-one2many.md), con edición inline, lógica del hijo y guardado transaccional del padre. Demo local en `/sample#one2many-model`.

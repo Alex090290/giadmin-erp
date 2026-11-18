@@ -29,6 +29,7 @@ async function main() {
   const { className, classImport } = manifestModel(text, key);
   const lookups = Object.entries(entry.metadata).filter(([, field]) => field.kind === "many2one" && !field.sensitive && definition.models.some(model => model.contract.name === field.target)).map(([name]) => name);
   const model = {
+    many2many: Object.keys(entry.contract.many2manyFields),
     key, className, classImport, lookups, listFields: entry.list.fields,
     fields: Object.fromEntries(entry.clientFields.map(name => [name, entry.metadata[name]])),
     preview: Object.fromEntries(Object.entries((entry.contract.previewFields ?? {}) as Record<string, { metadata: (typeof entry.metadata)[string] }>).map(([name, field]) => [name, field.metadata])),

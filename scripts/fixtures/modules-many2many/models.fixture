@@ -1,0 +1,20 @@
+import "server-only";
+import { Fields, Model, action, constraint, ModelValidationError, type ActionRecord } from "@/lib/orm";
+export class Ticket extends Model {
+  name = Fields.Text({ required: true, tracking: true });
+  etiquetas = Fields.Many2many("VinculosEtiqueta", { label: "Etiquetas", maxSelected: 3 });
+  @constraint("name", "etiquetas")
+  validar(values: Readonly<Record<string, unknown>>) {
+    if (values.name === "necesita" && !(values.etiquetas as string[]).length) throw new ModelValidationError("Selecciona una etiqueta.");
+  }
+  @action({ label: "Vaciar" })
+  vaciar(record: ActionRecord<Ticket>) { if (!Object.isFrozen(record.etiquetas)) throw new Error("Mutable IDs"); return { etiquetas: [] }; }
+  beforeSave(values: Record<string, unknown>) {
+    return values.name === "forjar" ? { ...values, etiquetas: ["missing"] } : values;
+  }
+  afterSave(record: Record<string, unknown>) { if (record.name === "fallar") throw new Error("Late rollback"); }
+}
+export class Etiqueta extends Model {
+  name = Fields.Text({ required: true });
+  active = Fields.Boolean({ default: true });
+}

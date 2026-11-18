@@ -18,6 +18,8 @@ export function unboundFiles(profile: ModuleGeneration) {
 export function repositoryFiles(profile: ModuleGeneration) {
   const files: Record<string, string> = {};
   for (const { model, clientFields } of profile.models) {
+    if (Object.keys(model.many2manyFields ?? {}).length) throw new Error("Many2many requiere módulos declarativos; no usa bindings legacy.");
+    if (Object.values(model.metadata).some(field => field.sequence)) throw new Error("sequence requiere módulos declarativos, no bindings legacy.");
     const names = Object.keys(model.fields), n = model.name, delegate = n[0].toLowerCase() + n.slice(1);
     if (clientFields.length !== names.length || names.some(name => !clientFields.includes(name))) throw new Error(`${n}: el repositorio inicial requiere publicar todos sus campos. Los contratos parciales requieren un servicio propio.`);
     const dto = names.map(name => `    ${name}: ${model.metadata[name].kind === "datetime" ? model.metadata[name].required ? `record.${name}.toISOString()` : `record.${name}?.toISOString() ?? null` : `record.${name}`},`).join("\n");
