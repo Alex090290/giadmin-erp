@@ -17,10 +17,4 @@ model User {
     updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
     @@map("users")
-
-  // BEGIN lite-erp:tickets:User
-  ticketsTicketCreatedRecords TicketsTicket[] @relation("TicketsTicket_createBy")
-  ticketsCategoriaCreatedRecords TicketsCategoria[] @relation("TicketsCategoria_createBy")
-  ticketsTecnicoCreatedRecords TicketsTecnico[] @relation("TicketsTecnico_createBy")
-  // END lite-erp:tickets:User
 }
