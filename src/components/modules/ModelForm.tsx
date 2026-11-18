@@ -37,7 +37,7 @@ function control(ui: ModelUI, name: string, field: FieldMetadata) {
     case "datetime": return <FieldDate<Values> key={name} name={name} type="datetime" direction="inline" />;
     case "selection": return <FieldSelect<Values> key={name} name={name} direction="inline" />;
     case "many2one": return Object.hasOwn(ui.config.lookups, name) ? <FieldMany2One<Values> key={name} name={name} direction="inline" /> : null;
-    default: return <FieldText<Values> key={name} name={name} direction="inline" />;
+    default: return <FieldText<Values> key={name} name={name} widget={field.sequence ? "header" : "text"} direction="inline" />;
   }
 }
 

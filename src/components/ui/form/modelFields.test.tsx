@@ -150,14 +150,16 @@ test("Many2many tags inherit provider, bounds, label and visibility with explici
 });
 
 
-test("sequence text inherits readonly Nuevo presentation even when editable props are requested", () => {
+test("sequence text keeps Nuevo and lets FieldText choose readonly explicitly", () => {
   const name = Fields.Text({ label: "Folio", sequence: { prefix: "TCK-" } });
-  function SequenceFixture() {
+  function SequenceFixture({ readOnly }: { readOnly?: boolean }) {
     const methods = useForm({ defaultValues: { name: "" } });
-    return <FormProvider {...methods}><FormModelContext.Provider value={{ fields: { name } }}><FieldText name="name" readOnly={false} required /></FormModelContext.Provider></FormProvider>;
+    return <FormProvider {...methods}><FormModelContext.Provider value={{ fields: { name } }}><FieldText name="name" readOnly={readOnly} required /></FormModelContext.Provider></FormProvider>;
   }
   const html = renderToStaticMarkup(<SequenceFixture />);
-  assert.match(html, /readOnly=""/i);
+  assert.doesNotMatch(html, /readOnly=""/i);
+  assert.doesNotMatch(renderToStaticMarkup(<SequenceFixture readOnly={false} />), /readOnly=""/i);
+  assert.match(renderToStaticMarkup(<SequenceFixture readOnly />), /readOnly=""/i);
   assert.match(html, /placeholder="Nuevo"/);
   assert.match(html, /autoComplete="off"/i);
   assert.doesNotMatch(html, / required=""/);

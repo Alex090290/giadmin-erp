@@ -29,7 +29,7 @@ function control(name: string, field: FieldMetadata, lookups: readonly string[])
     case "datetime": return ["FieldDate", `<FieldDate${attr} type="datetime" direction="inline" />`];
     case "selection": return ["FieldSelect", `<FieldSelect${attr} direction="inline" />`];
     case "many2one": return lookups.includes(name) ? ["FieldMany2One", `<FieldMany2One${attr} direction="inline" />`] : null;
-    default: return ["FieldText", `<FieldText${attr} direction="inline" />`];
+    default: return ["FieldText", `<FieldText${attr}${field.sequence ? ' widget="header"' : ""} direction="inline" />`];
   }
 }
 

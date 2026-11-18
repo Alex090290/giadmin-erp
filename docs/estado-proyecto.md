@@ -1,20 +1,47 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-17.
+Última actualización: 2026-11-18.
 
 Documento de continuidad entre agentes y máquinas. Leer primero [AGENTS.md](../AGENTS.md)
 y [README](../README.md); contrastar este resumen con Git y el código relevante.
 Actualizar el estado vigente, evitando acumular una transcripción de sesiones.
 
-Revisión de continuidad (2026-11-17): rama `codex/herencia`, HEAD `dd70ff9`
-(`herencia primera fase`), árbol limpio antes de esta corrección documental.
-Contrastados README, instrucciones, historial, registro vacío de módulos, API y
-composición de extensiones y configuración de Prisma. Las secciones antiguas de
-Flota y de separación de entornos son históricas; prevalecen las decisiones del
-2026-11-17. Esta revisión no ejecuta suites, navegador ni consultas a la BD.
-Al iniciar esta revisión, la siguiente prioridad registrada era diseñar y presentar
-la distribución de módulos entre proyectos. Después el usuario autorizó la fase 2
-de herencia, cuyo avance se registra abajo. Distribución, entornos y fase 3 siguen pendientes.
+Revisión de continuidad (2026-11-18, Windows): rama `codex/tickets`, HEAD `408b593`
+(`tickets primer progreso`), árbol limpio antes de esta corrección documental.
+Contrastados instrucciones, README, guía de Tickets, historial, clase Ticket,
+manifest, registro de módulos, esquema Prisma y configuración de Prisma.
+Tickets es el único módulo registrado en `src/modules/index.ts`; sus campos
+coinciden con el punto de continuación siguiente y `compromisoAt` aún no existe.
+El progreso ya está versionado en ese commit; no se comprobó sincronización remota.
+Se corrigió el README que aún decía que los ejercicios no habían comenzado.
+Las secciones antiguas de Flota y separación de entornos son históricas;
+prevalecen las decisiones del 2026-11-17 y el avance de Tickets de abajo.
+Revisión documental y de fuentes, sin suites, navegador, consultas a la BD,
+generación ni migraciones; no se confirmó disponibilidad de dev o PostgreSQL.
+Distribución de módulos, estrategia de entornos, permisos por campo, compute
+persistido y fase 3 de herencia siguen pendientes, sin implementación anticipada.
+
+## Sequence: readOnly explícito en la vista (2026-11-18)
+
+Por solicitud del usuario, `sequence` ya no añade `readOnly` al descriptor ni
+fuerza esa prop desde useModelField. Los folios persistidos recuperan búsqueda,
+filtros y orden con la política de colecciones habitual. FieldText permite
+`readOnly` explícito en TSX. Por aclaración posterior del usuario, los campos
+con secuencia se presentan con `widget="header"` en formularios: ModelForm lo
+elige por convención y eject:view lo declara en las nuevas vistas. La demo
+`/sample#model-sequences` usa header, sin input editable. Las vistas personalizadas
+existentes no se regeneran. Se conservan
+placeholder Nuevo, borrador vacío, required/unique persistidos y protección del
+folio en servidor frente a cambios del cliente/hooks/acciones. Sin SQL ni cambios
+en Ticket o sus vistas. Contrato actualizado en [Folios](folios-secuencias.md).
+
+Verificación: 10 pruebas focalizadas de secuencias/colecciones y 12 de
+test:form-model aprobadas; incluyen consultas de folios, readOnly omitido/false/true
+y rechazo de folios falsificados/cambios desde hooks. TypeScript, ESLint de los
+archivos de código modificados y git diff --check aprobados. Para la convención
+header posterior: 7 pruebas de eject:view, TypeScript y ESLint focalizado aprobados.
+Sin navegador ni integración
+PostgreSQL nueva; estas pruebas de servidor usan un repositorio simulado.
 
 ## Tickets: punto de continuación guardado (2026-11-17)
 
@@ -58,7 +85,8 @@ opcional (fecha y hora de compromiso, instante UTC). Explicar el concepto, pedir
 al usuario añadir sólo ese campo y compartir `orm:sync -- tickets --plan`; revisar
 antes de aplicar. Después probar guardar/reabrir. No introducir Date sin hora.
 Revisar Git y estado real de la máquina al retomar; no asumir que dev sigue activo.
-Los cambios de código, esquemas y migraciones siguen locales, sin commit ni push.
+Código, esquemas y migraciones están versionados en `408b593`, comprobado el
+2026-11-18. El estado remoto no se comprobó; esta revisión no hizo commit ni push.
 El resto del recorrido y los pendientes están en la guía. Flota no se restaura.
 
 ## Acciones con parámetros implementadas (2026-11-17)

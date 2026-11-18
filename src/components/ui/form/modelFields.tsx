@@ -46,5 +46,5 @@ export function useModelField<P extends { name: string; direction?: FieldDirecti
   if (metadata.kind === "many2one" && !("model" in props && props.model !== undefined)) defaults.load = (line?.lookups ?? model?.lookups)?.[key];
   if (metadata.kind === "image") defaults.upload = (line?.uploads ?? model?.uploads)?.[key];
   if (metadata.kind === "integer") defaults.allowNegative = (metadata.min ?? -2147483648) < 0;
-  return { ...defaults, ...Object.fromEntries(Object.entries(layoutProps).filter(([, value]) => value !== undefined)), ...(metadata.sequence ? { readOnly: true, required: false, placeholder: (props as { placeholder?: string }).placeholder ?? "Nuevo" } : {}) } as P;
+  return { ...defaults, ...Object.fromEntries(Object.entries(layoutProps).filter(([, value]) => value !== undefined)), ...(metadata.sequence ? { required: false, placeholder: (props as { placeholder?: string }).placeholder ?? "Nuevo" } : {}) } as P;
 }

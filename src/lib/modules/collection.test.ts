@@ -17,6 +17,18 @@ const config: ModelClientConfig = {
   view: "list", kanban: "estado",
 };
 
+test("sequence fields support search, filters and sorting in the shared collection", () => {
+  class Folio extends Model { name = Fields.Text({ sequence: { prefix: "TCK-" } }); }
+  const entry = defineModule({ id: "folios", name: "Folios", icon: "boxes", models: { folio: Folio } }).models[0];
+  const source = modelCollection({ ...config, fields: entry.metadata, preview: {}, related: [], list: {
+    fields: entry.list.fields, searchFields: entry.list.searchFields,
+    sortable: entry.list.sortable ?? [], filterable: entry.list.filterable ?? [], groupable: entry.list.groupable ?? [],
+  }, kanban: undefined });
+  assert.deepEqual(source.common.searchFields, ["name"]);
+  assert.equal(source.columns[0].sortable, true);
+  assert.equal(source.columns[0].filterable, true);
+});
+
 test("actor config filters actions and graph without mutating definitions or granting a fallback move", () => {
   const declarations = [{ name: "start", label: "Iniciar" }, { name: "finish", label: "Finalizar", groups: ["private"] }];
   const graph = [{ from: "pendiente", to: "curso", action: "start" }, { from: "curso", to: "hecha", action: "finish" }];

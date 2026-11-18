@@ -130,7 +130,7 @@ function makeField<I, O>(schema: z.ZodType<O, I>, options: CommonOptions & { def
     ...(options.invisible !== undefined ? { invisible: options.invisible } : {}),
     ...(options.related ? { related: options.related } : {}),
     ...(options.compute ? { compute: options.compute } : {}),
-    ...(options.sequence ? { sequence: options.sequence, readOnly: true } : {}),
+    ...(options.sequence ? { sequence: options.sequence } : {}),
     defaultKind: !hasDefault ? "empty" : typeof configuredDefault === "function" ? "factory" : "literal",
     ...(hasDefault && typeof configuredDefault !== "function" ? { defaultValue: configuredDefault } : {}),
     ...Object.fromEntries(presentationKeys.filter(key => options[key] !== undefined).map(key => [key, options[key]])),

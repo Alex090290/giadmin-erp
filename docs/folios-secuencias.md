@@ -35,17 +35,24 @@ También puede declararse en otro Text: el contador se identifica por
 | `padding` | `6` | De 1 a 12. Es un ancho mínimo, sin truncar números mayores. |
 | `reset` | `"none"` | `none` mantiene una serie; `year` separa contadores por año UTC y exige `{year}` en el prefijo. |
 
-El descriptor implica `required: true`, `unique: true` y `readOnly`. No admite
+El descriptor implica `required: true` y `unique: true`, sin imponer `readOnly`.
+El folio persistido permite búsqueda, filtros y orden según la política de lista.
+No admite
 required/unique false, default propio, sensitive, compute, related, minLength ni
 trim false. `maxLength`, si se declara, debe permitir el formato; si el número
 crece más allá de ese límite, se rechaza el guardado y se revierte el contador.
 
 ## Borrador, guardado y vistas
 
-- El default es `""`. ModelForm muestra «Nuevo» mediante el placeholder de FieldText,
-  mantiene el input de sólo lectura y permite validar el resto del borrador.
-- ModelForm y las vistas generadas por eject:view heredan el comportamiento sin
-  props adicionales. `readOnly={false}` no vuelve editable un folio secuencial.
+- El default es `""`. ModelForm muestra «Nuevo» mediante el placeholder de FieldText
+  y permite validar el resto del borrador sin exigir un folio antes de guardar.
+- Desde el 2026-11-18, los campos con secuencia usan `widget="header"` en los
+  formularios automáticos de ModelForm y en los nuevos formularios de eject:view.
+  Las vistas personalizadas declaran `<FieldText name="name" widget="header" />`:
+  muestra el valor RHF como encabezado, sin input editable ni necesidad de readOnly.
+  La demo usa este widget. Las vistas existentes no se regeneran.
+  FieldText sigue admitiendo `readOnly` explícito para otras presentaciones;
+  sequence no lo impone ni autoriza reemplazar el folio en servidor.
 - El formulario usa `formSchema`/`fieldInputSchema`, que admiten folio vacío o null
   en el borrador. El descriptor `.schema` y `defineModel.schema` siguen siendo
   estrictos para el valor persistido. Para un formulario manual, usar FormLayout

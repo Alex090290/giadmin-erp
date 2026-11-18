@@ -1,5 +1,10 @@
 # FieldText
 
+Los folios con `sequence` no imponen `readOnly`: su presentación acordada es
+`<FieldText name="name" widget="header" />`, sin input editable. ModelForm y los
+nuevos formularios de eject:view seleccionan ese widget por convención.
+El servidor conserva la asignación automática y rechaza modificaciones del folio.
+
 `mode="display"` muestra un Text de recordUI.readFields (compute/related), sin
 registrarlo en RHF ni crear un input. Hereda label y conserva direction inline/block.
 Ejemplo: `<FieldText mode="display" name="resumen" />`.
