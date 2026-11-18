@@ -16,6 +16,26 @@ Al iniciar esta revisión, la siguiente prioridad registrada era diseñar y pres
 la distribución de módulos entre proyectos. Después el usuario autorizó la fase 2
 de herencia, cuyo avance se registra abajo. Distribución, entornos y fase 3 siguen pendientes.
 
+## Guía de Tickets preparada (2026-11-17)
+
+Por petición del usuario, [tutorial-tickets.md](tutorial-tickets.md) prepara el
+siguiente piloto desde cero, con ejercicios progresivos, archivos, comandos,
+comprobaciones y matriz de cobertura del framework actual. Flujo declarativo,
+modelo mínimo con name/folio desde su primera instalación y asunto separado;
+después campos, catálogos, negocio, reacciones, TSX, colecciones, acciones con
+parámetros, actividad, líneas, etiquetas, accesos, dominios y Recursos como módulo
+auxiliar para dependencias/imágenes/extensiones. Sin restaurar Flota.
+
+Estado: sólo documentación, ningún ejercicio confirmado ni módulo creado.
+Siguiente paso: ejercicio 0, revisar Git/entorno y migraciones pendientes en la
+máquina actual antes de proponer create:module -- tickets --dry-run. No aplicar
+migraciones pendientes de Flota/folios por efecto colateral. El usuario ejecuta
+y escribe los pasos, con explicación y revisión uno a uno. Distinguidos Date,
+store, permisos por campo, adjuntos/avisos y otros pendientes de las APIs actuales.
+README, AGENTS y la idea original enlazan al recorrido vigente. Verificación de
+esta tarea: enlaces locales de los documentos afectados y git diff --check; sin
+suites, SQL ni cambios funcionales.
+
 ## Acciones con parámetros implementadas (2026-11-17)
 
 Autorizado por el usuario. @action admite params declarados con Fields; se derivan
@@ -274,13 +294,12 @@ de UserEditor y el texto de ChangePasswordForm; docs/authentication.md actualiza
 Verificados test:auth (9) con límites 7/8/72/73 y multibyte, test:auth:integration
 en proyecto/esquema temporales, tsc y ESLint. Sin cambios de datos ni de hashes.
 
-## Siguiente guía planeada: Tickets de servicio interno (2026-11-17)
+## Idea inicial de Tickets (2026-11-17; sustituida por la guía)
 
-Anotada a petición del usuario como siguiente tutoría tras Flota; todavía no inicia
-porque antes quiere afinar otros módulos. Cubre dependencias entre módulos, folios,
-Date, acciones con parámetros, Many2many, reglas por rol y, al final, avisos y
-adjuntos. Varias piezas no existen en el framework: se diseñan e implementan con
-aprobación cuando el ejercicio las requiera. [Plan](ideas/tickets-servicio.md).
+El usuario autorizó después preparar el recorrido completo desde cero. Seguir
+[tutorial-tickets.md](tutorial-tickets.md) y el punto de continuación al inicio de
+este estado. Los ejercicios aún no comienzan. Folios, parámetros y Many2many ya
+existen; Date sin hora, adjuntos y avisos después del commit siguen pendientes.
 
 ## Herencia de modelos entre módulos: fase 1 (2026-11-17)
 
@@ -356,7 +375,7 @@ vulnerabilidades (7 moderadas sólo en dependencias de desarrollo), tsc, lint y
 `next build` aprobados con los tres avisos de trazado conocidos. Esa máquina no tenía
 `.env.development.local`: `npm run build` falla en `prisma generate` por falta de
 DATABASE_URL; se generó el cliente con una URL ficticia sólo para el proceso (no
-conecta). Crear ese archivo privado por máquina según [entornos](entornos-y-bases.md).
+conecta). Crear ese archivo privado por máquina según [estrategia de entornos vigente](ideas/entornos-bases.md).
 GitHub no se consultó: gh no está instalado.
 
 Ejecutado `next upgrade --agent=security`: objetivo seleccionado 16.4.6 desde
@@ -508,7 +527,7 @@ Compose versionado sólo para producción; no contiene contraseñas. Nuevos coma
 Prisma de conexión/status/deploy por ambiente y build/start explícitos de producción;
 escrituras/despliegue producción requieren main, sin cambiar el significado de Git
 ni NODE_ENV. No commit/push/merge ni despliegue de esquema de producción.
-[Guía completa](entornos-y-bases.md).
+[Estrategia vigente; la guía anterior fue retirada](ideas/entornos-bases.md).
 
 Verificación real de lectura con el constructor Prisma: desarrollo conecta a
 liteerp4_dev con 10 tablas; producción a lite_erp4_production con 0. Dos pruebas
